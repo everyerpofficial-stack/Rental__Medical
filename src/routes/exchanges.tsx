@@ -90,6 +90,7 @@ function ExchangesPage() {
   }, [openCreate]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const agrId = params.get("agreementId");
     if (agrId) {

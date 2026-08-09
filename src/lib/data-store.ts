@@ -661,7 +661,8 @@ export function getOwners(): OwnerItem[] {
   let changed = false;
   const updatedList = list.map((o: OwnerItem) => {
     const ownerEquipment = eqList.filter((e: any) => e.owner?.toLowerCase() === o.name.toLowerCase());
-    const hasActiveEquipment = ownerEquipment.some((e: any) => e.status === "Rented");
+    // BUG-OWN FIX: Also check legacy "Active" equipment status (matches getDynamicKPIs pattern)
+    const hasActiveEquipment = ownerEquipment.some((e: any) => e.status === "Rented" || e.status === "Active");
     const correctStatus = hasActiveEquipment ? "Active" : "Inactive";
     
     if (o.status !== correctStatus) {
@@ -1298,7 +1299,6 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
   setStorageItem("medirent-returns", list);
 
 
-  // Update corresponding rental status and release returned equipment
   // Update corresponding rental status and release returned equipment
   const rentalsList = getRentals();
   const rentalIndex = rentalsList.findIndex((r) => r.id === ret.agreement);
@@ -4104,6 +4104,7 @@ const initialExchanges: ExchangeItem[] = [];
 
 export function getExchanges(): ExchangeItem[] {
   const list = getStorageItem("medirent-exchanges", initialExchanges);
+  if (typeof window === "undefined") return sortLatestFirst(list, "exchangeDate") as ExchangeItem[];
   return sortLatestFirst(list, "exchangeDate") as ExchangeItem[];
 }
 
@@ -4111,8 +4112,19 @@ export function getNextExchangeNumber(): string {
   if (!isBrowser) return `EXC-${new Date().getFullYear()}-0001`;
   const year = new Date().getFullYear();
   const key = `medirent-exc-counter-${year}`;
-  const current = parseInt(localStorage.getItem(key) || "0", 10);
-  const next = current + 1;
+  // BUG-EXC FIX: Auto-align counter with the maximum ID in the database to prevent
+  // duplicate/stale counters after a Google Sheets pull that restores exchanges data.
+  const exchanges = getStorageItem<any[]>("medirent-exchanges", []);
+  const yearPrefix = `EXC-${year}-`;
+  let maxIdNum = parseInt(localStorage.getItem(key) || "0", 10);
+  exchanges.forEach((e: any) => {
+    if (e.id && e.id.startsWith(yearPrefix)) {
+      const parts = e.id.split("-");
+      const num = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+    }
+  });
+  const next = maxIdNum + 1;
   localStorage.setItem(key, next.toString());
   return `EXC-${year}-${String(next).padStart(4, "0")}`;
 }
@@ -4124,8 +4136,18 @@ export function peekNextExchangeNumber(): string {
   if (!isBrowser) return `EXC-${new Date().getFullYear()}-0001`;
   const year = new Date().getFullYear();
   const key = `medirent-exc-counter-${year}`;
-  const current = parseInt(localStorage.getItem(key) || "0", 10);
-  return `EXC-${year}-${String(current + 1).padStart(4, "0")}`;
+  // Auto-align peek with max existing ID (mirrors getNextExchangeNumber)
+  const exchanges = getStorageItem<any[]>("medirent-exchanges", []);
+  const yearPrefix = `EXC-${year}-`;
+  let maxIdNum = parseInt(localStorage.getItem(key) || "0", 10);
+  exchanges.forEach((e: any) => {
+    if (e.id && e.id.startsWith(yearPrefix)) {
+      const parts = e.id.split("-");
+      const num = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+    }
+  });
+  return `EXC-${year}-${String(maxIdNum + 1).padStart(4, "0")}`;
 }
 
 export function saveExchange(exc: ExchangeItem) {
@@ -4193,9 +4215,11 @@ export function saveExchange(exc: ExchangeItem) {
     affectedOwners.forEach((ownerName) => updateOwnerStatusByEquipment(ownerName));
 
     // 5. Auto-create a document for the exchange
+    // BUG-EXC-DOC FIX: Use direct localStorage write instead of saveDocument() to avoid
+    // dispatching medirent-db-updated event mid-save (matches saveRental/saveReturn pattern).
     const existingDocs = getDocuments();
     if (!existingDocs.some(d => d.id === `doc-exc-${exc.id}`)) {
-      saveDocument({
+      const excDoc: DocumentItem = {
         id: `doc-exc-${exc.id}`,
         name: `Exchange Slip ${exc.id}.pdf`,
         type: "Exchange Slip",
@@ -4203,7 +4227,11 @@ export function saveExchange(exc: ExchangeItem) {
         date: new Date(exc.exchangeDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
         rentalId: exc.agreementId,
         customerId: exc.customerId,
-      });
+      };
+      const docList = getDocuments();
+      docList.unshift(excDoc);
+      localStorage.setItem("medirent-documents", JSON.stringify(docList));
+      if (isGSheetsEnabled()) syncRowToSheet(SHEETS.DOCUMENTS, excDoc as unknown as Record<string, unknown>);
     }
   }
 
