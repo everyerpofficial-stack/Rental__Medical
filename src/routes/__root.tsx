@@ -41,6 +41,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold text-foreground">This page didn't load</h1>
         <p className="mt-2 text-sm text-muted-foreground">Something went wrong on our end.</p>
+        {error?.message && (
+          <p className="mt-2 text-xs font-mono text-destructive/80 bg-destructive/5 p-2 rounded border border-destructive/10 max-w-sm mx-auto overflow-auto max-h-24">
+            {error.message}
+          </p>
+        )}
         <div className="mt-6 flex justify-center gap-2">
           <button onClick={() => { router.invalidate(); reset(); }} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Try again</button>
           <a href="/" className="rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent">Go home</a>
@@ -642,7 +647,9 @@ function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   );
 }
 function RootComponent() {
-  const { queryClient } = Route.useRouteContext();
+  const context = Route.useRouteContext() as { queryClient?: QueryClient } | undefined;
+  const [fallbackQueryClient] = useState(() => new QueryClient());
+  const queryClient = context?.queryClient || fallbackQueryClient;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   // First-run: true when no staff users have been created yet
