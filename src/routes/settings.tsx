@@ -927,9 +927,9 @@ function UserLoginCredentials() {
       const defaultList: (StaffUser & { firstAdmin?: boolean })[] = [
         {
           id: "1",
-          name: "Avinash",
-          email: "g.avinash10005@gmail.com",
-          passwordHash: "6ed2d3fcddb2b961ca5b5e3f2bef97cccf52a10ccedf87c817183cd79f626b43",
+          name: "Relife Admin",
+          email: "relifemedicaltechnologies.mys@gmail.com",
+          passwordHash: "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec",
           role: "Admin",
           firstAdmin: true,
         }

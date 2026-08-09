@@ -35,7 +35,7 @@ if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
 // ─── Pre-seed default admin account ─────────────────────────────────────────
 // This ensures the app always has an admin account on any fresh device or
 // deployment without requiring the user to go through the First-Run Setup screen.
-// Password: Avinash@123  (SHA-256 pre-computed — never stored in plaintext)
+// Password: Relife@806709  (SHA-256 pre-computed — never stored in plaintext)
 if (isBrowser) {
   const existingStaff = localStorage.getItem("medirent-staff-users");
   let hasUsers = false;
@@ -48,10 +48,10 @@ if (isBrowser) {
   if (!hasUsers) {
     const defaultAdmin = [{
       id: "1",
-      name: "Avinash",
-      email: "g.avinash10005@gmail.com",
-      // SHA-256 of "Avinash@123"
-      passwordHash: "6ed2d3fcddb2b961ca5b5e3f2bef97cccf52a10ccedf87c817183cd79f626b43",
+      name: "Relife Admin",
+      email: "relifemedicaltechnologies.mys@gmail.com",
+      // SHA-256 of "Relife@806709"
+      passwordHash: "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec",
       role: "Admin",
       firstAdmin: true,
     }];
