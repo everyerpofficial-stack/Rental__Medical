@@ -1,0 +1,3 @@
+# Mediclick
+
+Mediclick ERP application.

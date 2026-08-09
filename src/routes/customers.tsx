@@ -1,0 +1,1713 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect, useMemo } from "react";
+import { AppShell, StatusBadge } from "@/components/layout/AppShell";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toast } from "sonner";
+import {
+  Plus, Search, Download, Phone, MapPin,
+  UserCheck, UserX, Edit, Eye, Trash2,
+  Mail, MapPinned, Hash, Users, Clock, Filter,
+  AlertTriangle, FolderOpen, FileCheck2, FileImage, FileText,
+  FileDigit, Receipt, ChevronRight, CreditCard, CheckCircle2,
+} from "lucide-react";
+import { customers } from "@/lib/mock-data";
+import {
+  getCustomers,
+  saveCustomer,
+  deleteCustomer,
+  getRentals,
+  getPayments,
+  getDocuments,
+  getReturns,
+  downloadAgreementFile,
+  downloadFile,
+  downloadExcel,
+  printReceipt,
+  printDocumentFile,
+  downloadBase64File,
+  saveDocument,
+  useDatabaseTrigger,
+  getNextCustomerNumber,
+  getNextDocumentNumber,
+  getDocumentWithFile,
+  getCustomerDueBalance,
+  savePayment,
+  saveReturn,
+  getNextPaymentNumber,
+  getLocalYYYYMMDD,
+  formatDateDDMMYYYY,
+  getDocumentPreviewUrl,
+  sortLatestFirst,
+  extractIdNumber,
+} from "@/lib/data-store";
+import { AgreementPreviewDialog } from "./rentals";
+
+export const Route = createFileRoute("/customers")({
+  head: () => ({ meta: [{ title: "Customers — MediRent" }] }),
+  component: CustomersPage,
+});
+
+type Customer = typeof customers[number];
+
+// Derive avatar color from index — unified hues from design system
+const avatarHues = [
+  "bg-primary/15 text-primary",
+  "bg-accent/15 text-accent",
+  "bg-success/12 text-success",
+  "bg-warning/15 text-warning-foreground",
+  "bg-destructive/12 text-destructive",
+  "bg-muted text-muted-foreground",
+];
+
+function CustomerFormDialog({
+  trigger,
+  title,
+  customer,
+  onSave,
+}: {
+  trigger: React.ReactNode;
+  title: string;
+  customer?: Customer;
+  onSave?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(customer?.name || "");
+  const [phone, setPhone] = useState(customer?.phone || "");
+  const [altPhone, setAltPhone] = useState(customer?.altPhone || "");
+  const [contactNumber3, setContactNumber3] = useState(customer?.contactNumber3 || "");
+  const [email, setEmail] = useState(customer?.email || "");
+  const [aadhaar, setAadhaar] = useState(customer?.aadhaar || "");
+  const [pan, setPan] = useState(customer?.pan || "");
+  const [address, setAddress] = useState(customer?.address || "");
+  const [area, setArea] = useState(customer?.area || "");
+  const [city, setCity] = useState(customer?.city || "Mysore");
+  const [state, setState] = useState(customer?.state || "Karnataka");
+  const [pincode, setPincode] = useState(customer?.pincode || "");
+  const [notes, setNotes] = useState(customer?.notes || "");
+  const [selectedFiles, setSelectedFiles] = useState<Array<{ id?: string; name: string; size: string; fileData?: string; isExisting?: boolean }>>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(customer?.name || "");
+      setPhone(customer?.phone || "");
+      setAltPhone(customer?.altPhone || "");
+      setContactNumber3(customer?.contactNumber3 || "");
+      setEmail(customer?.email || "");
+      setAadhaar(customer?.aadhaar || "");
+      setPan(customer?.pan || "");
+      setAddress(customer?.address || "");
+      setArea(customer?.area || "");
+      setCity(customer?.city || "Mysore");
+      setState(customer?.state || "Karnataka");
+      setPincode(customer?.pincode || "");
+      setNotes(customer?.notes || "");
+      setSelectedFiles([]);
+
+      if (customer?.id) {
+        try {
+          const docs = getDocuments().filter((d: any) => d.customerId === customer.id && d.type === "ID Proof");
+          Promise.all(docs.map((d: any) => getDocumentWithFile(d))).then((fullDocs) => {
+            setSelectedFiles(
+              fullDocs.map((d: any) => ({
+                id: d.id,
+                name: d.name,
+                size: d.size,
+                fileData: d.fileData !== "NOT_FOUND" ? d.fileData : undefined,
+                isExisting: true,
+              }))
+            );
+          });
+        } catch (_e) { /* ignore */ }
+      }
+    }
+  }, [open, customer]);
+
+  const handleSave = () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    if (!name.trim()) {
+      toast.error("Please enter the customer's full name.");
+      setIsSubmitting(false);
+      return;
+    }
+    if (!phone.trim()) {
+      toast.error("Please enter a primary phone number.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const isValidPhone = (p: string) => {
+      const digits = p.replace(/\D/g, "");
+      return digits.length === 10;
+    };
+
+    if (!isValidPhone(phone)) {
+      toast.error("Primary Phone Number must be exactly 10 digits.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (altPhone.trim() && !isValidPhone(altPhone)) {
+      toast.error("Alternative Phone Number must be exactly 10 digits.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (contactNumber3.trim() && !isValidPhone(contactNumber3)) {
+      toast.error("Alternative Phone 1 must be exactly 10 digits.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (aadhaar.trim()) {
+      const aadhaarDigits = aadhaar.replace(/\D/g, "");
+      if (aadhaarDigits.length !== 12) {
+        toast.error("Aadhaar Number must contain exactly 12 digits.");
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (!city.trim()) {
+      toast.error("Please enter the customer's city.");
+      setIsSubmitting(false);
+      return;
+    }
+    if (!state) {
+      toast.error("Please select the customer's state.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const id = customer?.id || getNextCustomerNumber();
+    const newCustomer = {
+      id,
+      name: name.trim(),
+      phone: phone.trim(),
+      altPhone,
+      contactNumber3,
+      email,
+      city: city.trim(),
+      state: state,
+      pincode: pincode,
+      address: address || "No address provided",
+      area: area.trim(),
+      aadhaar,
+      pan,
+      rentals: customer?.rentals || 0,
+      status: customer?.status || "Active",
+      notes,
+    };
+    saveCustomer(newCustomer);
+
+    // Save newly uploaded ID proofs
+    selectedFiles.forEach((file) => {
+      if (!file.isExisting && file.fileData) {
+        const docId = getNextDocumentNumber();
+        saveDocument({
+          id: docId,
+          name: file.name,
+          type: "ID Proof",
+          size: file.size,
+          date: getLocalYYYYMMDD(),
+          customerId: id,
+          fileData: file.fileData,
+        });
+      }
+    });
+
+    toast.success(customer ? `Customer details for "${name}" saved successfully.` : "New customer created successfully.");
+    setIsSubmitting(false);
+    setOpen(false);
+    if (onSave) onSave();
+  };
+
+  const handleFilesAdded = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    
+    fileArray.forEach((file) => {
+      const sizeKB = (file.size / 1024).toFixed(1);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedFiles((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            size: `${sizeKB} KB`,
+            fileData: reader.result as string,
+            isExisting: false,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent 
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-2 sm:grid-cols-2">
+          <Field label="Full Name" placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(e.target.value)} />
+          
+          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Address Details</h4>
+          </div>
+          <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(e.target.value)} />
+          <Field label="City" value={city} onChange={(e) => setCity(e.target.value)} />
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
+            <Select value={state} onValueChange={setState}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select state" />
+              </SelectTrigger>
+              <SelectContent>
+                {["Karnataka"].map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Field label="Pincode" value={pincode} onChange={(e) => setPincode(e.target.value)} />
+
+          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Contact Details</h4>
+          </div>
+          <Field 
+            label="Primary Number"      
+            placeholder="10-digit phone number"                   
+            value={phone} 
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "");
+              if (digits.length > 10) {
+                if (digits.startsWith("91")) setPhone(digits.slice(-10));
+                else if (digits.startsWith("0")) setPhone(digits.slice(-10));
+                else setPhone(digits.slice(0, 10));
+              } else {
+                setPhone(digits);
+              }
+            }} 
+            maxLength={14}
+          />
+          <Field 
+            label="Alternative Phone" 
+            placeholder="optional (10 digits)"                
+            value={altPhone} 
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "");
+              if (digits.length > 10) {
+                if (digits.startsWith("91")) setAltPhone(digits.slice(-10));
+                else if (digits.startsWith("0")) setAltPhone(digits.slice(-10));
+                else setAltPhone(digits.slice(0, 10));
+              } else {
+                setAltPhone(digits);
+              }
+            }} 
+            maxLength={14}
+          />
+          <Field 
+            label="Alternative Phone 1"  
+            placeholder="optional (10 digits)"                
+            value={contactNumber3} 
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "");
+              if (digits.length > 10) {
+                if (digits.startsWith("91")) setContactNumber3(digits.slice(-10));
+                else if (digits.startsWith("0")) setContactNumber3(digits.slice(-10));
+                else setContactNumber3(digits.slice(0, 10));
+              } else {
+                setContactNumber3(digits);
+              }
+            }} 
+            maxLength={14}
+          />
+          <Field label="Email" placeholder="email@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          
+          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Government Verification</h4>
+          </div>
+          <Field 
+            label="Aadhaar Number"    
+            placeholder="12-digit Aadhaar number"         
+            value={aadhaar} 
+            onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))} 
+            maxLength={12}
+          />
+          <Field label="PAN Number" placeholder="ABCDE1234F" value={pan} onChange={(e) => setPan(e.target.value)} />
+          
+          <div className="sm:col-span-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                ID Proof Uploads {selectedFiles.length > 0 && <span className="text-primary font-bold normal-case">({selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"})</span>}
+              </Label>
+              {selectedFiles.length > 0 && (
+                <label className="text-[11px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1">
+                  <Plus className="h-3 w-3" /> Add More Files
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
+                    className="hidden"
+                    onChange={(e) => handleFilesAdded(e.target.files)}
+                  />
+                </label>
+              )}
+            </div>
+
+            {selectedFiles.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-border/40 rounded-xl bg-muted/10">
+                {selectedFiles.map((file, idx) => {
+                  const isImage = file.fileData?.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+                  return (
+                    <div key={idx} className="flex items-center justify-between gap-2 p-2 border border-border/60 rounded-lg bg-background shadow-xs hover:border-primary/40 transition-colors group">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {isImage && file.fileData ? (
+                          <img src={file.fileData} alt="Preview" className="h-8 w-8 rounded object-cover border border-border shrink-0" />
+                        ) : (
+                          <div className="h-8 w-8 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                            {file.name.toLowerCase().endsWith(".pdf") ? <FileText className="h-4 w-4" /> : <FileImage className="h-4 w-4" />}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[12px] font-medium truncate text-foreground leading-tight" title={file.name}>{file.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{file.size} {file.isExisting && "· Saved"}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full shrink-0"
+                        onClick={() => removeFile(idx)}
+                        title="Remove file"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <label
+                htmlFor="customer-id-proof-upload"
+                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border/70 rounded-xl cursor-pointer bg-muted/20 hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group relative overflow-hidden"
+              >
+                <div className="flex flex-col items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors">
+                  <FileImage className="h-6 w-6 mb-0.5" />
+                  <p className="text-[13px] font-medium">Click or Drag to upload ID Proofs</p>
+                  <p className="text-[11px]">Multiple Aadhaar, PAN, Photo — PDF or image files supported</p>
+                </div>
+                <input
+                  id="customer-id-proof-upload"
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  onChange={(e) => handleFilesAdded(e.target.files)}
+                />
+              </label>
+            )}
+          </div>
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
+            <Textarea placeholder="Any special notes about this customer…" className="resize-none min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" type="button">Cancel</Button>
+          </DialogClose>
+          <Button type="button" onClick={handleSave} disabled={isSubmitting}>Save Customer</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteCustomerDialog({ customer, trigger, onDelete }: { customer: Customer; trigger: React.ReactNode; onDelete?: () => void }) {
+  const handleDelete = () => {
+    deleteCustomer(customer.id);
+    toast.success(`Customer "${customer.name}" successfully deleted.`);
+    if (onDelete) onDelete();
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-destructive flex items-center gap-2">
+            <Trash2 className="h-4 w-4" /> Delete Customer
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete <strong className="text-foreground">{customer.name}</strong>?
+          </p>
+          <div className="rounded-lg border border-destructive/18 bg-destructive/5 p-3 text-[12px] text-destructive">
+            This will permanently remove the customer and all associated data. This action cannot be undone.
+          </div>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" type="button">Cancel</Button>
+          </DialogClose>
+          <DialogClose asChild>
+            <Button variant="destructive" type="button" onClick={handleDelete}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const getDocDetails = (type: string) => {
+  switch (type) {
+    case "ID Proof":
+      return {
+        icon: FileImage,
+        color: "text-primary bg-primary/10 border-primary/20",
+        dotColor: "bg-primary",
+      };
+    case "Agreement":
+      return {
+        icon: FileCheck2,
+        color: "text-accent bg-accent/10 border-accent/20",
+        dotColor: "bg-accent",
+      };
+    case "Invoice":
+      return {
+        icon: FileText,
+        color: "text-success bg-success/10 border-success/20",
+        dotColor: "bg-success",
+      };
+    case "Receipt":
+      return {
+        icon: Receipt,
+        color: "text-warning-foreground bg-warning/10 border-warning/20",
+        dotColor: "bg-warning-foreground",
+      };
+    default:
+      return {
+        icon: FileText,
+        color: "text-muted-foreground bg-muted/10 border-border/60",
+        dotColor: "bg-muted-foreground",
+      };
+  }
+};
+
+function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer | null; open: boolean; onClose: () => void }) {
+  if (!customer) return null;
+  const rentals = getRentals();
+  const payments = getPayments();
+  const documents = getDocuments();
+  const returns = getReturns();
+
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+
+  // Load heavy file content from IndexedDB when a document is opened in preview
+  useEffect(() => {
+    if (previewDoc && !previewDoc.fileData && previewDoc.type !== "Agreement" && !previewDoc.id.startsWith("doc-ret-") && !previewDoc.id.startsWith("doc-pay-")) {
+      getDocumentWithFile(previewDoc).then((fullDoc) => {
+        setPreviewDoc(fullDoc);
+      });
+    }
+  }, [previewDoc]);
+
+  const custRentals  = rentals.filter((r) => r.customerId === customer.id);
+  const custPayments = payments.filter((p) => p.customerId === customer.id);
+  const custDocs = documents.filter((d) => d.customerId === customer.id || (d.rentalId && custRentals.some(r => r.id === d.rentalId)));
+  const custKYCDocs = custDocs.filter((d) => d.type === "ID Proof");
+
+  const initials = customer.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("");
+
+  // Calculate totals
+  const totalPaid = custPayments.filter(p => p.status === "Paid").reduce((sum, p) => sum + p.amount, 0);
+  
+  // Pending dues calculation (includes active rental dues and return dues)
+  const dueBalanceInfo = getCustomerDueBalance(customer.id, customer.name);
+  const totalPending = dueBalanceInfo.totalDue;
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border border-border/80 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-background">
+        {/* Banner header */}
+        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-card p-6 border-b border-border/60 relative">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-16 w-16 border-2 border-background shadow-sm">
+                <AvatarFallback className="bg-primary/15 text-primary font-bold text-xl">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h3 className="font-display text-[20px] font-bold text-foreground leading-tight">{customer.name}</h3>
+                  <StatusBadge status={customer.status} />
+                </div>
+                <p className="text-[11px] font-mono text-muted-foreground/80 mt-1">Customer ID: {customer.id}</p>
+                <p className="text-[12.5px] text-muted-foreground mt-0.5">{customer.city}, {customer.state}</p>
+              </div>
+            </div>
+            
+            {/* Quick action buttons */}
+            <div className="flex gap-2 self-start sm:self-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8.5 rounded-lg text-[12px] gap-1.5"
+                onClick={() => window.open(`tel:${customer.phone}`)}
+              >
+                <Phone className="h-3.5 w-3.5" />
+                Call Customer
+              </Button>
+              {customer.email && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8.5 rounded-lg text-[12px] gap-1.5"
+                  onClick={() => window.open(`mailto:${customer.email}`)}
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Email
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Content Tabs */}
+        <Tabs defaultValue="overview" className="w-full flex flex-col">
+          <div className="border-b border-border/50 bg-muted/15 px-6">
+            <TabsList className="bg-transparent border-0 gap-2 h-11 p-0 justify-start">
+              <TabsTrigger value="overview" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Overview & KYC</TabsTrigger>
+              <TabsTrigger value="rentals" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Rentals ({custRentals.length})</TabsTrigger>
+              <TabsTrigger value="payments" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Payments & Dues ({custPayments.length})</TabsTrigger>
+              <TabsTrigger value="documents" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Documents ({custKYCDocs.length})</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="p-6">
+            {/* Overview & KYC Tab */}
+            <TabsContent value="overview" className="mt-0 focus-visible:ring-0 focus-visible:outline-none">
+              <div className="grid gap-6 md:grid-cols-3">
+                {/* Contact information card */}
+                <div className="md:col-span-2 space-y-4">
+                  <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3.5">
+                    <h4 className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Demographics & Address</h4>
+                    <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 text-[13px]">
+                      <InfoRow icon={Phone} label="Primary Phone" value={customer.phone} />
+                      {customer.altPhone && <InfoRow icon={Phone} label="Alt Phone" value={customer.altPhone} />}
+                      {customer.contactNumber3 && <InfoRow icon={Phone} label="Alt Phone 1" value={customer.contactNumber3} />}
+                      <InfoRow icon={Mail} label="Email" value={customer.email || "—"} />
+                      <InfoRow icon={MapPin} label="City / State" value={`${customer.city}, ${customer.state}`} />
+                      <InfoRow icon={Hash} label="Pincode" value={customer.pincode || "—"} />
+                      <InfoRow icon={MapPin} label="Area" value={customer.area || "—"} />
+                      <InfoRow icon={MapPinned} label="Full Address" value={customer.address} />
+                    </div>
+                  </div>
+
+                  {customer.notes && (
+                    <div className="rounded-xl border border-border/60 bg-muted/15 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1.5">Internal Notes</p>
+                      <p className="text-[13px] text-foreground/80 leading-relaxed">{customer.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Identity Verification Info */}
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-border/60 bg-card p-4 space-y-3.5">
+                    <h4 className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Government Verification</h4>
+                    <div className="space-y-3">
+                      <div className="rounded-lg bg-muted/30 p-2.5 border border-border/40">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Aadhaar (KYC)</span>
+                        <p className="font-mono font-bold text-[13px] text-foreground mt-0.5">{customer.aadhaar || "Pending Upload"}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/30 p-2.5 border border-border/40">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">PAN Card</span>
+                        <p className="font-mono font-bold text-[13px] text-foreground mt-0.5">{customer.pan || "Pending Upload"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KYC Documents Panel */}
+                  <div className="rounded-xl border border-border/60 bg-card p-4">
+                    <h4 className="text-[12px] font-bold text-muted-foreground uppercase tracking-wider mb-2">KYC Documents</h4>
+                    {custDocs.filter(d => d.type === "ID Proof").length === 0 ? (
+                      <p className="text-[12px] text-muted-foreground py-2 italic">No ID Proof uploaded yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {custDocs.filter(d => d.type === "ID Proof").map(d => (
+                          <div key={d.id} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 p-2 hover:bg-muted/15 transition-all">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[12.5px] font-semibold truncate text-foreground">{d.name}</p>
+                              <p className="text-[10px] text-muted-foreground">{d.size} · {formatDateDDMMYYYY(d.date)}</p>
+                            </div>
+                            <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 rounded-md shrink-0" onClick={() => setPreviewDoc(d)}>
+                              View
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Rentals & Agreements Tab */}
+            <TabsContent value="rentals" className="mt-0 focus-visible:ring-0 focus-visible:outline-none">
+              {custRentals.length === 0 ? (
+                <div className="text-center py-12 border border-dashed rounded-2xl bg-muted/10 border-border/60">
+                  <FolderOpen className="h-8 w-8 mx-auto text-muted-foreground/45 mb-2.5" />
+                  <p className="text-[13px] font-semibold text-foreground">No Rentals Found</p>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">This customer has no active or past agreements.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {custRentals.map((r) => {
+                    const returnDetails = returns.find(ret => ret.agreement === r.id);
+                    return (
+                      <Card key={r.id} className="hover:border-primary/30 transition-all border-border/60 overflow-hidden shadow-sm hover:shadow-md">
+                        <CardHeader className="bg-muted/15 px-4.5 py-3 border-b border-border/50 flex flex-row items-center justify-between gap-2.5 space-y-0">
+                          <span className="font-mono text-[11.5px] font-bold text-primary">{r.id}</span>
+                          <StatusBadge status={r.status} />
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-3.5">
+                          <div>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Rented Equipment</p>
+                            <p className="text-[14px] font-bold text-foreground mt-0.5">{r.equipment}</p>
+                            <p className="text-[10.5px] font-mono text-muted-foreground mt-0.5">Serial: {r.serial}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3.5 bg-muted/15 p-3 rounded-lg border border-border/40 text-[12px]">
+                            <div>
+                              <span className="text-muted-foreground">Monthly Rent</span>
+                              <p className="font-bold text-[13.5px] text-foreground mt-0.5">₹{r.monthlyRent.toLocaleString("en-IN")}/mo</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Security Deposit</span>
+                              <p className="font-semibold text-[13px] text-foreground mt-0.5">₹{r.deposit.toLocaleString("en-IN")}</p>
+                            </div>
+                            <div className="col-span-2 border-t border-border/40 pt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Period</span>
+                              <span className="font-medium text-foreground">{r.start} → {r.end}</span>
+                            </div>
+                          </div>
+
+                          {/* Logistics / Charges */}
+                          <div className="grid grid-cols-3 gap-2 text-[11px] border-b border-border/40 pb-2.5">
+                            <div>
+                              <span className="text-muted-foreground">Delivery</span>
+                              <p className="font-semibold mt-0.5">₹{r.deliveryCharges}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Installation</span>
+                              <p className="font-semibold mt-0.5">₹{r.installationCharges}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Additional</span>
+                              <p className="font-semibold mt-0.5">₹{r.additionalCharges}</p>
+                            </div>
+                          </div>
+
+                          {r.remarks && (
+                            <div className="text-[12px] bg-amber-50/20 dark:bg-amber-950/10 border border-amber-200/40 p-2.5 rounded-md text-foreground/80">
+                              <strong>Remarks:</strong> {r.remarks}
+                            </div>
+                          )}
+
+                          {returnDetails && (
+                            <div className="text-[12px] bg-green-50/20 dark:bg-green-950/10 border border-green-200/40 p-2.5 rounded-md text-foreground/80">
+                              <strong>Returned:</strong> {formatDateDDMMYYYY(returnDetails.date)} ({returnDetails.condition} Condition)
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Refund: ₹{returnDetails.refund} · Balance: ₹{returnDetails.pendingBalance}</p>
+                            </div>
+                          )}
+
+                          {/* Rental Actions */}
+                          <div className="flex gap-2 pt-1 border-t border-border/30 justify-between items-center">
+                            <span className="text-[10px] text-muted-foreground">Digital Agreement</span>
+                            <div className="flex gap-1.5">
+                              <AgreementPreviewDialog
+                                rental={r}
+                                trigger={
+                                  <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 rounded-md">
+                                    Preview
+                                  </Button>
+                                }
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[11px] px-2 rounded-md"
+                                onClick={() => {
+                                  downloadAgreementFile(r);
+                                  toast.success(`Agreement downloaded for ${r.id}`);
+                                }}
+                              >
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Payments & Billing Tab */}
+            <TabsContent value="payments" className="mt-0 focus-visible:ring-0 focus-visible:outline-none">
+              <div className="space-y-6">
+                {/* Billing KPI Cards */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-xl border border-border/60 bg-success/5 p-4.5">
+                    <span className="text-[11px] font-bold text-success uppercase tracking-wider">Total Amount Paid</span>
+                    <h5 className="font-display text-[22px] font-bold text-success mt-1">₹{totalPaid.toLocaleString("en-IN")}</h5>
+                    <p className="text-[10.5px] text-muted-foreground mt-1">Received from {custPayments.filter(p => p.status === "Paid").length} payments</p>
+                  </div>
+                  
+                  <div className="rounded-xl border border-border/60 bg-destructive/5 p-4.5">
+                    <span className="text-[11px] font-bold text-destructive uppercase tracking-wider">Pending Dues</span>
+                    <h5 className="font-display text-[22px] font-bold text-destructive mt-1">₹{totalPending.toLocaleString("en-IN")}</h5>
+                    <p className="text-[10.5px] text-muted-foreground mt-1">Includes overdue rentals & balances</p>
+                  </div>
+
+                  <div className="rounded-xl border border-border/60 bg-card p-4.5 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Payment Standing</span>
+                      <p className="text-[13px] font-semibold text-foreground mt-1.5">
+                        {customer.status === "Active" ? "🟢 Good Standing" : customer.status === "Overdue" ? "🔴 Balance Overdue" : "🟡 Action Required"}
+                      </p>
+                    </div>
+                    <p className="text-[10.5px] text-muted-foreground mt-1.5 leading-snug">Requires attention when tracking monthly billing cycles</p>
+                  </div>
+                </div>
+
+                {/* Overdue Alert Panel if there is outstanding amount */}
+                {customer.status === "Overdue" && (
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 flex gap-3.5 items-start">
+                    <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                    <div>
+                      <h5 className="font-bold text-[13.5px] text-destructive leading-tight">Payment Overdue Notice</h5>
+                      <p className="text-[12.5px] text-destructive/80 mt-1 leading-relaxed">
+                        This customer has rentals marked as **Overdue** (e.g. {custRentals.filter(r => r.status === "Overdue").map(r => r.id).join(", ")}).
+                        Please contact the customer to clear the pending balance of **₹{totalPending.toLocaleString("en-IN")}** at the earliest.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Transaction history table */}
+                <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+                  <div className="px-4.5 py-3 border-b border-border/50 bg-muted/20">
+                    <h4 className="text-[12.5px] font-bold text-foreground">Transaction & Invoicing History</h4>
+                  </div>
+                  {custPayments.length === 0 ? (
+                    <p className="text-[12.5px] text-muted-foreground text-center py-8">No payments recorded.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader className="bg-muted/5">
+                          <TableRow>
+                            <TableHead className="text-[11.5px] h-9">Date</TableHead>
+                            <TableHead className="text-[11.5px] h-9">Transaction ID</TableHead>
+                            <TableHead className="text-[11.5px] h-9">Agreement</TableHead>
+                            <TableHead className="text-[11.5px] h-9">Type</TableHead>
+                            <TableHead className="text-[11.5px] h-9">Mode</TableHead>
+                            <TableHead className="text-[11.5px] h-9 text-right">Amount</TableHead>
+                            <TableHead className="text-[11.5px] h-9">Status</TableHead>
+                            <TableHead className="text-[11.5px] h-9 text-right">Invoice</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {custPayments.map((p) => (
+                            <TableRow key={p.id} className="text-[12.5px]">
+                              <TableCell className="py-2.5 font-medium">{formatDateDDMMYYYY(p.date)}</TableCell>
+                              <TableCell className="py-2.5 font-mono text-[11px] text-muted-foreground">{p.id}</TableCell>
+                              <TableCell className="py-2.5 font-mono text-[11px] text-primary">{p.agreement}</TableCell>
+                              <TableCell className="py-2.5">{p.type}</TableCell>
+                              <TableCell className="py-2.5 text-muted-foreground">{p.mode} {p.txRef ? `(${p.txRef})` : ""}</TableCell>
+                              <TableCell className="py-2.5 text-right font-bold">₹{p.amount.toLocaleString("en-IN")}</TableCell>
+                              <TableCell className="py-2.5"><StatusBadge status={p.status} /></TableCell>
+                              <TableCell className="py-2.5 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6.5 text-[10px] px-1.5 rounded"
+                                  onClick={() => {
+                                    printReceipt(p, customer.name);
+                                    toast.success(`Receipt PDF for ${p.id} generated successfully.`);
+                                  }}
+                                >
+                                  Download
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Documents Tab */}
+            <TabsContent value="documents" className="mt-0 focus-visible:ring-0 focus-visible:outline-none">
+              {custKYCDocs.length === 0 ? (
+                <div className="text-center py-12 border border-dashed rounded-2xl bg-muted/10 border-border/60">
+                  <FolderOpen className="h-8 w-8 mx-auto text-muted-foreground/45 mb-2.5" />
+                  <p className="text-[13px] font-semibold text-foreground">No Documents Found</p>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">No contract or identity document is uploaded yet.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  {custKYCDocs.map((d) => {
+                    const isKYC = d.type === "ID Proof";
+                    const isAgreement = d.type === "Agreement";
+                    
+                    return (
+                      <div key={d.id} className="group rounded-xl border border-border/60 bg-card p-3.5 hover:border-primary/30 transition-all shadow-sm">
+                        <div className="flex items-start gap-3">
+                          <div className={`metric-icon h-10 w-10 shrink-0 flex items-center justify-center rounded-lg ${
+                            isKYC ? "bg-primary/10 text-primary" :
+                            isAgreement ? "bg-accent/10 text-accent" : "bg-success/10 text-success"
+                          }`}>
+                            {isKYC ? <FileImage className="h-4.5 w-4.5" /> :
+                             isAgreement ? <FileCheck2 className="h-4.5 w-4.5" /> : <FileText className="h-4.5 w-4.5" />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-[13px] leading-tight truncate text-foreground">{d.name}</p>
+                            <span className={`inline-flex rounded px-1.5 py-0.2 text-[8.5px] font-bold uppercase tracking-wider mt-1 ${
+                              isKYC ? "bg-primary/10 text-primary" :
+                              isAgreement ? "bg-accent/10 text-accent" : "bg-success/10 text-success"
+                            }`}>
+                              {d.type}
+                            </span>
+                            <p className="text-[10px] text-muted-foreground mt-1">{d.size} · {formatDateDDMMYYYY(d.date)}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-1.5 border-t border-border/40 pt-2 transition-opacity">
+                          <Button variant="ghost" size="sm" className="h-6.5 text-[11px] px-2 rounded-md text-muted-foreground hover:text-foreground" onClick={() => setPreviewDoc(d)}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6.5 text-[11px] px-2 rounded-md text-muted-foreground hover:text-foreground ml-auto"
+                            onClick={async () => {
+                              const ok = await printDocumentFile(d);
+                              if (ok) {
+                                toast.success(`Opening print view for ${d.name}...`);
+                              } else {
+                                toast.error(`"${d.name}" isn't available on this device and hasn't been backed up to Google Sheets yet.`);
+                              }
+                            }}
+                          >
+                            <Download className="h-3 w-3 mr-1" /> Download
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </div>
+        </Tabs>
+        
+        {/* Footer */}
+        <div className="border-t border-border/60 bg-muted/20 px-6 py-4 flex justify-end gap-2.5 rounded-b-2xl">
+          <Button variant="outline" className="h-9.5 text-[13px] font-medium" onClick={onClose}>
+            Close Window
+          </Button>
+        </div>
+
+        <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
+          <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto p-5 md:p-6">
+            <DialogHeader>
+              <DialogTitle>Document Preview</DialogTitle>
+            </DialogHeader>
+            {previewDoc && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 border-b border-border/50 pb-4">
+                  {(() => {
+                    const { icon: DocIcon, color } = getDocDetails(previewDoc.type);
+                    return (
+                      <>
+                        <div className={`metric-icon h-10 w-10 shrink-0 ${color}`}>
+                          <DocIcon className="h-4.5 w-4.5" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-[14px]">{previewDoc.name}</p>
+                          <p className="text-[12px] text-muted-foreground mt-0.5">{previewDoc.type} · {previewDoc.size} · Uploaded {formatDateDDMMYYYY(previewDoc.date)}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center justify-center border border-border/60 rounded-xl overflow-hidden bg-muted/10 h-[280px] w-full">
+                  {previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && (previewDoc.fileData.startsWith("data:image/") || (previewDoc.fileData.startsWith("data:") && previewDoc.name.toLowerCase().match(/\.(png|jpe?g|gif|webp|svg)$/))) ? (
+                    <img 
+                      src={previewDoc.fileData} 
+                      className="max-h-full max-w-full object-contain rounded-lg shadow-sm" 
+                      alt={previewDoc.name} 
+                    />
+                  ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:application/pdf") ? (
+                    <iframe
+                      src={previewDoc.fileData}
+                      className="w-full h-full border-0 bg-white"
+                      title={previewDoc.name}
+                    />
+                  ) : previewDoc.fileData === "NOT_FOUND" ? (
+                    <div className="flex flex-col items-center justify-center bg-muted/5 border border-border/40 rounded-xl p-8 h-full text-center w-full">
+                      <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+                      <h5 className="font-bold text-[14px] text-foreground">File Content Not Available</h5>
+                      <p className="text-[12px] text-muted-foreground mt-1 max-w-md">
+                        The file data could not be retrieved from IndexedDB or Google Sheets. 
+                        If this file was uploaded from another browser/device, please ensure that GSheets sync is complete.
+                      </p>
+                    </div>
+                  ) : (
+                    <iframe 
+                      src={getDocumentPreviewUrl(previewDoc)} 
+                      className="w-full h-full border-0 bg-white" 
+                      title={previewDoc.name} 
+                    />
+                  )}
+                </div>
+                 <div className="grid grid-cols-2 gap-3 text-[12px] bg-muted/20 p-4 rounded-xl border border-border/40">
+                  <div>
+                    <span className="text-muted-foreground">Document ID</span>
+                    <p className="font-mono font-bold mt-1 text-[13px] text-primary">{previewDoc.id}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Verified By</span>
+                    <p className="font-semibold mt-1 text-[13px]">System Auditor</p>
+                  </div>
+                </div>
+
+              </div>
+            )}
+            <DialogFooter className="sm:justify-end border-t border-border/50 pt-4 mt-4">
+              <div className="flex gap-2">
+                <Button variant="outline" className="h-9 text-[13px]" onClick={() => setPreviewDoc(null)}>Close</Button>
+                {previewDoc && (
+                  <Button
+                    className="h-9 text-[13px]"
+                    disabled={previewDoc.fileData === "NOT_FOUND"}
+                    title={previewDoc.fileData === "NOT_FOUND" ? "Not available on this device or in Google Sheets" : undefined}
+                    onClick={async () => {
+                      if (previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:")) {
+                        downloadBase64File(previewDoc.fileData, previewDoc.name);
+                        toast.success(`Downloading file: ${previewDoc.name}`);
+                      } else {
+                        const ok = await printDocumentFile(previewDoc);
+                        if (ok) {
+                          toast.success(`Opening download file: ${previewDoc.name}`);
+                        } else {
+                          toast.error(`"${previewDoc.name}" isn't available on this device and hasn't been backed up to Google Sheets yet.`);
+                        }
+                      }
+                    }}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" /> Download File
+                  </Button>
+                )}
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InfoRow({ icon: Icon, label, value, className }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; className?: string }) {
+  return (
+    <div className={`flex items-start gap-2.5 py-2 border-b border-border/40 last:border-0 ${className ?? ""}`}>
+      <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground/60" />
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-20 shrink-0">{label}</span>
+      <span className="text-[13px] text-foreground/80 flex-1">{value}</span>
+    </div>
+  );
+}
+
+function CustomerPayDueDialog({
+  customer,
+  onSave,
+}: {
+  customer: Customer;
+  onSave: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const dueInfo = useMemo(() => getCustomerDueBalance(customer.id, customer.name), [customer, open]);
+  const [payAmount, setPayAmount] = useState(dueInfo.totalDue.toString());
+  const [paymentMode, setPaymentMode] = useState("Cash");
+  const [paymentDate, setPaymentDate] = useState(() => getLocalYYYYMMDD());
+  const [txRef, setTxRef] = useState("");
+  const [cashAmount, setCashAmount] = useState("");
+  const [bankAmount, setBankAmount] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const currentDue = getCustomerDueBalance(customer.id, customer.name).totalDue;
+      setPayAmount(currentDue.toString());
+      setPaymentMode("Cash");
+      setPaymentDate(getLocalYYYYMMDD());
+      setTxRef("");
+      const cAmt = Math.round(currentDue / 2);
+      setCashAmount(cAmt.toString());
+      setBankAmount((currentDue - cAmt).toString());
+    }
+  }, [open, customer]);
+
+  const handlePay = () => {
+    const amt = Number(payAmount) || 0;
+    if (amt <= 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+    setIsSubmitting(true);
+
+    if (dueInfo.unpaidReturns.length > 0) {
+      let remainingPayment = amt;
+      dueInfo.unpaidReturns.forEach((ret: any) => {
+        const retDue = Math.abs(ret.refund || 0);
+        if (remainingPayment >= retDue) {
+          saveReturn({
+            ...ret,
+            duePaymentStatus: "Paid",
+            duePaymentMode: paymentMode,
+            dueTxRef: txRef,
+            status: "Completed",
+          });
+          remainingPayment -= retDue;
+        }
+      });
+    }
+
+    if (paymentMode === "Cash+Bank") {
+      let cAmt = Number(cashAmount) || 0;
+      let bAmt = Number(bankAmount) || 0;
+      if (cAmt + bAmt !== amt) {
+        bAmt = Math.max(0, amt - cAmt);
+      }
+
+      if (cAmt > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate,
+          customer: customer.name,
+          customerId: customer.id,
+          amount: cAmt,
+          mode: "Cash",
+          type: "Rent" as const,
+          notes: `Customer Due Balance Payment for ${customer.name} (Cash portion of ₹${amt.toLocaleString("en-IN")})`,
+          status: "Paid" as const,
+        });
+      }
+      if (bAmt > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate,
+          customer: customer.name,
+          customerId: customer.id,
+          amount: bAmt,
+          mode: "Bank",
+          type: "Rent" as const,
+          txRef,
+          notes: `Customer Due Balance Payment for ${customer.name} (Bank portion of ₹${amt.toLocaleString("en-IN")})`,
+          status: "Paid" as const,
+        });
+      }
+    } else {
+      savePayment({
+        id: getNextPaymentNumber(),
+        date: paymentDate,
+        customer: customer.name,
+        customerId: customer.id,
+        amount: amt,
+        mode: paymentMode as any,
+        type: "Rent" as const,
+        txRef,
+        notes: `Customer Due Balance Payment for ${customer.name}`,
+        status: "Paid" as const,
+      });
+    }
+
+    toast.success(`₹${amt.toLocaleString("en-IN")} payment recorded for ${customer.name}! Customer dues updated.`);
+    setIsSubmitting(false);
+    setOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("medirent-db-updated"));
+    }
+    onSave();
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200 gap-1"
+        onClick={() => setOpen(true)}
+        title="Pay Customer Due"
+      >
+        <CreditCard className="h-3 w-3" /> Pay Due
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <CreditCard className="h-4 w-4" /> Settle Customer Due Balance
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-3.5 space-y-2 text-[12.5px]">
+              <div className="flex justify-between font-bold text-foreground">
+                <span>{customer.name}</span>
+                <span className="font-mono text-muted-foreground">{customer.id}</span>
+              </div>
+
+              <div className="space-y-1 border-t border-rose-200/60 pt-2 text-[11.5px]">
+                <div className="flex justify-between text-[13.5px] font-black text-rose-800 pt-0.5">
+                  <span>After Return Due Balance:</span>
+                  <span>₹{dueInfo.totalDue.toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
+                <Input
+                  type="number"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="h-9 font-bold text-foreground"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+                <Input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="h-9 text-[13px]"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+              <Select 
+                value={paymentMode} 
+                onValueChange={(m) => {
+                  setPaymentMode(m);
+                  if (m === "Cash+Bank") {
+                    const amt = Number(payAmount) || 0;
+                    const cAmt = Math.round(amt / 2);
+                    setCashAmount(cAmt.toString());
+                    setBankAmount((amt - cAmt).toString());
+                  }
+                }}
+              >
+                <SelectTrigger className="h-9 text-[13px] bg-background"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Bank">Bank</SelectItem>
+                  <SelectItem value="Cash+Bank">Cash + Bank</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentMode === "Cash+Bank" && (
+              <div className="grid grid-cols-2 gap-3 p-3 bg-muted/20 rounded-lg border border-border">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash Amount (₹)</Label>
+                  <Input
+                    type="number"
+                    placeholder="Cash portion"
+                    className="h-9 text-[13px] font-semibold bg-emerald-50/20"
+                    value={cashAmount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCashAmount(val);
+                      const amt = Number(payAmount) || 0;
+                      const cNum = Math.max(0, Number(val) || 0);
+                      setBankAmount(Math.max(0, amt - cNum).toString());
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank Amount (₹)</Label>
+                  <Input
+                    type="number"
+                    placeholder="Bank portion"
+                    className="h-9 text-[13px] font-semibold bg-blue-50/20"
+                    value={bankAmount}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBankAmount(val);
+                      const amt = Number(payAmount) || 0;
+                      const bNum = Math.max(0, Number(val) || 0);
+                      setCashAmount(Math.max(0, amt - bNum).toString());
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Transaction Reference (Optional)</Label>
+              <Input
+                placeholder="UPI ref, cheque no, bank ref"
+                value={txRef}
+                onChange={(e) => setTxRef(e.target.value)}
+                className="h-9 text-[13px]"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </DialogClose>
+            <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={handlePay} disabled={isSubmitting}>
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Record Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function CustomersPage() {
+  const dbVersion = useDatabaseTrigger();
+  const [customers, setCustomers] = useState(() => getCustomers());
+  const [profileCustomer, setProfileCustomer] = useState<Customer | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [cityFilter, setCityFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all-status");
+
+  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+
+  const refresh = () => setCustomers(getCustomers());
+
+  useEffect(() => {
+    setCustomers(getCustomers());
+  }, [dbVersion]);
+
+  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+
+  const filteredCustomers = sortLatestFirst(
+    customers.filter((c) => {
+      const q = search.toLowerCase().trim();
+      const custRentals = rentalsList.filter(r => r.customerId === c.id);
+      const matchesSearch =
+        !q ||
+        c.name.toLowerCase().includes(q) ||
+        c.id.toLowerCase().includes(q) ||
+        String(c.phone || "").toLowerCase().includes(q) ||
+        String(c.altPhone || "").toLowerCase().includes(q) ||
+        String(c.contactNumber3 || "").toLowerCase().includes(q) ||
+        String(c.area || "").toLowerCase().includes(q) ||
+        String(c.address || "").toLowerCase().includes(q) ||
+        String(c.aadhaar || "").toLowerCase().includes(q) ||
+        String(c.pan || "").toLowerCase().includes(q) ||
+        custRentals.some(r => 
+          String(r.serial || "").toLowerCase().includes(q) ||
+          String(r.equipment || "").toLowerCase().includes(q) ||
+          (r.equipmentItems && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(q)))
+        );
+      const matchesCity =
+        cityFilter === "all" || c.city.toLowerCase() === cityFilter.toLowerCase();
+      const matchesStatus =
+        statusFilter === "all-status" ||
+        c.status.toLowerCase() === statusFilter.toLowerCase();
+      return matchesSearch && matchesCity && matchesStatus;
+    })
+  );
+
+  // Dynamic stats
+  const totalCount = customers.length;
+  const activeCount = customers.filter(c => c.status === "Active").length;
+  const pendingCount = customers.filter(c => c.status === "Pending").length;
+  const overdueCount = customers.filter(c => c.status === "Overdue").length;
+
+  return (
+    <AppShell
+      title="Customers"
+      subtitle="Manage your customer database and rental history"
+      actions={
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const headers = ["Customer ID", "Name", "Primary Number", "Alternative Phone", "Alternative Phone 1", "Email", "City", "State", "Active Rentals", "Status"];
+              const rows = customers.map(c => [
+                c.id,
+                c.name,
+                c.phone,
+                c.altPhone || "",
+                c.contactNumber3 || "",
+                c.email || "",
+                c.city,
+                c.state,
+                c.rentals.toString(),
+                c.status
+              ]);
+              downloadExcel("customers_export.xls", headers, rows, [110, 200, 120, 120, 120, 220, 120, 120, 110, 100]);
+              toast.success("Customer list exported successfully.");
+            }}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            Export
+          </Button>
+          <CustomerFormDialog
+            title="New Customer"
+            onSave={refresh}
+            trigger={
+              <Button size="sm">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Customer
+              </Button>
+            }
+          />
+        </>
+      }
+    >
+      {/* Stat cards */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
+        {[
+          { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary",            border: "border-border/60" },
+          { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success",             border: "border-border/60" },
+          { l: "Pending KYC",     v: pendingCount.toString(),    icon: Clock,     color: "text-warning-foreground",  border: "border-border/60" },
+          { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive",          border: "border-border/60" },
+        ].map((s, i) => (
+          <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}>
+            <CardContent className="p-3.5 sm:p-5">
+              <div className="flex items-center gap-2.5">
+                <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9">
+                  <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight">{s.l}</p>
+                  <p className={`mt-0.5 font-display text-[20px] sm:text-[22px] font-bold ${s.color}`}>{s.v}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Table card */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          {/* Toolbar */}
+          <div className="flex flex-col gap-2 border-b border-border/60 bg-muted/20 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
+              <Input
+                placeholder="Search by name, phone, ID…"
+                className="pl-9 h-9 text-[13px] bg-card border-border/50 w-full"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 sm:pb-0">
+              <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground shrink-0">
+                <Users className="h-3.5 w-3.5" />
+                <span><strong className="text-foreground">{filteredCustomers.length}</strong> customers</span>
+              </div>
+              <div className="flex-1" />
+              <Select value={cityFilter} onValueChange={setCityFilter}>
+                <SelectTrigger className="w-[120px] h-8 text-[12px] shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Cities</SelectItem>
+                  <SelectItem value="Mysore">Mysore</SelectItem>
+                  <SelectItem value="Bengaluru">Bengaluru</SelectItem>
+                  <SelectItem value="Chennai">Chennai</SelectItem>
+                  <SelectItem value="Mumbai">Mumbai</SelectItem>
+                  <SelectItem value="Hyderabad">Hyderabad</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[110px] h-8 text-[12px] shrink-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-status">All Status</SelectItem>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Overdue">Overdue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Desktop Table — hidden on mobile */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Rentals</TableHead>
+                  <TableHead>Due Balance</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-32 text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredCustomers.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-12 text-center text-[13px] text-muted-foreground">
+                      No customers match your search or filter.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {filteredCustomers.map((c, idx) => (
+                  <TableRow key={c.id} className="group">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className={`${avatarHues[idx % avatarHues.length]} text-[11px] font-bold`}>
+                            {c.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-[13px]">{c.name}</p>
+                          <p className="text-[11px] font-mono text-muted-foreground/70">{c.id}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                          <Phone className="h-3 w-3" />{c.phone}
+                        </div>
+                        {c.email && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                            <Mail className="h-2.5 w-2.5" />{c.email}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        <MapPin className="h-3 w-3" />{c.city}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                        {c.rentals} active
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const dueInfo = getCustomerDueBalance(c.id, c.name);
+                        return dueInfo.totalDue > 0 ? (
+                          <div>
+                            <p className="font-bold text-[13px] text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")}</p>
+                            <span className="inline-flex rounded px-1.5 py-0.2 text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              Pending
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-semibold text-[13px] text-emerald-600">₹0</p>
+                            <span className="inline-flex rounded px-1.5 py-0.2 text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Paid
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </TableCell>
+                    <TableCell><StatusBadge status={c.status} /></TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1 transition-opacity">
+                        {(() => {
+                          const dueInfo = getCustomerDueBalance(c.id, c.name);
+                          return dueInfo.totalDue > 0 ? (
+                            <CustomerPayDueDialog customer={c} onSave={refresh} />
+                          ) : null;
+                        })()}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          onClick={() => { setProfileCustomer(c); setProfileOpen(true); }}
+                          title="View Profile"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        {!isStaff && (
+                          <>
+                            <CustomerFormDialog
+                              title="Edit Customer"
+                              customer={c}
+                              onSave={refresh}
+                              trigger={
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                            <DeleteCustomerDialog
+                              customer={c}
+                              onDelete={refresh}
+                              trigger={
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card List — visible only on mobile */}
+          <div className="sm:hidden">
+            {filteredCustomers.length === 0 ? (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                No customers match your search or filter.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {filteredCustomers.map((c, idx) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-3 px-4 py-3.5 active:bg-muted/40 transition-colors"
+                    onClick={() => { setProfileCustomer(c); setProfileOpen(true); }}
+                  >
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarFallback className={`${avatarHues[idx % avatarHues.length]} text-[12px] font-bold`}>
+                        {c.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-[13.5px] truncate">{c.name}</p>
+                        <StatusBadge status={c.status} />
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="info-row">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          {c.phone}
+                        </span>
+                        <span className="info-row">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          {c.city}
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] font-mono text-muted-foreground/60 mt-0.5">{c.id} · {c.rentals} rental{c.rentals !== 1 ? "s" : ""}</p>
+                      {(() => {
+                        const dueInfo = getCustomerDueBalance(c.id, c.name);
+                        return (
+                          <p className="text-[11px] font-medium mt-1">
+                            Due Balance:{" "}
+                            {dueInfo.totalDue > 0 ? (
+                              <strong className="text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")} (Pending)</strong>
+                            ) : (
+                              <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
+                            )}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Profile Dialog */}
+      <CustomerProfileDialog
+        customer={profileCustomer}
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+      />
+    </AppShell>
+  );
+}
+
+function Field({
+  label,
+  placeholder,
+  type = "text",
+  className,
+  value,
+  onChange,
+  maxLength,
+}: {
+  label: string;
+  placeholder?: string;
+  type?: string;
+  className?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  maxLength?: number;
+}) {
+  return (
+    <div className={`space-y-1.5 ${className ?? ""}`}>
+      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </Label>
+      <Input type={type} placeholder={placeholder} value={value} onChange={onChange} maxLength={maxLength} />
+    </div>
+  );
+}
