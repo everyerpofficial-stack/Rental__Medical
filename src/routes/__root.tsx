@@ -103,6 +103,7 @@ async function hashPassword(plain: string): Promise<string> {
 
 /** Create a session with 8-hour expiry */
 function createSession(user: { name: string; email: string; role: string }) {
+  if (typeof window === "undefined") return;
   const token = crypto.randomUUID();
   const expiry = Date.now() + 8 * 60 * 60 * 1000;
   localStorage.setItem("medirent-authenticated", "true");
@@ -120,9 +121,11 @@ const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 function getLoginAttempts(): number {
+  if (typeof window === "undefined") return 0;
   return parseInt(localStorage.getItem(RATE_LIMIT_KEY) || "0", 10);
 }
 function incrementLoginAttempts(): number {
+  if (typeof window === "undefined") return 0;
   const next = getLoginAttempts() + 1;
   localStorage.setItem(RATE_LIMIT_KEY, String(next));
   if (next >= MAX_LOGIN_ATTEMPTS) {
@@ -131,10 +134,12 @@ function incrementLoginAttempts(): number {
   return next;
 }
 function resetLoginAttempts() {
+  if (typeof window === "undefined") return;
   localStorage.removeItem(RATE_LIMIT_KEY);
   localStorage.removeItem(LOCKOUT_KEY);
 }
 function getLockoutRemainingMs(): number {
+  if (typeof window === "undefined") return 0;
   const lockoutUntil = parseInt(localStorage.getItem(LOCKOUT_KEY) || "0", 10);
   return Math.max(0, lockoutUntil - Date.now());
 }
