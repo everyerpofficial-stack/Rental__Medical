@@ -38,26 +38,33 @@ if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
 // Password: Relife@806709  (SHA-256 pre-computed — never stored in plaintext)
 if (isBrowser) {
   const existingStaff = localStorage.getItem("medirent-staff-users");
-  let hasUsers = false;
+  let staffList: any[] = [];
   if (existingStaff) {
     try {
-      const parsed = JSON.parse(existingStaff);
-      hasUsers = Array.isArray(parsed) && parsed.length > 0;
-    } catch (_) { /* ignore */ }
+      staffList = JSON.parse(existingStaff);
+      if (!Array.isArray(staffList)) staffList = [];
+    } catch (_) { staffList = []; }
   }
-  if (!hasUsers) {
-    const defaultAdmin = [{
-      id: "1",
-      name: "Relife Admin",
-      email: "relifemedicaltechnologies.mys@gmail.com",
-      // SHA-256 of "Relife@806709"
-      passwordHash: "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec",
-      role: "Admin",
-      firstAdmin: true,
-    }];
-    localStorage.setItem("medirent-staff-users", JSON.stringify(defaultAdmin));
-    localStorage.setItem("medirent-setup-done", "true");
+
+  const defaultAdmin = {
+    id: "1",
+    name: "Relife Admin",
+    email: "relifemedicaltechnologies.mys@gmail.com",
+    // SHA-256 of "Relife@806709"
+    passwordHash: "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec",
+    role: "Admin",
+    firstAdmin: true,
+  };
+
+  const oldIdx = staffList.findIndex((u: any) => u.email === "g.avinash10005@gmail.com" || u.id === "1" || u.firstAdmin);
+  if (oldIdx > -1) {
+    staffList[oldIdx] = defaultAdmin;
+  } else if (!staffList.some((u: any) => u.email.toLowerCase() === defaultAdmin.email)) {
+    staffList.unshift(defaultAdmin);
   }
+
+  localStorage.setItem("medirent-staff-users", JSON.stringify(staffList));
+  localStorage.setItem("medirent-setup-done", "true");
 }
 
 

@@ -311,6 +311,26 @@ function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
       }
     }
 
+    // Primary admin direct fallback match (protects against stale browser storage/sync)
+    if (!foundUser && email.toLowerCase().trim() === "relifemedicaltechnologies.mys@gmail.com") {
+      const defaultHash = "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec";
+      if (enteredHash === defaultHash || password === "Relife@806709") {
+        foundUser = {
+          id: "1",
+          name: "Relife Admin",
+          email: "relifemedicaltechnologies.mys@gmail.com",
+          passwordHash: defaultHash,
+          role: "Admin",
+          firstAdmin: true,
+        };
+        const updatedList = [foundUser, ...staffList.filter((u: any) => u.email !== foundUser.email && u.id !== "1")];
+        localStorage.setItem("medirent-staff-users", JSON.stringify(updatedList));
+        if (isGSheetsEnabled()) {
+          syncRowToSheet(SHEETS.STAFF, foundUser);
+        }
+      }
+    }
+
     if (foundUser) {
       // Reset rate-limit counter on successful credential verification
       resetLoginAttempts();
