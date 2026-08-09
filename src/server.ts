@@ -11,9 +11,18 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
-    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => (m.default ?? m) as ServerEntry,
-    );
+    serverEntryPromise = import("@tanstack/react-start/server-entry").then((m) => {
+      const entry = (m.default ?? m) as any;
+      if (typeof entry === "function") {
+        return { fetch: (req: Request, env: unknown, ctx: unknown) => entry(req, env, ctx) };
+      }
+      if (entry && typeof entry.fetch === "function") {
+        return entry as ServerEntry;
+      }
+      return {
+        fetch: (req: Request) => entry(req),
+      } as ServerEntry;
+    });
   }
   return serverEntryPromise;
 }
