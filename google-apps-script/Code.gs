@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════
 // MediRent / Relife ERP — Google Apps Script Web App  (v6 — Shared-Secret Auth)
-// Sheet ID: 1f5mJV8P90ID2-BiyeZZvtBF0Q3JjvyElbfI4omxkJRw
+// Sheet ID: 1va-_-hRrCaj7CyZSfdEoQeU1PBwn7Bh_PJlj9kaR--0
 //
 // SETUP STEPS:
 //  1. Replace ALL existing code with this script
@@ -37,9 +37,21 @@
 //    request — keeps chunk downloads fast as the sheet grows.
 // ══════════════════════════════════════════════════════════
 
+const SPREADSHEET_ID = "1va-_-hRrCaj7CyZSfdEoQeU1PBwn7Bh_PJlj9kaR--0";
 const TOKEN = "392284cd2d4b0ea7d53f74cba8cd2288d044898d586824f1"; // must match the frontend's token — rotate both together
 const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns", "Owners", "Documents", "Exchanges", "FileChunks", "Staff"];
 const LOCK_WAIT_MS = 30000;
+
+function getSS() {
+  if (SPREADSHEET_ID && SPREADSHEET_ID.trim() !== "") {
+    try {
+      return SpreadsheetApp.openById(SPREADSHEET_ID);
+    } catch (e) {
+      // Fallback to active spreadsheet if openById fails
+    }
+  }
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 
 function unauthorized() {
   return ContentService
@@ -56,14 +68,14 @@ function doGet(e) {
   const sheet  = e.parameter.sheet;
 
   if (action === "ping") {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSS();
     return ContentService
       .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v6" }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
   if (action === "getAll" && sheet) {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = getSS();
     const sh = ss.getSheetByName(sheet);
     if (!sh || sh.getLastRow() < 2 || sh.getLastColumn() === 0) {
       return ContentService.createTextOutput(JSON.stringify({ data: [] })).setMimeType(ContentService.MimeType.JSON);
@@ -148,7 +160,7 @@ function doPost(e) {
     const row   = body.row;
     const rows  = body.rows;
     const id    = body.id;
-    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const ss    = getSS();
 
     function getOrCreateSheet(name) {
       var sh = ss.getSheetByName(name);

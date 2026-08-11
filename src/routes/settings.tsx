@@ -677,7 +677,7 @@ function applyHeaderFormat(sh) {
                 To prevent database disconnection when browser storage is cleared, set the
                 <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900 mx-0.5">VITE_GSHEETS_URL</code>
                 and <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900 mx-0.5">VITE_GSHEETS_TOKEN</code>
-                environment variables in Netlify/Vercel settings or in your local <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900">.env</code> file.
+                environment variables in your Vercel project settings or in your local <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900">.env</code> file.
               </p>
             </div>
           </div>
