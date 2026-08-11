@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -597,11 +598,11 @@ function applyHeaderFormat(sh) {
 
           {/* Apps Script Code */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Apps Script Code (Copy → Paste into Script Editor)
               </Label>
-              <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={copyScript}>
+              <Button variant="outline" size="sm" className="h-7 text-[12px] self-start sm:self-auto" onClick={copyScript}>
                 <Copy className="h-3 w-3 mr-1.5" /> Copy Code
               </Button>
             </div>
@@ -909,7 +910,7 @@ function CompanySettingsTab() {
           <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Logo Upload</Label>
           <Input type="file" className="h-10 text-[13px] file:text-[13px]" />
         </div>
-        <div className="sm:col-span-2 flex items-center justify-between border-t border-border/50 pt-5">
+        <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border/50 pt-5">
           <p className="text-[12px] text-muted-foreground">Changes are saved to local storage and persist across refreshes.</p>
           <div className="flex gap-2">
             <Button variant="outline" type="button" onClick={handleCancel}>Cancel</Button>
@@ -1064,7 +1065,8 @@ function UserLoginCredentials() {
 
   return (
     <Card>
-      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4 flex flex-row items-center justify-between gap-4">
+      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="metric-icon h-9 w-9 bg-primary/10 text-primary border-primary/20">
             <Lock className="h-4.5 w-4.5" />
@@ -1121,10 +1123,12 @@ function UserLoginCredentials() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </CardHeader>
-      
+
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* Desktop Table — hidden on mobile */}
+        <div className="hidden sm:block overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/10">
               <TableRow>
@@ -1162,6 +1166,44 @@ function UserLoginCredentials() {
               ))}
             </TableBody>
           </Table>
+        </div>
+
+        {/* Mobile Card List — visible only on mobile */}
+        <div className="sm:hidden">
+          {staffUsers.length === 0 ? (
+            <div className="py-12 text-center text-[13px] text-muted-foreground">No staff users yet.</div>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {staffUsers.map((user) => (
+                <div key={user.id} className="flex items-center gap-3 px-4 py-3.5">
+                  <Avatar className="h-10 w-10 shrink-0">
+                    <AvatarFallback className="text-[12px] font-bold">
+                      {user.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-[13.5px] truncate">{user.name}</p>
+                    <p className="info-row truncate">{user.email}</p>
+                  </div>
+                  <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${getRoleBadgeClass(user.role)}`}>
+                    {user.role}
+                  </span>
+                  {isCurrentUserAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={!!(user as any).firstAdmin}
+                      onClick={() => handleDeleteUser(user.id, !!(user as any).firstAdmin)}
+                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title={!!(user as any).firstAdmin ? "Primary admin cannot be deleted" : "Delete User"}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

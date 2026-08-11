@@ -1009,7 +1009,7 @@ function ReportsPage() {
       case "Rentals Statement":
         return (
           <TableRow>
-            <TableHead>Agreement ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Agreement ID</TableHead>
             <TableHead>Customer Name</TableHead>
             <TableHead>Equipment</TableHead>
             <TableHead>Serial</TableHead>
@@ -1023,7 +1023,7 @@ function ReportsPage() {
       case "Exchanges Statement":
         return (
           <TableRow>
-            <TableHead>Exchange ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Exchange ID</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Customer Name</TableHead>
             <TableHead>Agreement ID</TableHead>
@@ -1037,7 +1037,7 @@ function ReportsPage() {
       case "Customers Statement":
         return (
           <TableRow>
-            <TableHead>Customer ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Customer ID</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Phone</TableHead>
             <TableHead>Email</TableHead>
@@ -1050,7 +1050,7 @@ function ReportsPage() {
       case "Equipment Statement":
         return (
           <TableRow>
-            <TableHead>Equipment ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Equipment ID</TableHead>
             <TableHead>Category</TableHead>
             <TableHead>Serial</TableHead>
             <TableHead>Model</TableHead>
@@ -1064,7 +1064,7 @@ function ReportsPage() {
       case "Payments Statement":
         return (
           <TableRow>
-            <TableHead>Payment ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Payment ID</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Customer</TableHead>
             <TableHead>Agreement</TableHead>
@@ -1078,7 +1078,7 @@ function ReportsPage() {
       case "Rent Dues Statement":
         return (
           <TableRow>
-            <TableHead>Agreement ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Agreement ID</TableHead>
             <TableHead>Customer Name</TableHead>
             <TableHead>Equipment</TableHead>
             <TableHead>Start Date</TableHead>
@@ -1091,7 +1091,7 @@ function ReportsPage() {
       case "Return Statement":
         return (
           <TableRow>
-            <TableHead>Return ID</TableHead>
+            <TableHead className="sticky left-0 z-20 bg-muted">Return ID</TableHead>
             <TableHead>Return Date</TableHead>
             <TableHead>Agreement ID</TableHead>
             <TableHead>Customer Name</TableHead>
@@ -1106,7 +1106,7 @@ function ReportsPage() {
       case "Owner Statement":
         return (
           <TableRow>
-            <TableHead className="w-12 text-center">Sr. No.</TableHead>
+            <TableHead className="w-12 text-center sticky left-0 z-20 bg-muted">Sr. No.</TableHead>
             <TableHead>Owner Name</TableHead>
             <TableHead>Category</TableHead>
             <TableHead className="text-center">Machine / Serial No.</TableHead>
@@ -1140,7 +1140,7 @@ function ReportsPage() {
         case "Rentals Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono font-bold text-primary">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono font-bold text-primary">{item.id}</TableCell>
               <TableCell className="font-semibold">{item.customer}</TableCell>
               <TableCell>{item.equipment}</TableCell>
               <TableCell className="font-mono">{item.serial}</TableCell>
@@ -1162,7 +1162,7 @@ function ReportsPage() {
         case "Exchanges Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono font-bold text-primary">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono font-bold text-primary">{item.id}</TableCell>
               <TableCell>{formatDateDDMMYYYY(item.exchangeDate || item.date)}</TableCell>
               <TableCell className="font-semibold">{item.customer}</TableCell>
               <TableCell className="font-mono">{item.agreementId}</TableCell>
@@ -1176,7 +1176,7 @@ function ReportsPage() {
         case "Customers Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono text-muted-foreground">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono text-muted-foreground">{item.id}</TableCell>
               <TableCell className="font-semibold">{item.name}</TableCell>
               <TableCell>{item.phone}</TableCell>
               <TableCell>{item.email || "—"}</TableCell>
@@ -1201,7 +1201,7 @@ function ReportsPage() {
         case "Equipment Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono text-muted-foreground">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono text-muted-foreground">{item.id}</TableCell>
               <TableCell className="font-semibold">{item.category}</TableCell>
               <TableCell className="font-mono font-bold">{item.serial}</TableCell>
               <TableCell>{item.model}</TableCell>
@@ -1223,7 +1223,7 @@ function ReportsPage() {
         case "Payments Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono font-bold text-primary">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono font-bold text-primary">{item.id}</TableCell>
               <TableCell>{formatDateDDMMYYYY(item.date)}</TableCell>
               <TableCell className="font-semibold">{item.customer}</TableCell>
               <TableCell className="font-mono">{item.agreement}</TableCell>
@@ -1244,7 +1244,7 @@ function ReportsPage() {
         case "Rent Dues Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono font-bold text-primary">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono font-bold text-primary">{item.id}</TableCell>
               <TableCell className="font-semibold">{item.customer}</TableCell>
               <TableCell>{item.equipment}</TableCell>
               <TableCell>{formatDateDDMMYYYY(item.start)}</TableCell>
@@ -1263,7 +1263,7 @@ function ReportsPage() {
         case "Return Statement":
           return (
             <TableRow key={item.id || index}>
-              <TableCell className="font-mono font-bold text-primary">{item.id}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 font-mono font-bold text-primary">{item.id}</TableCell>
               <TableCell>{formatDateDDMMYYYY(item.date)}</TableCell>
               <TableCell className="font-mono">{item.agreement}</TableCell>
               <TableCell className="font-semibold">{item.customer}</TableCell>
@@ -1280,7 +1280,7 @@ function ReportsPage() {
 
           return (
             <TableRow key={index}>
-              <TableCell className="text-center font-medium text-muted-foreground">{index + 1}</TableCell>
+              <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 text-center font-medium text-muted-foreground">{index + 1}</TableCell>
               <TableCell className="font-semibold text-slate-800">{item.owner || "—"}</TableCell>
               <TableCell>{item.category || "—"}</TableCell>
               <TableCell className="text-center font-mono font-semibold">{item.serial || "—"}</TableCell>
@@ -1567,42 +1567,70 @@ function ReportsPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 flex-grow">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-5">Customer</TableHead>
-                  <TableHead className="text-center">Rentals</TableHead>
-                  <TableHead className="text-right pr-5">Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dynamicTopCustomers.length === 0 && (
+            {/* Desktop Table — hidden on mobile */}
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={3} className="py-12 text-center text-[13px] text-muted-foreground">
-                      No billing history found.
-                    </TableCell>
+                    <TableHead className="pl-5">Customer</TableHead>
+                    <TableHead className="text-center">Rentals</TableHead>
+                    <TableHead className="text-right pr-5">Revenue</TableHead>
                   </TableRow>
-                )}
-                {dynamicTopCustomers.map((cust) => (
-                  <TableRow key={cust.id} className="group">
-                    <TableCell className="pl-5">
-                      <div>
+                </TableHeader>
+                <TableBody>
+                  {dynamicTopCustomers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-12 text-center text-[13px] text-muted-foreground">
+                        No billing history found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {dynamicTopCustomers.map((cust) => (
+                    <TableRow key={cust.id} className="group">
+                      <TableCell className="pl-5">
+                        <div>
+                          <p className="font-semibold text-[13px] truncate">{cust.name}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">{cust.id}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary text-[11px] font-bold">
+                          {cust.rentals}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right pr-5 font-semibold text-[13px] text-success">
+                        ₹{cust.revenue.toLocaleString("en-IN")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile List — visible only on mobile */}
+            <div className="sm:hidden">
+              {dynamicTopCustomers.length === 0 ? (
+                <div className="py-12 text-center text-[13px] text-muted-foreground">
+                  No billing history found.
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {dynamicTopCustomers.map((cust) => (
+                    <div key={cust.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="min-w-0 flex-1">
                         <p className="font-semibold text-[13px] truncate">{cust.name}</p>
-                        <p className="text-[10px] font-mono text-muted-foreground">{cust.id}</p>
+                        <p className="text-[10px] font-mono text-muted-foreground">
+                          {cust.id} · {cust.rentals} rental{cust.rentals !== 1 ? "s" : ""}
+                        </p>
                       </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary text-[11px] font-bold">
-                        {cust.rentals}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right pr-5 font-semibold text-[13px] text-success">
-                      ₹{cust.revenue.toLocaleString("en-IN")}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <p className="shrink-0 text-right font-semibold text-[13px] text-success">
+                        ₹{cust.revenue.toLocaleString("en-IN")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1781,6 +1809,9 @@ function ReportsPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto max-h-[500px] overflow-y-auto">
+            <p className="sm:hidden px-4 pt-2.5 pb-1 text-[11px] text-muted-foreground">
+              Swipe to see all columns →
+            </p>
             <Table>
               <TableHeader className="bg-muted/10 sticky top-0 z-10">
                 {renderTableHeader()}

@@ -10,6 +10,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { 
   RotateCcw, 
   Receipt, 
@@ -33,7 +34,8 @@ import {
   Clock,
   MessageCircle,
   Copy,
-  Send
+  Send,
+  MoreVertical
 } from "lucide-react";
 import { toast } from "sonner";
 import { QrScannerModal } from "@/components/QrScannerModal";
@@ -176,12 +178,23 @@ function WhatsAppReturnMessageModal({
   ret,
   rental,
   customer,
+  hideTrigger,
+  controlledOpen,
+  onControlledOpenChange,
 }: {
   ret?: any;
   rental?: any;
   customer?: any;
+  hideTrigger?: boolean;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : openState;
+  const setOpen = (value: boolean) => {
+    setOpenState(value);
+    onControlledOpenChange?.(value);
+  };
   const [editedMsg, setEditedMsg] = useState("");
 
   const customerName = ret?.customer || rental?.customer || customer?.name || "Customer";
@@ -242,15 +255,17 @@ function WhatsAppReturnMessageModal({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 px-2 text-[11px] font-bold text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100 border-emerald-300 gap-1.5"
-        onClick={() => setOpen(true)}
-        title="WhatsApp Pickup Message"
-      >
-        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp
-      </Button>
+      {!hideTrigger && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-[11px] font-bold text-emerald-700 bg-emerald-50/70 hover:bg-emerald-100 border-emerald-300 gap-1.5"
+          onClick={() => setOpen(true)}
+          title="WhatsApp Pickup Message"
+        >
+          <MessageCircle className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
@@ -352,8 +367,25 @@ function formatRentalDuration(startStr: string, endStr: string, rentCycle: strin
 }
 
 
-function PayReturnDueDialog({ ret, onSave }: { ret: any; onSave: () => void }) {
-  const [open, setOpen] = useState(false);
+function PayReturnDueDialog({
+  ret,
+  onSave,
+  hideTrigger,
+  controlledOpen,
+  onControlledOpenChange,
+}: {
+  ret: any;
+  onSave: () => void;
+  hideTrigger?: boolean;
+  controlledOpen?: boolean;
+  onControlledOpenChange?: (open: boolean) => void;
+}) {
+  const [openState, setOpenState] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : openState;
+  const setOpen = (value: boolean) => {
+    setOpenState(value);
+    onControlledOpenChange?.(value);
+  };
   const totalCollectible = Math.abs(ret.refund || 0);
   const existingPaid = ret.duePaidAmount !== undefined 
     ? ret.duePaidAmount 
@@ -470,15 +502,17 @@ function PayReturnDueDialog({ ret, onSave }: { ret: any; onSave: () => void }) {
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="h-7 px-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 gap-1"
-        onClick={() => setOpen(true)}
-        title="Pay Due Amount"
-      >
-        <CreditCard className="h-3 w-3" /> Pay Due
-      </Button>
+      {!hideTrigger && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 gap-1"
+          onClick={() => setOpen(true)}
+          title="Pay Due Amount"
+        >
+          <CreditCard className="h-3 w-3" /> Pay Due
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
@@ -558,6 +592,35 @@ function PayReturnDueDialog({ ret, onSave }: { ret: any; onSave: () => void }) {
   );
 }
 
+// Compact single-line Final Settlement summary for the mobile return card —
+// mirrors the same status logic used in the desktop table's "Final Settlement" column.
+function getReturnSettlementDisplay(ret: any): { text: string; className: string } {
+  if (ret.refund >= 0) {
+    return {
+      text: `₹${Math.abs(ret.refund).toLocaleString("en-IN")} (Refund)`,
+      className: "text-emerald-600",
+    };
+  }
+  const totalDue = Math.abs(ret.refund);
+  const paidAmt = ret.duePaidAmount !== undefined
+    ? ret.duePaidAmount
+    : (ret.duePaymentStatus === "Paid" ? totalDue : 0);
+  const pendingDue = ret.duePendingBalance !== undefined
+    ? ret.duePendingBalance
+    : Math.max(0, totalDue - paidAmt);
+  const status = ret.duePaymentStatus === "Paid" || pendingDue <= 0
+    ? "Paid"
+    : (paidAmt > 0 ? "Partial" : "Not Paid");
+
+  if (status === "Paid") {
+    return { text: `₹${totalDue.toLocaleString("en-IN")} (Paid)`, className: "text-emerald-600" };
+  }
+  if (status === "Partial") {
+    return { text: `₹${pendingDue.toLocaleString("en-IN")} (Pending)`, className: "text-amber-600" };
+  }
+  return { text: `₹${totalDue.toLocaleString("en-IN")} (Collect)`, className: "text-rose-600" };
+}
+
 export const Route = createFileRoute("/returns")({
   head: () => ({ meta: [{ title: "Returns — Relife" }] }),
   component: ReturnsPage,
@@ -596,6 +659,11 @@ function ReturnsPage() {
   const lastSelectedAgreementRef = useRef("");
 
   const [historySearch, setHistorySearch] = useState("");
+
+  // Mobile-only: tracks which return row's WhatsApp / Pay Due dialog is open,
+  // opened from the mobile card's kebab menu (dialogs are rendered once, outside the row loop).
+  const [mobileWaReturn, setMobileWaReturn] = useState<any>(null);
+  const [mobilePayDueReturn, setMobilePayDueReturn] = useState<any>(null);
 
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
 
@@ -1587,7 +1655,7 @@ function ReturnsPage() {
                             {/* Status Buttons: Full Payment / Partial Payment / Not Paid */}
                             <div className="space-y-1.5">
                               <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Due Payment Status</Label>
-                              <div className="grid grid-cols-3 gap-1.5 bg-background p-1.5 rounded-lg border border-border h-11">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 bg-background p-1.5 rounded-lg border border-border h-auto sm:h-11">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1596,7 +1664,7 @@ function ReturnsPage() {
                                     setDueCashAmount(Math.round(totalDueAmt / 2).toString());
                                     setDueBankAmount((totalDueAmt - Math.round(totalDueAmt / 2)).toString());
                                   }}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md text-[12px] font-bold transition-all ${
+                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
                                     duePaymentStatus === "Paid"
                                       ? "bg-emerald-600 text-white shadow-xs"
                                       : "text-muted-foreground hover:text-foreground"
@@ -1615,7 +1683,7 @@ function ReturnsPage() {
                                     setDueCashAmount(Math.round(defaultPartial / 2).toString());
                                     setDueBankAmount((defaultPartial - Math.round(defaultPartial / 2)).toString());
                                   }}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md text-[12px] font-bold transition-all ${
+                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
                                     duePaymentStatus === "Partial"
                                       ? "bg-amber-600 text-white shadow-xs"
                                       : "text-muted-foreground hover:text-foreground"
@@ -1628,7 +1696,7 @@ function ReturnsPage() {
                                 <button
                                   type="button"
                                   onClick={() => setDuePaymentStatus("Not Paid")}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md text-[12px] font-bold transition-all ${
+                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
                                     duePaymentStatus === "Not Paid"
                                       ? "bg-rose-600 text-white shadow-xs"
                                       : "text-muted-foreground hover:text-foreground"
@@ -1973,7 +2041,8 @@ function ReturnsPage() {
 
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            {/* Desktop Table — hidden on mobile */}
+            <div className="hidden sm:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/10">
@@ -2170,6 +2239,125 @@ function ReturnsPage() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile Card List — visible only on mobile */}
+            <div className="sm:hidden">
+              {filteredReturns.length === 0 ? (
+                <div className="py-14 text-center text-[13px] text-muted-foreground">
+                  <RotateCcw className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="font-semibold text-foreground/75">No return records match filters</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Try widening search criteria or selecting another tab.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/60">
+                  {filteredReturns.map((ret) => {
+                    const settlement = getReturnSettlementDisplay(ret);
+                    return (
+                      <div
+                        key={ret.id}
+                        className="flex items-center gap-3 px-4 py-3.5"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="font-semibold text-[13.5px] truncate">{ret.customer}</p>
+                            <span className={`inline-flex items-center shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-bold border ${
+                              ret.status === "Pending Approval"
+                                ? "bg-warning/10 text-warning border-warning/25 animate-pulse"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200/50"
+                            }`}>
+                              {ret.status || "Completed"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="info-row min-w-0">
+                              <Package className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{ret.equipment}</span>
+                            </span>
+                            <span className="info-row shrink-0">
+                              <ShieldCheck className="h-3 w-3 shrink-0" />
+                              {ret.condition}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-[10.5px] font-mono text-muted-foreground/60">{ret.id} · {formatDateDDMMYYYY(ret.date)}</p>
+                            <p className={`text-[12px] font-bold ${settlement.className}`}>{settlement.text}</p>
+                          </div>
+                        </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-11 w-11 shrink-0 text-muted-foreground"
+                              title="Return actions"
+                            >
+                              <MoreVertical className="h-4.5 w-4.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onSelect={() => setMobileWaReturn(ret)}>
+                              <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp Message
+                            </DropdownMenuItem>
+                            {ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
+                              <DropdownMenuItem onSelect={() => setMobilePayDueReturn(ret)}>
+                                <CreditCard className="h-4 w-4 text-emerald-600" /> Pay Due
+                              </DropdownMenuItem>
+                            )}
+                            {!isStaff && ret.status === "Pending Approval" && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  const updatedReturn = { ...ret, status: "Completed" };
+                                  saveReturn(updatedReturn);
+                                  setMockReturns(getReturns());
+                                  toast.success(`Return ${ret.id} approved successfully!`);
+                                  if (typeof window !== "undefined") {
+                                    window.dispatchEvent(new CustomEvent("medirent-db-updated"));
+                                  }
+                                }}
+                              >
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Approve
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                printReturnReceipt(ret);
+                                toast.success(`Receipt printed for ${ret.customer}`);
+                              }}
+                            >
+                              <Receipt className="h-4 w-4" /> Print Receipt
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Controlled dialogs opened from the mobile card kebab menu above.
+                Rendered once, outside the row loop and outside the DropdownMenu tree, so they
+                aren't unmounted when their triggering dropdown closes. */}
+            {mobileWaReturn && (
+              <WhatsAppReturnMessageModal
+                ret={mobileWaReturn}
+                rental={rentals.find((r) => r.id === mobileWaReturn.agreement)}
+                customer={customers.find((c) => c.name === mobileWaReturn.customer || c.id === rentals.find((r) => r.id === mobileWaReturn.agreement)?.customerId)}
+                hideTrigger
+                controlledOpen={!!mobileWaReturn}
+                onControlledOpenChange={(v) => { if (!v) setMobileWaReturn(null); }}
+              />
+            )}
+            {mobilePayDueReturn && (
+              <PayReturnDueDialog
+                ret={mobilePayDueReturn}
+                onSave={() => { refresh(); setMobilePayDueReturn(null); }}
+                hideTrigger
+                controlledOpen={!!mobilePayDueReturn}
+                onControlledOpenChange={(v) => { if (!v) setMobilePayDueReturn(null); }}
+              />
+            )}
           </CardContent>
         </Card>
 

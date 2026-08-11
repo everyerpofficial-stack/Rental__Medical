@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
-import { RefreshCw, Search, Plus, CalendarDays, ClipboardList, AlertTriangle, Printer, Eye, QrCode, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Search, Plus, CalendarDays, ClipboardList, AlertTriangle, Printer, Eye, QrCode, CheckCircle2, ChevronRight, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import {
@@ -686,77 +686,116 @@ function ExchangesPage() {
         </div>
 
         <Card className="border border-border/50 shadow-soft overflow-hidden">
-          <Table>
-            <TableHeader className="bg-muted/40">
-              <TableRow className="hover:bg-transparent border-b border-border/40">
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange ID</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Date</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Agreement No</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned Item (Serial)</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item (Serial)</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Reason</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Status</TableHead>
-                <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredExchanges.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-[13px]">
-                    No exchange requests found.
-                  </TableCell>
+          {/* Desktop Table — hidden on mobile */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader className="bg-muted/40">
+                <TableRow className="hover:bg-transparent border-b border-border/40">
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange ID</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Date</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Agreement No</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned Item (Serial)</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item (Serial)</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Reason</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Status</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px] text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredExchanges.map((exc) => (
-                  <TableRow key={exc.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
-                    <TableCell className="font-semibold text-foreground text-[13px]"><code>{exc.id}</code></TableCell>
-                    <TableCell className="text-[13px] text-slate-600">{formatDateDDMMYYYY(exc.exchangeDate)}</TableCell>
-                    <TableCell className="text-[13px] font-medium text-primary"><code>{exc.agreementId}</code></TableCell>
-                    <TableCell className="text-[13px] font-semibold text-slate-800">{exc.customer}</TableCell>
-                    <TableCell className="text-[13px] text-slate-600">
-                      <div>{exc.currentEquipment}</div>
-                      <code className="text-[11px] text-muted-foreground">{exc.currentEquipmentSerial}</code>
-                    </TableCell>
-                    <TableCell className="text-[13px] text-slate-600">
-                      {exc.newEquipment ? (
-                        <>
-                          <div>{exc.newEquipment}</div>
-                          <code className="text-[11px] text-muted-foreground">{exc.newEquipmentSerial}</code>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground italic text-[12px]">Pending swap</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-[13px] text-slate-500 max-w-[200px] truncate" title={exc.reason}>{exc.reason}</TableCell>
-                    <TableCell className="text-[13px]"><StatusBadge status={exc.status} /></TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 hover:bg-slate-100 rounded-md"
-                          onClick={() => setSelectedExchange(exc)}
-                          title="View Details"
-                        >
-                          <Eye className="h-4 w-4 text-slate-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 hover:bg-slate-100 rounded-md"
-                          onClick={() => printExchangeSlip(exc)}
-                          title="Print Exchange Slip"
-                        >
-                          <Printer className="h-4 w-4 text-slate-600" />
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {filteredExchanges.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-[13px]">
+                      No exchange requests found.
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  filteredExchanges.map((exc) => (
+                    <TableRow key={exc.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
+                      <TableCell className="font-semibold text-foreground text-[13px]"><code>{exc.id}</code></TableCell>
+                      <TableCell className="text-[13px] text-slate-600">{formatDateDDMMYYYY(exc.exchangeDate)}</TableCell>
+                      <TableCell className="text-[13px] font-medium text-primary"><code>{exc.agreementId}</code></TableCell>
+                      <TableCell className="text-[13px] font-semibold text-slate-800">{exc.customer}</TableCell>
+                      <TableCell className="text-[13px] text-slate-600">
+                        <div>{exc.currentEquipment}</div>
+                        <code className="text-[11px] text-muted-foreground">{exc.currentEquipmentSerial}</code>
+                      </TableCell>
+                      <TableCell className="text-[13px] text-slate-600">
+                        {exc.newEquipment ? (
+                          <>
+                            <div>{exc.newEquipment}</div>
+                            <code className="text-[11px] text-muted-foreground">{exc.newEquipmentSerial}</code>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground italic text-[12px]">Pending swap</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-[13px] text-slate-500 max-w-[200px] truncate" title={exc.reason}>{exc.reason}</TableCell>
+                      <TableCell className="text-[13px]"><StatusBadge status={exc.status} /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-slate-100 rounded-md"
+                            onClick={() => setSelectedExchange(exc)}
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4 text-slate-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 hover:bg-slate-100 rounded-md"
+                            onClick={() => printExchangeSlip(exc)}
+                            title="Print Exchange Slip"
+                          >
+                            <Printer className="h-4 w-4 text-slate-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card List — visible only on mobile */}
+          <div className="sm:hidden">
+            {filteredExchanges.length === 0 ? (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                No exchange requests found.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {filteredExchanges.map((exc) => (
+                  <div
+                    key={exc.id}
+                    className="flex items-center gap-3 px-4 py-3.5 active:bg-muted/40 transition-colors"
+                    onClick={() => setSelectedExchange(exc)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-[13.5px] truncate">{exc.customer}</p>
+                        <StatusBadge status={exc.status} />
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="info-row">
+                          <RefreshCw className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{exc.currentEquipment}</span>
+                          <ArrowRight className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{exc.newEquipment || "Pending swap"}</span>
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] font-mono text-muted-foreground/60 mt-0.5">{exc.id} · {formatDateDDMMYYYY(exc.exchangeDate)}</p>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 

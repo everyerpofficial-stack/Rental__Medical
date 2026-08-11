@@ -16,10 +16,11 @@ import {
 } from "@/components/ui/sheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Plus, Search, Edit, Trash2, Phone, Mail, Handshake, ShieldCheck,
   Package, Percent, MapPin, Calendar, FileText, Check, ExternalLink, Activity,
-  Printer, Download
+  Printer, Download, ChevronRight
 } from "lucide-react";
 import {
   getOwners,
@@ -43,6 +44,15 @@ export const Route = createFileRoute("/owners")({
   component: OwnersPage,
 });
 
+// Derive avatar color from index — unified hues from design system
+const avatarHues = [
+  "bg-primary/15 text-primary",
+  "bg-accent/15 text-accent",
+  "bg-success/12 text-success",
+  "bg-warning/15 text-warning-foreground",
+  "bg-destructive/12 text-destructive",
+  "bg-muted text-muted-foreground",
+];
 
 function OwnerFormDialog({
   title,
@@ -1048,6 +1058,8 @@ function OwnersPage() {
       {/* Table Card */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
+          {/* Desktop Table — hidden on mobile */}
+          <div className="hidden sm:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1156,6 +1168,58 @@ function OwnersPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          {/* Mobile Card List — visible only on mobile */}
+          <div className="sm:hidden">
+            {filteredOwners.length === 0 ? (
+              <div className="py-12 text-center text-[13px] text-muted-foreground">
+                No equipment owners match your search filter.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {filteredOwners.map((owner, idx) => {
+                  const ownedCount = equipment.filter(
+                    (e) => e.owner?.toLowerCase() === owner.name.toLowerCase()
+                  ).length;
+                  return (
+                    <div
+                      key={owner.id}
+                      className="flex items-center gap-3 px-4 py-3.5 active:bg-muted/40 transition-colors"
+                      onClick={() => {
+                        setSelectedOwner(owner);
+                        setDetailsOpen(true);
+                      }}
+                    >
+                      <Avatar className="h-10 w-10 shrink-0">
+                        <AvatarFallback className={`${avatarHues[idx % avatarHues.length]} text-[12px] font-bold`}>
+                          {owner.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-[13.5px] truncate">{owner.name}</p>
+                          <StatusBadge status={owner.status} />
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="info-row">
+                            <Phone className="h-3 w-3 shrink-0" />
+                            {owner.phone}
+                          </span>
+                          <span className="info-row">
+                            <Package className="h-3 w-3 shrink-0" />
+                            {ownedCount} items
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] font-mono text-muted-foreground/60 mt-0.5">{owner.id}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
