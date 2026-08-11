@@ -20,8 +20,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Plus, Search, Edit, Trash2, Phone, Mail, Handshake, ShieldCheck,
   Package, Percent, MapPin, Calendar, FileText, Check, ExternalLink, Activity,
-  Printer, Download, ChevronRight
+  Printer, Download, Upload, ChevronRight
 } from "lucide-react";
+import { ImportCsvDialog, type ImportColumn } from "@/components/ImportCsvDialog";
 import {
   getOwners,
   saveOwner,
@@ -53,6 +54,40 @@ const avatarHues = [
   "bg-destructive/12 text-destructive",
   "bg-muted text-muted-foreground",
 ];
+
+// Bulk-import column mapping — mirrors the fields on OwnerFormDialog
+const ownerImportColumns: ImportColumn[] = [
+  { key: "name", label: "Organization Name", required: true, aliases: ["Company", "Organization", "Name"] },
+  { key: "ownerName", label: "Owner Name", required: true, aliases: ["Contact Person", "Owner"] },
+  { key: "phone", label: "Contact Phone", aliases: ["Phone"] },
+  { key: "email", label: "Contact Email", aliases: ["Email"] },
+  { key: "address", label: "Address", aliases: ["Office / Billing Address"] },
+  { key: "commissionRate", label: "Commission Rate", aliases: ["Commission %", "Commission"] },
+];
+
+function importOwnerRow(row: Record<string, string>): { ok: boolean; error?: string } {
+  const name = (row.name || "").trim();
+  if (!name) return { ok: false, error: "Missing organization name" };
+
+  const ownerName = (row.ownerName || "").trim();
+  if (!ownerName) return { ok: false, error: `${name}: missing owner name` };
+
+  const phoneDigits = (row.phone || "").replace(/\D/g, "");
+  if (phoneDigits && phoneDigits.length !== 10) return { ok: false, error: `${name}: Contact Phone must be exactly 10 digits` };
+
+  saveOwner({
+    id: getNextOwnerNumber(),
+    name,
+    ownerName,
+    inventorySeries: "",
+    phone: phoneDigits,
+    email: row.email || "",
+    address: row.address || "",
+    commissionRate: parseFloat(row.commissionRate) || 100,
+    status: "Active",
+  });
+  return { ok: true };
+}
 
 function OwnerFormDialog({
   title,
@@ -931,16 +966,30 @@ function OwnersPage() {
       title="Equipment Owners"
       subtitle="Manage partner contracts, commissions, and owned inventories"
       actions={
-        <OwnerFormDialog
-          title="Add New Owner"
-          onSave={refreshData}
-          trigger={
-            <Button size="sm">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add Owner
-            </Button>
-          }
-        />
+        <>
+          <ImportCsvDialog
+            entityLabel="Owners"
+            columns={ownerImportColumns}
+            onImportRow={importOwnerRow}
+            onComplete={refreshData}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Import
+              </Button>
+            }
+          />
+          <OwnerFormDialog
+            title="Add New Owner"
+            onSave={refreshData}
+            trigger={
+              <Button size="sm">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Owner
+              </Button>
+            }
+          />
+        </>
       }
     >
       {/* KPI Cards Grid */}

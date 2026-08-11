@@ -19,12 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
-  Plus, Search, Download, Phone, MapPin,
+  Plus, Search, Download, Upload, Phone, MapPin,
   UserCheck, UserX, Edit, Eye, Trash2,
   Mail, MapPinned, Hash, Users, Clock, Filter,
   AlertTriangle, FolderOpen, FileCheck2, FileImage, FileText,
   FileDigit, Receipt, ChevronRight, CreditCard, CheckCircle2,
 } from "lucide-react";
+import { ImportCsvDialog, type ImportColumn } from "@/components/ImportCsvDialog";
 import { customers } from "@/lib/mock-data";
 import {
   getCustomers,
@@ -73,6 +74,57 @@ const avatarHues = [
   "bg-destructive/12 text-destructive",
   "bg-muted text-muted-foreground",
 ];
+
+// Bulk-import column mapping — mirrors the fields on CustomerFormDialog
+const customerImportColumns: ImportColumn[] = [
+  { key: "name", label: "Name", required: true, aliases: ["Customer Name", "Full Name"] },
+  { key: "phone", label: "Primary Number", required: true, aliases: ["Phone", "Primary Phone", "Mobile"] },
+  { key: "altPhone", label: "Alternative Phone", aliases: ["Alt Phone"] },
+  { key: "contactNumber3", label: "Alternative Phone 1", aliases: ["Alt Phone 1"] },
+  { key: "email", label: "Email" },
+  { key: "city", label: "City" },
+  { key: "state", label: "State" },
+  { key: "pincode", label: "Pincode" },
+  { key: "area", label: "Area" },
+  { key: "address", label: "Address" },
+  { key: "aadhaar", label: "Aadhaar" },
+  { key: "pan", label: "PAN" },
+  { key: "notes", label: "Notes" },
+];
+
+function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: string } {
+  const name = (row.name || "").trim();
+  if (!name) return { ok: false, error: "Missing customer name" };
+
+  const phoneDigits = (row.phone || "").replace(/\D/g, "");
+  if (phoneDigits.length !== 10) return { ok: false, error: `${name}: Primary Number must be exactly 10 digits` };
+
+  const altPhoneDigits = (row.altPhone || "").replace(/\D/g, "");
+  if (altPhoneDigits && altPhoneDigits.length !== 10) return { ok: false, error: `${name}: Alternative Phone must be exactly 10 digits` };
+
+  const contactNumber3Digits = (row.contactNumber3 || "").replace(/\D/g, "");
+  if (contactNumber3Digits && contactNumber3Digits.length !== 10) return { ok: false, error: `${name}: Alternative Phone 1 must be exactly 10 digits` };
+
+  saveCustomer({
+    id: getNextCustomerNumber(),
+    name,
+    phone: phoneDigits,
+    altPhone: altPhoneDigits,
+    contactNumber3: contactNumber3Digits,
+    email: row.email || "",
+    city: (row.city || "Mysore").trim(),
+    state: (row.state || "Karnataka").trim(),
+    pincode: row.pincode || "",
+    address: row.address || "No address provided",
+    area: row.area || "",
+    aadhaar: row.aadhaar || "",
+    pan: row.pan || "",
+    rentals: 0,
+    status: "Active",
+    notes: row.notes || "",
+  });
+  return { ok: true };
+}
 
 function CustomerFormDialog({
   trigger,
@@ -1405,6 +1457,18 @@ function CustomersPage() {
             <Download className="mr-1.5 h-3.5 w-3.5" />
             Export
           </Button>
+          <ImportCsvDialog
+            entityLabel="Customers"
+            columns={customerImportColumns}
+            onImportRow={importCustomerRow}
+            onComplete={refresh}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Upload className="mr-1.5 h-3.5 w-3.5" />
+                Import
+              </Button>
+            }
+          />
           <CustomerFormDialog
             title="New Customer"
             onSave={refresh}
