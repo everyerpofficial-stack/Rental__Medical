@@ -21,7 +21,7 @@ export function getGSheetsUrl(): string {
   if (!isBrowser) return "";
   // Priority: localStorage (user-saved) → build-time env var → empty (forces user to configure)
   // ⚠️  No hardcoded fallback URL — the URL must be configured explicitly to protect the database.
-  return localStorage.getItem("medirent-gsheets-url") || (import.meta.env.VITE_GSHEETS_URL || "https://script.google.com/macros/s/AKfycbwGtMZHfNnAoEsbRIUsNZVmOTotRmChnaXsxPbEqih05-YitjF3skHYQdxcxAYR5KPGFA/exec");
+  return localStorage.getItem("medirent-gsheets-url") || (import.meta.env.VITE_GSHEETS_URL || "https://script.google.com/macros/s/AKfycbwK9uf6Vwop40yzdmxD_B9jlplagJZuiOCke_kT0mGzCWYjVjCMjJWzGmu_t2uSLD_jNQ/exec");
 }
 
 export function setGSheetsUrl(url: string) {
