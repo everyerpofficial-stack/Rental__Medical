@@ -57,7 +57,7 @@ import { isOwnOwner } from "@/components/EquipmentFormDialog";
 import { QrScannerModal } from "@/components/QrScannerModal";
 
 export const Route = createFileRoute("/rentals")({
-  head: () => ({ meta: [{ title: "Rentals — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Rentals — Relife" }] }),
   component: RentalsPage,
 });
 

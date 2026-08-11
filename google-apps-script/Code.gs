@@ -1,12 +1,27 @@
 // ══════════════════════════════════════════════════════════
-// MediRent / Relife ERP — Google Apps Script Web App  (v5 — Concurrency Fix)
+// MediRent / Relife ERP — Google Apps Script Web App  (v6 — Shared-Secret Auth)
 // Sheet ID: 1f5mJV8P90ID2-BiyeZZvtBF0Q3JjvyElbfI4omxkJRw
 //
 // SETUP STEPS:
 //  1. Replace ALL existing code with this script
-//  2. Click Deploy → Manage deployments → Edit (pencil) → Deploy
+//  2. Change TOKEN below to your own secret (must match VITE_GSHEETS_TOKEN /
+//     the token saved in Settings on the frontend)
+//  3. Click Deploy → Manage deployments → Edit (pencil) → Deploy
 //     - Execute as: Me
 //     - Who has access: Anyone
+//
+// v6 CHANGES (vs v5):
+//  - SECURITY FIX: doGet/doPost previously accepted requests from anyone who
+//    had the Web App URL, with no authentication at all — since the URL is
+//    shipped in the public frontend JS bundle, this meant any visitor could
+//    dump, overwrite, or clearSheet() the entire database directly, bypassing
+//    the app's login screen entirely. Every request now must include a
+//    `token` that matches TOKEN below, or it's rejected with a 401-style
+//    JSON error before any sheet is touched.
+//  - This is a shared secret, not a true server-side secret (it still has to
+//    ship to the browser for a client-only app to call this endpoint) — it
+//    stops opportunistic scanners and anyone who doesn't have the frontend
+//    source, but rotate it periodically and treat it like a password.
 //
 // v5 CHANGES (vs v4):
 //  - All writes (upsert / bulkUpsert / delete / clearSheet) are now serialized
@@ -22,19 +37,28 @@
 //    request — keeps chunk downloads fast as the sheet grows.
 // ══════════════════════════════════════════════════════════
 
+const TOKEN = "392284cd2d4b0ea7d53f74cba8cd2288d044898d586824f1"; // must match the frontend's token — rotate both together
 const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns", "Owners", "Documents", "Exchanges", "FileChunks", "Staff"];
 const LOCK_WAIT_MS = 30000;
+
+function unauthorized() {
+  return ContentService
+    .createTextOutput(JSON.stringify({ error: "Unauthorized" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
 
 // ─── GET handler ────────────────────────────────────────────────────────────
 
 function doGet(e) {
+  if (e.parameter.token !== TOKEN) return unauthorized();
+
   const action = e.parameter.action;
   const sheet  = e.parameter.sheet;
 
   if (action === "ping") {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v5" }))
+      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v6" }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -100,7 +124,9 @@ function doGet(e) {
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 function doPost(e) {
-  const body   = JSON.parse(e.postData.contents);
+  const body = JSON.parse(e.postData.contents);
+  if (body.token !== TOKEN) return unauthorized();
+
   const action = body.action;
 
   // Every write path below mutates a sheet via a read-then-write sequence

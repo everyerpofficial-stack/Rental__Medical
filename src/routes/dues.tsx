@@ -22,7 +22,7 @@ import {
 import { getRentals, getCustomers, getPayments, savePayment, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
-  head: () => ({ meta: [{ title: "Rent Dues — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
   component: DuesPage,
 });
 

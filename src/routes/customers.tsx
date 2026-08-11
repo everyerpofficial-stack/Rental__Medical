@@ -58,7 +58,7 @@ import {
 import { AgreementPreviewDialog } from "./rentals";
 
 export const Route = createFileRoute("/customers")({
-  head: () => ({ meta: [{ title: "Customers — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Customers — Relife" }] }),
   component: CustomersPage,
 });
 

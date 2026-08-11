@@ -60,8 +60,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" },
-      { title: "MediRent — Medical Equipment Rental ERP" },
-      { name: "description", content: "Premium ERP for managing medical equipment rentals, customers, payments and analytics." },
+      { title: "Relife — Medical Equipment Rental ERP" },
+      { name: "description", content: "ERP for managing medical equipment rentals, customers, payments and analytics." },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "default" },
       { name: "mobile-web-app-capable", content: "yes" },
@@ -318,26 +318,6 @@ function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
         );
       } catch (err) {
         console.warn("[GSheets] Login fallback sync failed:", err);
-      }
-    }
-
-    // Primary admin direct fallback match (protects against stale browser storage/sync)
-    if (!foundUser && email.toLowerCase().trim() === "relifemedicaltechnologies.mys@gmail.com") {
-      const defaultHash = "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec";
-      if (enteredHash === defaultHash || password === "Relife@806709") {
-        foundUser = {
-          id: "1",
-          name: "Relife Admin",
-          email: "relifemedicaltechnologies.mys@gmail.com",
-          passwordHash: defaultHash,
-          role: "Admin",
-          firstAdmin: true,
-        };
-        const updatedList = [foundUser, ...staffList.filter((u: any) => u.email !== foundUser.email && u.id !== "1")];
-        localStorage.setItem("medirent-staff-users", JSON.stringify(updatedList));
-        if (isGSheetsEnabled()) {
-          syncRowToSheet(SHEETS.STAFF, foundUser);
-        }
       }
     }
 

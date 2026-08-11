@@ -39,7 +39,7 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/owners")({
-  head: () => ({ meta: [{ title: "Equipment Owners — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Equipment Owners — Relife" }] }),
   component: OwnersPage,
 });
 

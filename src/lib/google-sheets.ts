@@ -33,6 +33,21 @@ export function isGSheetsEnabled(): boolean {
   return !!url && url.startsWith("https://script.google.com/");
 }
 
+/** Shared-secret token sent with every Apps Script request. The Apps Script
+ *  rejects requests whose token doesn't match its own TOKEN constant.
+ *  This doesn't make the endpoint fully private (it still ships to the
+ *  browser bundle like the URL above), but it blocks opportunistic/automated
+ *  access to a leaked or scanned Apps Script URL. Rotate it by changing the
+ *  TOKEN constant in Code.gs and re-saving it here (or via Settings). */
+export function getGSheetsToken(): string {
+  if (!isBrowser) return "";
+  return localStorage.getItem("medirent-gsheets-token") || (import.meta.env.VITE_GSHEETS_TOKEN || "392284cd2d4b0ea7d53f74cba8cd2288d044898d586824f1");
+}
+
+export function setGSheetsToken(token: string) {
+  if (isBrowser) localStorage.setItem("medirent-gsheets-token", token);
+}
+
 // ─── Core request helper ─────────────────────────────────────────────────────
 
 export async function sheetsRequest(
@@ -46,7 +61,7 @@ export async function sheetsRequest(
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...payload }),
+      body: JSON.stringify({ action, token: getGSheetsToken(), ...payload }),
       keepalive: true,
     });
 
@@ -85,7 +100,7 @@ async function sheetsGet(
   if (!url) return { success: false, error: "No Apps Script URL configured" };
 
   try {
-    let getUrl = `${url}?action=getAll&sheet=${encodeURIComponent(sheet)}`;
+    let getUrl = `${url}?action=getAll&sheet=${encodeURIComponent(sheet)}&token=${encodeURIComponent(getGSheetsToken())}`;
     if (filter) {
       getUrl += `&filterKey=${encodeURIComponent(filter.key)}&filterValue=${encodeURIComponent(filter.value)}`;
     }
@@ -113,7 +128,7 @@ export async function testConnection(): Promise<{
   }
 
   try {
-    const testUrl = `${url}?action=ping`;
+    const testUrl = `${url}?action=ping&token=${encodeURIComponent(getGSheetsToken())}`;
     const response = await fetch(testUrl, { method: "GET" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = await response.json();
@@ -243,7 +258,7 @@ export async function syncAllToSheets(
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "bulkUpsert", sheet, rows }),
+        body: JSON.stringify({ action: "bulkUpsert", sheet, rows, token: getGSheetsToken() }),
       });
       
       if (!response.ok) {
@@ -327,7 +342,7 @@ export async function sendOtpEmail(email: string, otp: string): Promise<{ succes
   if (!url) return { success: false, error: "No Apps Script URL configured" };
 
   try {
-    const getUrl = `${url}?action=sendOtp&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}`;
+    const getUrl = `${url}?action=sendOtp&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}&token=${encodeURIComponent(getGSheetsToken())}`;
     const response = await fetch(getUrl, { method: "GET" });
 
     if (!response.ok) {

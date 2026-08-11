@@ -621,7 +621,7 @@ export function AppShell({
                 {/* Breadcrumb */}
                 <div className="flex items-center gap-1 text-[11px] text-muted-foreground/60 mb-1">
                   <span className="font-medium hover:text-muted-foreground transition-colors cursor-pointer">
-                    MediRent
+                    Relife
                   </span>
                   <ChevronRight className="h-2.5 w-2.5 opacity-50" />
                   <span className="font-semibold text-muted-foreground/80">{title}</span>

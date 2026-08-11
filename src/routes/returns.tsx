@@ -559,7 +559,7 @@ function PayReturnDueDialog({ ret, onSave }: { ret: any; onSave: () => void }) {
 }
 
 export const Route = createFileRoute("/returns")({
-  head: () => ({ meta: [{ title: "Returns — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Returns — Relife" }] }),
   component: ReturnsPage,
 });
 

@@ -34,6 +34,8 @@ import {
 import {
   getGSheetsUrl,
   setGSheetsUrl,
+  getGSheetsToken,
+  setGSheetsToken,
   testConnection,
   syncAllToSheets,
   isGSheetsEnabled,
@@ -44,7 +46,7 @@ import {
 } from "@/lib/google-sheets";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "Settings — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Settings — Relife" }] }),
   component: SettingsPage,
 });
 
@@ -57,6 +59,7 @@ const roleIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 
 function DatabaseSettingsTab() {
   const [sheetsUrl, setSheetsUrl] = useState(getGSheetsUrl());
+  const [sheetsToken, setSheetsToken] = useState(getGSheetsToken());
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
@@ -69,34 +72,50 @@ function DatabaseSettingsTab() {
   const SHEET_ID = "1f5mJV8P90ID2-BiyeZZvtBF0Q3JjvyElbfI4omxkJRw";
 
   const appsScriptCode = `// ══════════════════════════════════════════════════════════
-// MediRent / Relife ERP — Google Apps Script Web App  (v3 — FileChunks + HTML OTP)
+// MediRent / Relife ERP — Google Apps Script Web App  (v6 — Shared-Secret Auth)
 // Sheet ID: ${SHEET_ID}
 //
 // SETUP STEPS:
 //  1. Open your Google Sheet: https://docs.google.com/spreadsheets/d/${SHEET_ID}
 //  2. Click Extensions → Apps Script
 //  3. Replace ALL existing code with this script
-//  4. Click Deploy → New Deployment → Web App
+//  4. (Recommended) Change TOKEN below to your own secret, and paste the same
+//     value into the "Shared Secret Token" field below before saving.
+//  5. Click Deploy → New Deployment → Web App
 //     - Execute as: Me
 //     - Who has access: Anyone
-//  5. Click Deploy → copy the Web App URL
-//  6. Paste the URL into the field above and click Test Connection
+//  6. Click Deploy → copy the Web App URL
+//  7. Paste the URL (and token) into the fields above and click Test Connection
 // ══════════════════════════════════════════════════════════
+
+// SECURITY: every request must include a token matching TOKEN below, or it's
+// rejected before touching any sheet. Without this, anyone who has the Web
+// App URL (it ships in the public frontend bundle) could read/write/delete
+// the entire database with no login at all.
+const TOKEN = "${sheetsToken || "CHANGE_ME_TO_A_LONG_RANDOM_SECRET"}";
 
 // BUG-9 FIX (v3): Added "FileChunks" — required for cross-device PDF/image sync.
 // Without this, file chunk upserts silently failed because the sheet wasn't tracked.
 const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns", "Owners", "Documents", "Exchanges", "FileChunks", "Staff"];
 
+function unauthorized() {
+  return ContentService
+    .createTextOutput(JSON.stringify({ error: "Unauthorized" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // ─── GET handler ────────────────────────────────────────────────────────────
 
 function doGet(e) {
+  if (e.parameter.token !== TOKEN) return unauthorized();
+
   const action = e.parameter.action;
   const sheet  = e.parameter.sheet;
 
   if (action === "ping") {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v3" }))
+      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v6" }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -153,16 +172,52 @@ function doGet(e) {
 // ─── POST handler ───────────────────────────────────────────────────────────
 
 function doPost(e) {
+  const body = JSON.parse(e.postData.contents);
+  if (body.token !== TOKEN) return unauthorized();
+
+  const action = body.action;
+
+  // ── Send OTP email (no lock needed — doesn't touch a sheet) ─────────────
+  if (action === "sendOtp" && body.email && body.otp) {
+    var otp = body.otp;
+    var plainBody = "Your Relife ERP login verification code is: " + otp +
+      "\\n\\nThis code expires in 10 minutes. Do not share it with anyone.";
+    var htmlBody = "<div style='font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;'>" +
+      "<h2 style='color:#1e3a8a;margin-top:0;'>Relife ERP — Login Verification</h2>" +
+      "<p style='color:#475569;'>Your one-time login verification code is:</p>" +
+      "<div style='background:#f8fafc;border:2px dashed #1e3a8a;border-radius:8px;padding:16px 24px;text-align:center;margin:16px 0;'>" +
+      "<span style='font-size:36px;font-weight:bold;letter-spacing:0.35em;color:#1e3a8a;'>" + otp + "</span>" +
+      "</div>" +
+      "<p style='color:#64748b;font-size:13px;'>This code <strong>expires in 10 minutes</strong>. Do not share it with anyone.</p>" +
+      "<hr style='border:none;border-top:1px solid #e2e8f0;margin:16px 0;'>" +
+      "<p style='color:#94a3b8;font-size:12px;'>Relife Medical Equipment Rental ERP | Automated security message</p>" +
+      "</div>";
+    MailApp.sendEmail({ to: body.email, subject: "Relife ERP — Verification Code: " + otp, body: plainBody, htmlBody: htmlBody });
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "ok" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Every write path below mutates a sheet via a read-then-write sequence
+  // (find row by id, then overwrite or append). Apps Script runs concurrent
+  // requests as separate executions, so without a lock two requests can both
+  // read "row not found yet" and both append — one silently clobbers the
+  // other. The lock forces writes to happen one at a time.
+  const lock = LockService.getScriptLock();
   try {
-    const body   = JSON.parse(e.postData.contents);
-    const action = body.action;
-    const sheet  = body.sheet;
-    const row    = body.row;
-    const rows   = body.rows;
-    const id     = body.id;
-    const email  = body.email;
-    const otp    = body.otp;
-    const ss     = SpreadsheetApp.getActiveSpreadsheet();
+    lock.waitLock(LOCK_WAIT_MS);
+  } catch (lockErr) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ error: "Server busy, please retry" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  try {
+    const sheet = body.sheet;
+    const row   = body.row;
+    const rows  = body.rows;
+    const id    = body.id;
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
 
     function getOrCreateSheet(name) {
       var sh = ss.getSheetByName(name);
@@ -170,57 +225,27 @@ function doPost(e) {
       return sh;
     }
 
-    // ── Send OTP email ───────────────────────────────────────────────────────
-    if (action === "sendOtp" && email && otp) {
-      var plainBody = "Your Relife ERP login verification code is: " + otp +
-        "\\n\\nThis code expires in 10 minutes. Do not share it with anyone.";
-      var htmlBody = "<div style='font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;'>" +
-        "<h2 style='color:#1e3a8a;margin-top:0;'>Relife ERP — Login Verification</h2>" +
-        "<p style='color:#475569;'>Your one-time login verification code is:</p>" +
-        "<div style='background:#f8fafc;border:2px dashed #1e3a8a;border-radius:8px;padding:16px 24px;text-align:center;margin:16px 0;'>" +
-        "<span style='font-size:36px;font-weight:bold;letter-spacing:0.35em;color:#1e3a8a;'>" + otp + "</span>" +
-        "</div>" +
-        "<p style='color:#64748b;font-size:13px;'>This code <strong>expires in 10 minutes</strong>. Do not share it with anyone.</p>" +
-        "<hr style='border:none;border-top:1px solid #e2e8f0;margin:16px 0;'>" +
-        "<p style='color:#94a3b8;font-size:12px;'>Relife Medical Equipment Rental ERP | Automated security message</p>" +
-        "</div>";
-      MailApp.sendEmail({
-        to: email,
-        subject: "Relife ERP — Verification Code: " + otp,
-        body: plainBody,
-        htmlBody: htmlBody
-      });
-      return ContentService
-        .createTextOutput(JSON.stringify({ status: "ok" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // ── Single row upsert ────────────────────────────────────────────────────
     if (action === "upsert" && sheet && row) {
       const sh = getOrCreateSheet(sheet);
-      upsertRow(sh, row);
-      applyHeaderFormat(sh);   // BUG-FIX: formatting only once, not inside upsertRow
+      const headersChanged = upsertRow(sh, row);
+      if (headersChanged) applyHeaderFormat(sh);
       return ContentService.createTextOutput(JSON.stringify({ status: "ok" })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // ── Bulk upsert (REWRITTEN — was O(n²), now O(n)) ───────────────────────
     if (action === "bulkUpsert" && sheet && rows) {
       const sh = getOrCreateSheet(sheet);
-      bulkUpsertRows(sh, rows);   // BUG-FIX: single efficient batch write
+      bulkUpsertRows(sh, rows);
       return ContentService.createTextOutput(JSON.stringify({ status: "ok", count: rows.length })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // ── Delete a single row ─────────────────────────────────────────────────
     if (action === "delete" && sheet && id) {
       const sh = ss.getSheetByName(sheet);
       if (sh) deleteRow(sh, id);
       return ContentService.createTextOutput(JSON.stringify({ status: "ok" })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // ── Clear all data rows (keep headers) ──────────────────────────────────
     if (action === "clearSheet" && sheet) {
       const sh = ss.getSheetByName(sheet);
-      // BUG-FIX: Guard getLastColumn() === 0 to avoid crash on sheets with no columns
       if (sh && sh.getLastRow() > 1 && sh.getLastColumn() > 0) {
         sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).clearContent();
       }
@@ -231,53 +256,41 @@ function doPost(e) {
 
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ error: String(err) })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
-// ─── Efficient batch upsert (fixes O(n²) bug in v1) ────────────────────────
-// Reads the sheet ONCE, builds a complete data map, then writes everything
-// in a single setValues() call — massively faster for large datasets.
+// ─── Bulk upsert ────────────────────────────────────────────────────────────
 
 function bulkUpsertRows(sh, rows) {
   if (!rows || rows.length === 0) return;
-
-  // 1. Collect the union of all field keys from all rows
   var allKeys = [];
   rows.forEach(function(r) {
     Object.keys(r).forEach(function(k) {
       if (allKeys.indexOf(k) === -1) allKeys.push(k);
     });
   });
-
-  // 2. Get or create headers row
   var headers;
+  var headersChanged = false;
   if (sh.getLastRow() === 0 || sh.getLastColumn() === 0) {
     sh.appendRow(allKeys);
     headers = allKeys.slice();
+    headersChanged = true;
   } else {
     headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-    // Add any new keys as new header columns
     var newKeys = allKeys.filter(function(k) { return headers.indexOf(k) === -1; });
-    newKeys.forEach(function(k) {
-      headers.push(k);
-      sh.getRange(1, headers.length).setValue(k);
-    });
+    if (newKeys.length > 0) {
+      newKeys.forEach(function(k) { headers.push(k); sh.getRange(1, headers.length).setValue(k); });
+      headersChanged = true;
+    }
   }
-
-  // 3. Read all existing data rows ONCE into a map: id → rowIndex (1-based, row 2+)
   var idCol = headers.indexOf("id");
-  var existingData = sh.getLastRow() > 1
-    ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues()
-    : [];
-
-  var idToRowIndex = {};  // id string → 0-based index in existingData
+  var existingData = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
+  var idToRowIndex = {};
   if (idCol !== -1) {
-    existingData.forEach(function(r, i) {
-      idToRowIndex[String(r[idCol])] = i;
-    });
+    existingData.forEach(function(r, i) { idToRowIndex[String(r[idCol])] = i; });
   }
-
-  // 4. Apply each incoming row as an update or append
   var toAppend = [];
   rows.forEach(function(row) {
     var newRow = headers.map(function(h) {
@@ -286,44 +299,39 @@ function bulkUpsertRows(sh, rows) {
       if (val !== null && typeof val === "object") return JSON.stringify(val);
       return val;
     });
-
     var rowId = idCol !== -1 ? String(row["id"]) : null;
     if (rowId && idToRowIndex.hasOwnProperty(rowId)) {
-      // Update in-place — write directly to the existing row
-      var sheetRowNum = idToRowIndex[rowId] + 2;  // +2 because row 1 is header
-      sh.getRange(sheetRowNum, 1, 1, headers.length).setValues([newRow]);
+      sh.getRange(idToRowIndex[rowId] + 2, 1, 1, headers.length).setValues([newRow]);
     } else {
       toAppend.push(newRow);
     }
   });
-
-  // 5. Append all new rows in one batch (much faster than row-by-row appendRow)
   if (toAppend.length > 0) {
     sh.getRange(sh.getLastRow() + 1, 1, toAppend.length, headers.length).setValues(toAppend);
   }
-
-  // 6. Format headers ONCE after all data is written
-  applyHeaderFormat(sh);
+  if (headersChanged) applyHeaderFormat(sh);
 }
 
-// ─── Single row upsert (for incremental syncs) ──────────────────────────────
+// ─── Single row upsert ──────────────────────────────────────────────────────
+// Returns true if the header row was created or extended (so the caller
+// knows whether it's worth re-running the (relatively expensive) formatting).
 
 function upsertRow(sh, row) {
-  var keys    = Object.keys(row);
+  var keys = Object.keys(row);
   var headers = [];
-
+  var headersChanged = false;
   if (sh.getLastRow() === 0 || sh.getLastColumn() === 0) {
     sh.appendRow(keys);
     headers = keys;
+    headersChanged = true;
   } else {
     headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
     var newKeys = keys.filter(function(k) { return headers.indexOf(k) === -1; });
-    newKeys.forEach(function(k) {
-      headers.push(k);
-      sh.getRange(1, headers.length).setValue(k);
-    });
+    if (newKeys.length > 0) {
+      newKeys.forEach(function(k) { headers.push(k); sh.getRange(1, headers.length).setValue(k); });
+      headersChanged = true;
+    }
   }
-
   var idCol = headers.indexOf("id");
   var newRow = headers.map(function(h) {
     var val = row[h];
@@ -331,18 +339,10 @@ function upsertRow(sh, row) {
     if (val !== null && typeof val === "object") return JSON.stringify(val);
     return val;
   });
-
-  if (idCol === -1) {
-    sh.appendRow(newRow);
-    return;
-  }
-
+  if (idCol === -1) { sh.appendRow(newRow); return headersChanged; }
   var rowId = String(row["id"]);
-  // BUG-FIX v1: getLastColumn guard
   var existingData = sh.getLastRow() > 1 && sh.getLastColumn() > 0
-    ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues()
-    : [];
-
+    ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
   var found = false;
   for (var i = 0; i < existingData.length; i++) {
     if (String(existingData[i][idCol]) === rowId) {
@@ -351,30 +351,24 @@ function upsertRow(sh, row) {
       break;
     }
   }
-  if (!found) {
-    sh.appendRow(newRow);
-  }
+  if (!found) { sh.appendRow(newRow); }
+  return headersChanged;
 }
 
-// ─── Delete a row by id ──────────────────────────────────────────────────────
+// ─── Delete row ─────────────────────────────────────────────────────────────
 
 function deleteRow(sh, id) {
-  // BUG-FIX: Guard getLastColumn() === 0
   if (sh.getLastRow() < 2 || sh.getLastColumn() === 0) return;
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var idCol   = headers.indexOf("id");
+  var idCol = headers.indexOf("id");
   if (idCol === -1) return;
   var data = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues();
   for (var i = 0; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(id)) {
-      sh.deleteRow(i + 2);
-      break;
-    }
+    if (String(data[i][idCol]) === String(id)) { sh.deleteRow(i + 2); break; }
   }
 }
 
-// ─── Header formatting (extracted — runs ONCE, not per-row) ─────────────────
-// BUG-FIX: In v1 this ran inside upsertRow, meaning 100 rows = 100 format ops.
+// ─── Header formatting ───────────────────────────────────────────────────────
 
 function applyHeaderFormat(sh) {
   try {
@@ -387,12 +381,9 @@ function applyHeaderFormat(sh) {
     sh.setFrozenRows(1);
     sh.autoResizeColumns(1, lastCol);
     for (var c = 1; c <= lastCol; c++) {
-      var w = sh.getColumnWidth(c);
-      sh.setColumnWidth(c, Math.max(120, w + 20));
+      sh.setColumnWidth(c, Math.max(120, sh.getColumnWidth(c) + 20));
     }
-  } catch (err) {
-    // Ignore formatting errors — data is more important than style
-  }
+  } catch (err) {}
 }`;
 
   const handleSaveUrl = () => {
@@ -401,6 +392,7 @@ function applyHeaderFormat(sh) {
       return;
     }
     setGSheetsUrl(sheetsUrl);
+    setGSheetsToken(sheetsToken);
     toast.success(sheetsUrl ? "Apps Script URL saved successfully." : "Google Sheets integration disabled.");
     setTestStatus("idle");
     setTestMessage("");
@@ -592,8 +584,8 @@ function applyHeaderFormat(sh) {
                 "Click Extensions → Apps Script",
                 "Replace all code with the script below, then click Save (Ctrl+S)",
                 "Click Deploy → New Deployment → Web App → Execute as: Me → Access: Anyone",
-                "Copy the Web App URL and paste it below",
-                "Click Save URL, then Test Connection, then Sync All Data",
+                "Copy the Web App URL and paste it below, along with the same Shared Secret Token from the script",
+                "Click Save, then Test Connection, then Sync All Data",
               ].map((step, i) => (
                 <li key={i} className="flex items-start gap-2.5">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold mt-0.5">{i + 1}</span>
@@ -644,14 +636,48 @@ function applyHeaderFormat(sh) {
                 <AlertTriangle className="h-3 w-3" /> URL must start with https://script.google.com/
               </p>
             )}
+          </div>
+
+          {/* Token Input */}
+          <div className="space-y-2">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Shared Secret Token
+            </Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
+                <Input
+                  value={sheetsToken}
+                  onChange={(e) => setSheetsToken(e.target.value)}
+                  placeholder="Must match the TOKEN constant in your Apps Script"
+                  className="pl-9 h-10 text-[13px] font-mono"
+                />
+              </div>
+              <Button onClick={handleSaveUrl} className="h-10 shrink-0">
+                <Check className="h-4 w-4 mr-1.5" /> Save
+              </Button>
+            </div>
+            <div className="rounded-lg border border-amber-200/50 bg-amber-50/40 p-3 text-[12px] text-amber-800 space-y-1.5 mt-1">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-900">
+                <Shield className="h-3.5 w-3.5 text-amber-600" /> Why this matters
+              </p>
+              <p className="text-amber-700/90 leading-relaxed">
+                The Apps Script Web App URL above is public — it ships inside this app's JavaScript bundle, so anyone
+                who inspects it can find it. Without a matching token, the script would accept read/write/delete
+                requests from anyone with that URL, with no login required. Every request now includes this token,
+                and the script rejects anything that doesn't match — keep it out of screenshots and shared docs, and
+                rotate it (change it here <em>and</em> in the deployed script's TOKEN constant) if it's ever exposed.
+              </p>
+            </div>
             <div className="rounded-lg border border-blue-200/50 bg-blue-50/40 p-3 text-[12px] text-blue-800 space-y-1.5 mt-1">
               <p className="font-semibold flex items-center gap-1.5 text-blue-900">
                 <Shield className="h-3.5 w-3.5 text-blue-600" /> Make Connection Permanent
               </p>
               <p className="text-blue-700/90 leading-relaxed">
-                To prevent database disconnection when browser storage is cleared, set the 
-                <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900 mx-0.5">VITE_GSHEETS_URL</code> 
-                environment variable in Netlify/Vercel settings or in your local <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900">.env</code> file.
+                To prevent database disconnection when browser storage is cleared, set the
+                <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900 mx-0.5">VITE_GSHEETS_URL</code>
+                and <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900 mx-0.5">VITE_GSHEETS_TOKEN</code>
+                environment variables in Netlify/Vercel settings or in your local <code className="font-mono bg-blue-100/60 px-1 py-0.5 rounded text-[11px] font-semibold text-blue-900">.env</code> file.
               </p>
             </div>
           </div>

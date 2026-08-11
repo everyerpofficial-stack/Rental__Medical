@@ -30,7 +30,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/")(
   {
-    head: () => ({ meta: [{ title: "Dashboard — MediRent ERP" }] }),
+    head: () => ({ meta: [{ title: "Dashboard — Relife ERP" }] }),
     component: Dashboard,
   },
 );

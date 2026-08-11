@@ -32,7 +32,7 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/exchanges")({
-  head: () => ({ meta: [{ title: "Exchanges — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Exchanges — Relife" }] }),
   component: ExchangesPage,
 });
 

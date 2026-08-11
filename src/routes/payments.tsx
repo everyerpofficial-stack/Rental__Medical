@@ -57,7 +57,7 @@ export interface Payment {
 }
 
 export const Route = createFileRoute("/payments")({
-  head: () => ({ meta: [{ title: "Payments — MediRent" }] }),
+  head: () => ({ meta: [{ title: "Payments — Relife" }] }),
   component: PaymentsPage,
 });
 
