@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,26 +43,29 @@ function PayDialog({
   getEquipmentName: (eqId: string) => string;
   onPaid: () => void;
 }) {
-  const eqItems = rental?.equipmentItems || [
+  const eqItems = useMemo(() => rental?.equipmentItems || [
     {
-      equipmentId: rental.equipmentId,
-      serial: rental.serial,
-      monthlyRent: Number(rental.monthlyRent) || 0,
+      equipmentId: rental?.equipmentId,
+      serial: rental?.serial,
+      monthlyRent: Number(rental?.monthlyRent) || 0,
       returned: false
     }
-  ];
+  ], [rental?.equipmentItems, rental?.equipmentId, rental?.serial, rental?.monthlyRent]);
 
   const activeEqItems = useMemo(() => eqItems.filter((it: any) => !it.returned), [eqItems]);
 
   const [open, setOpen] = useState(false);
   const [selectedEqIds, setSelectedEqIds] = useState<string[]>([]);
+  const prevOpenRef = useRef(false);
 
+  // Initialize selected items ONLY when the dialog is opened (open transitions from false to true)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       const activeIds = activeEqItems.map((it: any) => it.equipmentId);
       setSelectedEqIds(activeIds.length > 0 ? activeIds : [eqItems[0]?.equipmentId].filter(Boolean));
     }
-  }, [open, rental, activeEqItems, eqItems]);
+    prevOpenRef.current = open;
+  }, [open, activeEqItems, eqItems]);
 
   const selectedItemsDetails = useMemo(() => {
     let totalOutstanding = 0;
