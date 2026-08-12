@@ -68,30 +68,12 @@ if (isBrowser) {
 }
 
 
-// CALC-4 FIX: Auto-mark rentals as Overdue when past their end date
-// Called once on module load to keep statuses current
-if (isBrowser) {
-  try {
-    const _rawRentals = localStorage.getItem("medirent-rentals");
-    if (_rawRentals) {
-      const _rentals = JSON.parse(_rawRentals);
-      const _today = new Date();
-      _today.setHours(0, 0, 0, 0);
-      let _changed = false;
-      _rentals.forEach((r: any) => {
-        if (r.status === "Active" && r.end) {
-          const _end = new Date(r.end);
-          _end.setHours(0, 0, 0, 0);
-          if (!isNaN(_end.getTime()) && _end < _today) {
-            r.status = "Overdue";
-            _changed = true;
-          }
-        }
-      });
-      if (_changed) localStorage.setItem("medirent-rentals", JSON.stringify(_rentals));
-    }
-  } catch (_e) { /* silent — runs best-effort */ }
-}
+// CALC-4 FIX: Auto-mark rentals as Overdue when past their end date and
+// actually carrying unpaid rent (see the status-correction pass inside
+// getRentals() below — moved there because it needs getRentalOutstandingBalance/
+// getPaidForEquipment/cleanNum, which are declared later in this module via
+// `const`/`function` and aren't safely callable yet from this top-level block
+// that runs the instant the module is imported).
 
 // ─── Date formatting helper ──────────────────────────────────────────────────
 /**
@@ -1104,11 +1086,50 @@ export function getRentals() {
     return { ...r, equipmentId, serial, equipment, monthlyRent, deposit };
   });
 
+  // Status-correction pass: "Overdue" should reflect real unpaid rent, not
+  // just a nominal end date passing — most agreements here run ongoing
+  // month-to-month with no formal renewal, so a stale end date alone
+  // doesn't mean rent is unpaid. This also auto-clears a stale Overdue flag
+  // once the balance is actually settled (previously nothing reset it back
+  // to Active unless a payment happened to be saved with a matching
+  // `agreement` id on it).
+  const paymentsForStatus = getPayments();
+  const todayForStatus = new Date();
+  todayForStatus.setHours(0, 0, 0, 0);
+  const statusCorrectedList = repairedList.map((r: any) => {
+    if (r.status !== "Active" && r.status !== "Overdue") return r;
+
+    const outstanding = getRentalOutstandingBalance(r, paymentsForStatus);
+
+    if (r.status === "Overdue") {
+      if (outstanding <= 0) {
+        changed = true;
+        return { ...r, status: "Active" };
+      }
+      return r;
+    }
+
+    // r.status === "Active": only flip to Overdue when there's a nominal
+    // end date that has passed AND there's real unpaid rent — keeps the
+    // flag confined to rentals that were already candidates before this
+    // fix (no explicit end date is never touched), while adding the
+    // missing payment awareness.
+    if (r.end && outstanding > 0) {
+      const end = new Date(r.end);
+      end.setHours(0, 0, 0, 0);
+      if (!isNaN(end.getTime()) && end < todayForStatus) {
+        changed = true;
+        return { ...r, status: "Overdue" };
+      }
+    }
+    return r;
+  });
+
   if (changed) {
-    localStorage.setItem("medirent-rentals", JSON.stringify(repairedList));
-    return sortLatestFirst(repairedList, "start");
+    localStorage.setItem("medirent-rentals", JSON.stringify(statusCorrectedList));
+    return sortLatestFirst(statusCorrectedList, "start");
   }
-  
+
   return sortLatestFirst(list, "start");
 }
 
@@ -1213,7 +1234,8 @@ export function approveRental(id: string) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const end = rental.end ? new Date(rental.end) : null;
-    if (end && !isNaN(end.getTime()) && end < today) {
+    const outstanding = getRentalOutstandingBalance(rental, getPayments());
+    if (end && !isNaN(end.getTime()) && end < today && outstanding > 0) {
       rental.status = "Overdue";
     } else {
       rental.status = "Active";
@@ -1792,17 +1814,23 @@ export function getDynamicKPIs() {
   }
 
   // 7. Pending Payments growth
-  const pendingPaymentsAmount = rent
-    .filter((r) => r.status === "Overdue")
-    .reduce((sum, r) => sum + r.monthlyRent, 0);
+  // Real outstanding balance per rental (elapsed billing minus payments
+  // actually recorded), not the `status === "Overdue"` label — that field
+  // is only a nominal-end-date flag and misses rentals with real unpaid
+  // rent that are still labeled "Active" (e.g. ongoing month-to-month
+  // agreements with no formal end date), which is why this used to read
+  // ₹0 while the Rent Dues page showed large outstanding balances.
+  const rentalsForPending = rent.filter((r) => r.status !== "Completed" && r.status !== "Cancelled");
+  const pendingBalances = rentalsForPending.map((r) => ({ r, outstanding: getRentalOutstandingBalance(r, pay) }));
+  const pendingPaymentsAmount = pendingBalances.reduce((sum, x) => sum + x.outstanding, 0);
+  const pendingInvoicesCount = pendingBalances.filter((x) => x.outstanding > 0).length;
 
-  const prevPendingAmount = rent
-    .filter((r) => {
-      if (r.status !== "Overdue") return false;
-      const rDate = parseLocalDate(r.start);
+  const prevPendingAmount = pendingBalances
+    .filter((x) => {
+      const rDate = parseLocalDate(x.r.start);
       return !isNaN(rDate.getTime()) && (rDate.getFullYear() < curYear || (rDate.getFullYear() === curYear && rDate.getMonth() < curMonth));
     })
-    .reduce((sum, r) => sum + r.monthlyRent, 0);
+    .reduce((sum, x) => sum + x.outstanding, 0);
 
   let pendingChange = "";
   let pendingTrend = "down";
@@ -1856,7 +1884,7 @@ export function getDynamicKPIs() {
     { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${equip.length} units available` },
     { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${equip.length} units rented` },
     { label: "Monthly Revenue",     value: `₹${currentMonthRevenue.toLocaleString("en-IN")}`, description: "Payments collected this month" },
-    { label: "Pending Payments",    value: `₹${pendingPaymentsAmount.toLocaleString("en-IN")}`, description: `${rent.filter(r => r.status === 'Overdue').length} overdue invoices pending` },
+    { label: "Pending Payments",    value: `₹${pendingPaymentsAmount.toLocaleString("en-IN")}`, description: `${pendingInvoicesCount} agreement(s) with dues pending` },
     { label: "Security Deposits",   value: `₹${securityDepositsAmount.toLocaleString("en-IN")}`, description: "Refundable deposits in escrow" },
   ];
 }
@@ -4123,6 +4151,44 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   const totalShared = sharedPaymentsPaid + initialPaid;
 
   return directPaid + Math.round(totalShared * shareRatio);
+}
+
+/** Real outstanding rent across all unreturned equipment items on a rental,
+ *  from elapsed billing cycles minus payments actually recorded against it —
+ *  the same methodology the Rent Dues page and Dashboard financial tab use.
+ *  This is the source of truth for "is this rental actually overdue", as
+ *  opposed to the stored status label, which a nominal end date alone can
+ *  flip without regard to whether rent is actually unpaid. */
+export function getRentalOutstandingBalance(rental: any, paymentsList: any[]): number {
+  if (!rental) return 0;
+  const start = parseLocalDate(rental.start);
+  if (isNaN(start.getTime())) return 0;
+
+  const eqItems = rental.equipmentItems || [
+    {
+      equipmentId: rental.equipmentId,
+      serial: rental.serial,
+      monthlyRent: cleanNum(rental.monthlyRent),
+      dailyRent: cleanNum((rental as any).dailyRent),
+      returned: false
+    }
+  ];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysElapsed = Math.ceil(Math.max(0, today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+  return eqItems.reduce((total: number, item: any) => {
+    if (item.returned) return total;
+    const monthlyRent = cleanNum(item.monthlyRent || item.rentRate);
+    const dailyRate = cleanNum(item.dailyRent) || cleanNum((rental as any).dailyRent);
+    const isMonthly = (item.rentCycle || (rental as any).rentCycle)
+      ? (item.rentCycle || (rental as any).rentCycle) === "Monthly"
+      : (monthlyRent > 0 && dailyRate === 0);
+    const totalDue = isMonthly ? Math.floor(daysElapsed / 30) * monthlyRent : daysElapsed * dailyRate;
+    const paid = getPaidForEquipment(rental, item.equipmentId, paymentsList, true);
+    return total + Math.max(0, totalDue - paid);
+  }, 0);
 }
 
 // ─── Exchanges Data Store ───────────────────────────────────────────────────
