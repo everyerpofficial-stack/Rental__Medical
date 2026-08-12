@@ -1086,48 +1086,27 @@ export function getRentals() {
     return { ...r, equipmentId, serial, equipment, monthlyRent, deposit };
   });
 
-  // Status-correction pass: "Overdue" should reflect real unpaid rent, not
-  // just a nominal end date passing — most agreements here run ongoing
-  // month-to-month with no formal renewal, so a stale end date alone
-  // doesn't mean rent is unpaid. This also auto-clears a stale Overdue flag
-  // once the balance is actually settled (previously nothing reset it back
-  // to Active unless a payment happened to be saved with a matching
+  // Status-correction pass: "Overdue" means there's a real unpaid balance —
+  // not a nominal end date passing (most agreements here run ongoing
+  // month-to-month with no formal renewal/end date at all, so gating on
+  // that field left genuinely-unpaid rentals like these sitting labeled
+  // "Active" for months). This also auto-clears a stale Overdue flag once
+  // the balance is actually settled (previously nothing reset it back to
+  // Active unless a payment happened to be saved with a matching
   // `agreement` id on it).
   const paymentsForStatus = getPayments();
-  const todayForStatus = new Date();
-  todayForStatus.setHours(0, 0, 0, 0);
   const statusCorrections: any[] = [];
   const statusCorrectedList = repairedList.map((r: any) => {
     if (r.status !== "Active" && r.status !== "Overdue") return r;
 
     const outstanding = getRentalOutstandingBalance(r, paymentsForStatus);
+    const newStatus = outstanding > 0 ? "Overdue" : "Active";
+    if (newStatus === r.status) return r;
 
-    if (r.status === "Overdue") {
-      if (outstanding <= 0) {
-        changed = true;
-        const corrected = { ...r, status: "Active" };
-        statusCorrections.push(corrected);
-        return corrected;
-      }
-      return r;
-    }
-
-    // r.status === "Active": only flip to Overdue when there's a nominal
-    // end date that has passed AND there's real unpaid rent — keeps the
-    // flag confined to rentals that were already candidates before this
-    // fix (no explicit end date is never touched), while adding the
-    // missing payment awareness.
-    if (r.end && outstanding > 0) {
-      const end = new Date(r.end);
-      end.setHours(0, 0, 0, 0);
-      if (!isNaN(end.getTime()) && end < todayForStatus) {
-        changed = true;
-        const corrected = { ...r, status: "Overdue" };
-        statusCorrections.push(corrected);
-        return corrected;
-      }
-    }
-    return r;
+    changed = true;
+    const corrected = { ...r, status: newStatus };
+    statusCorrections.push(corrected);
+    return corrected;
   });
 
   // Push corrected statuses to Google Sheets (and register them as pending
@@ -1246,15 +1225,8 @@ export function approveRental(id: string) {
   const index = list.findIndex((r) => r.id === id);
   if (index > -1) {
     const rental = list[index];
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const end = rental.end ? new Date(rental.end) : null;
     const outstanding = getRentalOutstandingBalance(rental, getPayments());
-    if (end && !isNaN(end.getTime()) && end < today && outstanding > 0) {
-      rental.status = "Overdue";
-    } else {
-      rental.status = "Active";
-    }
+    rental.status = outstanding > 0 ? "Overdue" : "Active";
     setStorageItem("medirent-rentals", list);
     
     // Sync to Google Sheets (fire-and-forget)
