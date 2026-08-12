@@ -565,7 +565,8 @@ function OwnerDetailsSheet({
           ret.agreement === tx.rental.id &&
           (ret.returnedEquipmentIds || []).includes(tx.equipmentId)
       );
-      const returnDate = retRecord?.date || retRecord?.returnDate || (tx.returned ? tx.rental.endDate || tx.rental.end || "—" : "—");
+      const returnDateRaw = retRecord?.date || retRecord?.returnDate || (tx.returned ? tx.rental.endDate || tx.rental.end || "" : "");
+      const returnDate = returnDateRaw ? formatDateDDMMYYYY(returnDateRaw) : "—";
 
       const sameEqTx = txLog.filter((t) => t.equipmentId === tx.equipmentId);
       const curIdx = sameEqTx.findIndex((t) => t.rental.id === tx.rental.id);
@@ -590,7 +591,7 @@ function OwnerDetailsSheet({
         <tr>
           <td>${eq?.serial || tx.serial || "—"}</td>
           <td>${tx.rental.id}</td>
-          <td>${tx.rental.startDate || tx.rental.start || "—"}</td>
+          <td>${tx.rental.startDate || tx.rental.start ? formatDateDDMMYYYY(tx.rental.startDate || tx.rental.start) : "—"}</td>
           <td>${returnDate}</td>
           <td>${eq?.category || eq?.name || "—"}</td>
           <td>${tx.rental.customer || tx.rental.customerName || "—"}</td>

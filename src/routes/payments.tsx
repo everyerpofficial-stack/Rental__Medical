@@ -35,6 +35,7 @@ import {
   parseLocalDate,
   extractIdNumber,
   sortLatestFirst,
+  formatDateDDMMYYYY,
 } from "@/lib/data-store";
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -398,7 +399,7 @@ function PrintReceiptDialog({ payment }: { payment: Payment }) {
             <p className="font-mono text-[11px] font-bold text-primary mt-1">{payment.id}</p>
           </div>
           {[
-            { l: "Date",      v: payment.date },
+            { l: "Date",      v: formatDateDDMMYYYY(payment.date) },
             { l: "Customer",  v: payment.customer },
             { l: "Agreement", v: payment.agreement },
             { l: "Type",      v: payment.type },
@@ -565,7 +566,7 @@ function AgreementPaymentHistoryModal({
                   {agreementPayments.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-mono text-[12px] font-bold text-primary">{p.id}</TableCell>
-                      <TableCell className="text-[12px]">{p.date}</TableCell>
+                      <TableCell className="text-[12px]">{formatDateDDMMYYYY(p.date)}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
                           {p.type}
@@ -1014,7 +1015,7 @@ function PaymentsPage() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <p className="text-[11px] text-foreground font-medium">{g.latestDate || "—"}</p>
+                          <p className="text-[11px] text-foreground font-medium">{g.latestDate ? formatDateDDMMYYYY(g.latestDate) : "—"}</p>
                           {g.latestMode !== "—" && (
                             <span className={`inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-semibold mt-0.5 ${modeColors[g.latestMode] ?? "bg-muted text-muted-foreground"}`}>
                               {g.latestMode}
@@ -1105,7 +1106,7 @@ function PaymentsPage() {
                       <TableRow key={p.id} className="group">
                         <TableCell>
                           <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
-                          <p className="text-[10px] text-muted-foreground">{p.date}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatDateDDMMYYYY(p.date)}</p>
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px]">{p.customer}</p>
@@ -1176,7 +1177,7 @@ function PaymentsPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>{p.date}</span>
+                          <span>{formatDateDDMMYYYY(p.date)}</span>
                           <span>·</span>
                           <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
                           <span>·</span>

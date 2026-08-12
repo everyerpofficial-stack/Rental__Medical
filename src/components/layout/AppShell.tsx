@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import { isGSheetsEnabled } from "@/lib/google-sheets";
-import { syncFromSheetsToLocalStorage } from "@/lib/data-store";
+import { syncFromSheetsToLocalStorage, syncMissingFileChunks } from "@/lib/data-store";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -138,6 +138,45 @@ export function AppShell({
 
       return () => clearInterval(interval);
     }
+  }, []);
+
+  // Background file-backup loop: automatically pushes any document files held
+  // only in this device's IndexedDB (upload that never made it to Sheets —
+  // tab closed early, network blip, rate-limited chunk) up to Google Sheets,
+  // so every device can preview/download them. No manual "Sync Missing Files"
+  // click required. Runs shortly after mount, then again periodically so a
+  // transient failure gets retried automatically instead of staying stuck.
+  const isFileSyncRunningRef = useRef(false);
+  useEffect(() => {
+    if (!isGSheetsEnabled()) return;
+
+    const runBackgroundFileSync = async () => {
+      if (isFileSyncRunningRef.current) return;
+      isFileSyncRunningRef.current = true;
+      try {
+        const result = await syncMissingFileChunks();
+        if (result.uploaded > 0) {
+          toast.success(
+            `Backed up ${result.uploaded} document file${result.uploaded === 1 ? "" : "s"} to Google Sheets — now available on every device.`
+          );
+        }
+      } catch (e) {
+        console.warn("[GSheets] Background file backup scan failed:", e);
+      } finally {
+        isFileSyncRunningRef.current = false;
+      }
+    };
+
+    // Delay the first run so it doesn't compete with the initial row sync above.
+    const initialTimeout = setTimeout(runBackgroundFileSync, 8000);
+    // Then keep retrying periodically — covers files that failed to upload
+    // (rate limits, offline moments) and newly-created ones on this device.
+    const interval = setInterval(runBackgroundFileSync, 5 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleManualSync = async () => {

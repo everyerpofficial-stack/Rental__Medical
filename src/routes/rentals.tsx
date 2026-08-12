@@ -4190,7 +4190,7 @@ function RentalsPage() {
                 r.customer,
                 r.equipment,
                 r.serial,
-                `${r.start} to ${r.end}`,
+                `${formatDateDDMMYYYY(r.start)} to ${r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}`,
                 (r.monthlyRent ?? 0).toString(),
                 (r.deposit ?? 0).toString(),
                 r.status

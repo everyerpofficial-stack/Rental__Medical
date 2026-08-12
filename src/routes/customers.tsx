@@ -774,7 +774,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                             </div>
                             <div className="col-span-2 border-t border-border/40 pt-2 flex items-center justify-between text-[11px] text-muted-foreground">
                               <span>Period</span>
-                              <span className="font-medium text-foreground">{r.start} → {r.end}</span>
+                              <span className="font-medium text-foreground">{formatDateDDMMYYYY(r.start)} → {formatDateDDMMYYYY(r.end)}</span>
                             </div>
                           </div>
 
