@@ -1087,7 +1087,11 @@ export function getRentals() {
       Array.isArray(items) && items.length > 0 && items.some((it: any) => it.equipmentId);
     if (!looksWiped) return r;
 
-    if (!eqMasterForRepair) eqMasterForRepair = getEquipment();
+    // Read equipment straight from storage (not getEquipment()) — getEquipment()
+    // itself calls getRentals(), and calling it from here would recurse back
+    // into this repair pass infinitely (stack overflow) since the underlying
+    // record hasn't been saved as "fixed" yet at this point in the pass.
+    if (!eqMasterForRepair) eqMasterForRepair = getStorageItem("medirent-equipment", initialEquipment);
     const equipmentId = items.map((it: any) => it.equipmentId).filter(Boolean).join(", ");
     const serial = items.map((it: any) => it.serial).filter(Boolean).join(", ");
     const equipment = items
