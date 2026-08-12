@@ -186,8 +186,24 @@ export function removePendingSync(sheet: string, id: string) {
 export function cleanStalePendingSyncs() {
   const syncs = getPendingSyncs();
   const now = Date.now();
-  const filtered = syncs.filter((s) => now - s.timestamp < 120000); // 2 minutes timeout
-  setPendingSyncs(filtered);
+  const stale = syncs.filter((s) => now - s.timestamp >= 120000); // 2 minutes timeout
+  const fresh = syncs.filter((s) => now - s.timestamp < 120000);
+  setPendingSyncs(fresh);
+
+  // Retry stale pending writes instead of just dropping protection for them.
+  // If we silently forgot an unconfirmed change (e.g. the write to Sheets
+  // failed or the deployment URL/spreadsheet was misconfigured), the next
+  // background pull would overwrite the local value with the old remote row —
+  // e.g. an approved rental flipping back to "Pending Approval" over and over.
+  // Re-issuing the write re-registers a fresh pending entry, so local state
+  // stays protected until the write actually confirms.
+  for (const s of stale) {
+    if (s.type === "upsert" && s.data) {
+      syncRowToSheet(s.sheet, s.data);
+    } else if (s.type === "delete") {
+      deleteRowFromSheet(s.sheet, s.id);
+    }
+  }
 }
 
 /** Write a single row upsert (insert or update by id field) */

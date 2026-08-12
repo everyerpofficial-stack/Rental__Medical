@@ -1044,11 +1044,17 @@ export function getRentals() {
       changed = true;
       const allReturned = mappedItems.every((item: any) => item.returned);
       const activeItems = mappedItems.filter((item: any) => !item.returned);
-      
+
       const newStatus = allReturned ? "Completed" : r.status;
-      const newEquipmentId = activeItems.map((item: any) => item.equipmentId).join(", ");
-      const newSerial = activeItems.map((item: any) => item.serial).join(", ");
-      
+      // When every item has been returned, keep the full item list as the
+      // historical equipmentId/serial record instead of narrowing to "still
+      // active" items — that set is empty once everything's returned, which
+      // wiped the field to "" and made it look like the agreement's data had
+      // been deleted on the Rentals list / customer history / reports.
+      const displayItems = allReturned ? mappedItems : activeItems;
+      const newEquipmentId = displayItems.map((item: any) => item.equipmentId).join(", ");
+      const newSerial = displayItems.map((item: any) => item.serial).join(", ");
+
       return {
         ...r,
         status: newStatus,
@@ -1065,13 +1071,38 @@ export function getRentals() {
         equipmentItems: updatedItems
       };
     }
-    
+
     return r;
   });
-  
+
+  // Repair pass: rebuild equipmentId/serial/equipment/monthlyRent/deposit on
+  // Completed rentals that were wiped to ""/0 by the returns-processing bug
+  // above (now fixed) before this build. equipmentItems still has the real
+  // data, so reconstruct the summary fields from it rather than leaving old
+  // agreements looking like their data vanished.
+  let eqMasterForRepair: any[] | null = null;
+  const repairedList = healedList.map((r: any) => {
+    const items = r.equipmentItems;
+    const looksWiped = r.status === "Completed" && !r.equipmentId &&
+      Array.isArray(items) && items.length > 0 && items.some((it: any) => it.equipmentId);
+    if (!looksWiped) return r;
+
+    if (!eqMasterForRepair) eqMasterForRepair = getEquipment();
+    const equipmentId = items.map((it: any) => it.equipmentId).filter(Boolean).join(", ");
+    const serial = items.map((it: any) => it.serial).filter(Boolean).join(", ");
+    const equipment = items
+      .map((it: any) => it.name || eqMasterForRepair!.find((e: any) => e.id === it.equipmentId)?.name || "Unknown")
+      .join(", ");
+    const monthlyRent = cleanNum(r.monthlyRent) || items.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
+    const deposit = cleanNum(r.deposit) || items.reduce((sum: number, it: any) => sum + cleanNum(it.deposit), 0);
+
+    changed = true;
+    return { ...r, equipmentId, serial, equipment, monthlyRent, deposit };
+  });
+
   if (changed) {
-    localStorage.setItem("medirent-rentals", JSON.stringify(healedList));
-    return sortLatestFirst(healedList, "start");
+    localStorage.setItem("medirent-rentals", JSON.stringify(repairedList));
+    return sortLatestFirst(repairedList, "start");
   }
   
   return sortLatestFirst(list, "start");
@@ -1430,7 +1461,11 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
         rental.end = ret.date;
 
       } else {
-        // Normal case (all items returned)
+        // Normal case (all items returned). Keep equipmentId/serial/equipment/
+        // monthlyRent/deposit as-is — they're the historical record of what this
+        // completed agreement was for (shown on the customer's rental history,
+        // the Rentals list/export, and reports). Wiping them to "" / 0 here used
+        // to make that data vanish from every screen the moment a return was filed.
         rental.equipmentItems = rental.equipmentItems.map((item: any) => {
           if (returnedIds.includes(item.equipmentId)) {
             return { ...item, returned: true };
@@ -1439,22 +1474,13 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
         });
         rental.status = "Completed";
         rental.end = ret.date;
-        
-        rental.equipmentId = "";
-        rental.serial = "";
-        rental.equipment = "";
-        rental.monthlyRent = 0;
-        rental.deposit = 0;
       }
     } else {
-      // Fallback for legacy rentals
+      // Fallback for legacy rentals (no equipmentItems array to fall back on —
+      // these top-level fields are the ONLY record of what was rented, so they
+      // must be preserved, not wiped).
       rental.status = "Completed";
       rental.end = ret.date;
-      rental.equipmentId = "";
-      rental.equipment = "";
-      rental.serial = "";
-      rental.monthlyRent = 0;
-      rental.deposit = 0;
     }
 
     // Mark any selected "Not Paid" additional items as "Paid" since they are now settled in this return
@@ -3862,6 +3888,20 @@ export async function syncFromSheetsToLocalStorage(force = false) {
           mergedData.unshift(p.data); // Insert new item at the top of the array
         }
       });
+
+      // Safety guard: a successful-but-empty remote response (missing tab, blank
+      // spreadsheet, wrong sheet ID, transient read glitch) must never be treated
+      // as "everything was deleted". Only explicit deletes (handled above via
+      // pendingSyncs) are allowed to remove records — otherwise keep local data.
+      if (entity.key !== "medirent-company-settings") {
+        const localExisting = getStorageItem<any[]>(entity.key, []);
+        if (mergedData.length === 0 && localExisting.length > 0) {
+          console.warn(
+            `[GSheets] Sync skipped for ${entity.sheet}: remote returned 0 rows but local has ${localExisting.length} record(s). Preserving local data instead of wiping it.`
+          );
+          continue;
+        }
+      }
 
       if (entity.key === "medirent-company-settings") {
         // Settings are stored as a single row with id="company-settings"
