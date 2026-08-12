@@ -1096,6 +1096,7 @@ export function getRentals() {
   const paymentsForStatus = getPayments();
   const todayForStatus = new Date();
   todayForStatus.setHours(0, 0, 0, 0);
+  const statusCorrections: any[] = [];
   const statusCorrectedList = repairedList.map((r: any) => {
     if (r.status !== "Active" && r.status !== "Overdue") return r;
 
@@ -1104,7 +1105,9 @@ export function getRentals() {
     if (r.status === "Overdue") {
       if (outstanding <= 0) {
         changed = true;
-        return { ...r, status: "Active" };
+        const corrected = { ...r, status: "Active" };
+        statusCorrections.push(corrected);
+        return corrected;
       }
       return r;
     }
@@ -1119,11 +1122,23 @@ export function getRentals() {
       end.setHours(0, 0, 0, 0);
       if (!isNaN(end.getTime()) && end < todayForStatus) {
         changed = true;
-        return { ...r, status: "Overdue" };
+        const corrected = { ...r, status: "Overdue" };
+        statusCorrections.push(corrected);
+        return corrected;
       }
     }
     return r;
   });
+
+  // Push corrected statuses to Google Sheets (and register them as pending
+  // upserts in the process) — without this, the corrected value only lives
+  // in localStorage, and AppShell's sync-from-Sheets call (which fires
+  // immediately on every page mount, then every 15s) pulls the OLD status
+  // back down from the still-unchanged remote row and silently overwrites
+  // this fix seconds after every page load, even after a hard refresh.
+  if (statusCorrections.length > 0 && isGSheetsEnabled()) {
+    statusCorrections.forEach((r) => syncRowToSheet(SHEETS.RENTALS, r as unknown as Record<string, unknown>));
+  }
 
   if (changed) {
     localStorage.setItem("medirent-rentals", JSON.stringify(statusCorrectedList));
