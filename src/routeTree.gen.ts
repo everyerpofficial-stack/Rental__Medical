@@ -15,6 +15,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as RentalsRouteImport } from './routes/rentals'
 import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as OwnersRouteImport } from './routes/owners'
+import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as ExchangesRouteImport } from './routes/exchanges'
 import { Route as EquipmentRouteImport } from './routes/equipment'
 import { Route as DuesRouteImport } from './routes/dues'
@@ -50,6 +51,11 @@ const PaymentsRoute = PaymentsRouteImport.update({
 const OwnersRoute = OwnersRouteImport.update({
   id: '/owners',
   path: '/owners',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpensesRoute = ExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExchangesRoute = ExchangesRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/dues': typeof DuesRoute
   '/equipment': typeof EquipmentRoute
   '/exchanges': typeof ExchangesRoute
+  '/expenses': typeof ExpensesRoute
   '/owners': typeof OwnersRoute
   '/payments': typeof PaymentsRoute
   '/rentals': typeof RentalsRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/dues': typeof DuesRoute
   '/equipment': typeof EquipmentRoute
   '/exchanges': typeof ExchangesRoute
+  '/expenses': typeof ExpensesRoute
   '/owners': typeof OwnersRoute
   '/payments': typeof PaymentsRoute
   '/rentals': typeof RentalsRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/dues': typeof DuesRoute
   '/equipment': typeof EquipmentRoute
   '/exchanges': typeof ExchangesRoute
+  '/expenses': typeof ExpensesRoute
   '/owners': typeof OwnersRoute
   '/payments': typeof PaymentsRoute
   '/rentals': typeof RentalsRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/dues'
     | '/equipment'
     | '/exchanges'
+    | '/expenses'
     | '/owners'
     | '/payments'
     | '/rentals'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/dues'
     | '/equipment'
     | '/exchanges'
+    | '/expenses'
     | '/owners'
     | '/payments'
     | '/rentals'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/dues'
     | '/equipment'
     | '/exchanges'
+    | '/expenses'
     | '/owners'
     | '/payments'
     | '/rentals'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   DuesRoute: typeof DuesRoute
   EquipmentRoute: typeof EquipmentRoute
   ExchangesRoute: typeof ExchangesRoute
+  ExpensesRoute: typeof ExpensesRoute
   OwnersRoute: typeof OwnersRoute
   PaymentsRoute: typeof PaymentsRoute
   RentalsRoute: typeof RentalsRoute
@@ -228,6 +241,13 @@ declare module '@tanstack/react-router' {
       path: '/owners'
       fullPath: '/owners'
       preLoaderRoute: typeof OwnersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expenses': {
+      id: '/expenses'
+      path: '/expenses'
+      fullPath: '/expenses'
+      preLoaderRoute: typeof ExpensesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/exchanges': {
@@ -282,6 +302,7 @@ const rootRouteChildren: RootRouteChildren = {
   DuesRoute: DuesRoute,
   EquipmentRoute: EquipmentRoute,
   ExchangesRoute: ExchangesRoute,
+  ExpensesRoute: ExpensesRoute,
   OwnersRoute: OwnersRoute,
   PaymentsRoute: PaymentsRoute,
   RentalsRoute: RentalsRoute,

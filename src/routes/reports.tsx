@@ -26,6 +26,8 @@ import {
   getReturns,
   getOwners,
   getExchanges,
+  getIncomeExpenses,
+  printIncomeExpensesPDF,
   formatDateDDMMYYYY,
   useDatabaseTrigger,
   getLocalYYYYMMDD,
@@ -46,6 +48,7 @@ const CHART_COLORS = [
 ];
 
 const reportCards = [
+  { title: "Income & Expense Statement", desc: "Ledger cash flow, income and expense audit statement", icon: Banknote, color: "text-success bg-success/10 border-success/20" },
   { title: "Rentals Statement", desc: "Detailed log of all rental agreement contracts", icon: FileText, color: "text-primary bg-primary/10 border-primary/20" },
   { title: "Exchanges Statement", desc: "Log of equipment exchange history", icon: RefreshCw, color: "text-warning-foreground bg-warning/10 border-warning/20" },
   { title: "Customers Statement", desc: "Customer profiles, details, and active statuses", icon: Users2, color: "text-accent bg-accent/10 border-accent/20" },
@@ -67,6 +70,9 @@ const tooltipStyle = {
 };
 
 const DATE_TYPE_OPTIONS: Record<string, { label: string, value: string }[]> = {
+  "Income & Expense Statement": [
+    { label: "Transaction Date", value: "date" }
+  ],
   "Rentals Statement": [
     { label: "Agreement Start Date", value: "start" },
     { label: "Agreement End Date", value: "end" }
@@ -346,6 +352,9 @@ function ReportsPage() {
     let list: any[] = [];
     
     switch (activeStatement) {
+      case "Income & Expense Statement":
+        list = getIncomeExpenses();
+        break;
       case "Rentals Statement":
         list = rentalsList;
         break;
@@ -810,7 +819,27 @@ function ReportsPage() {
     let rows: string[][] = [];
     let title = activeStatement.replace(/\s+/g, "_");
 
+    if (activeStatement === "Income & Expense Statement" && format === "PDF") {
+      printIncomeExpensesPDF(filteredData, selectedOwnerFilter !== "all-owners" ? selectedOwnerFilter : "All Entities", "Reports Audit Scope");
+      toast.success("Generating PDF statement...");
+      return;
+    }
+
     switch (activeStatement) {
+      case "Income & Expense Statement":
+        headers = ["Tx ID", "Date", "Entity", "Type", "Category", "Amount", "Mode", "Reference No", "Description"];
+        rows = filteredData.map(e => [
+          e.id,
+          formatDateDDMMYYYY(e.date),
+          e.entity,
+          e.type,
+          e.category,
+          (e.type === "Income" ? e.amount : -e.amount).toString(),
+          e.paymentMode,
+          e.referenceNo || "",
+          e.description || ""
+        ]);
+        break;
       case "Rentals Statement":
         headers = ["Agreement ID", "Customer Name", "Equipment", "Serial", "Start Date", "End Date", "Monthly Rent", "Deposit", "Status"];
         rows = filteredData.map(r => [

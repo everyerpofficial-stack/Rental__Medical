@@ -27,6 +27,7 @@ import {
   QrCode,
   MoreHorizontal,
   Home,
+  Banknote,
 } from "lucide-react";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import { isGSheetsEnabled } from "@/lib/google-sheets";
@@ -61,6 +62,7 @@ const navSections = [
   {
     label: "Finance",
     items: [
+      { to: "/expenses", label: "Income / Expense", icon: Banknote },
       { to: "/payments", label: "Payments", icon: CreditCard },
       { to: "/dues", label: "Rent Dues", icon: CalendarClock },
       { to: "/returns", label: "Returns", icon: RotateCcw },
@@ -773,6 +775,10 @@ export function AppShell({
             </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Finance">
+            <CommandItem onSelect={() => { navigate({ to: "/expenses" }); setSearchOpen(false); }}>
+              <Banknote className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+              <span>Income / Expense (Ledger Cash Flow)</span>
+            </CommandItem>
             <CommandItem onSelect={() => { navigate({ to: "/payments" }); setSearchOpen(false); }}>
               <CreditCard className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
               <span>Payments Ledger</span>
