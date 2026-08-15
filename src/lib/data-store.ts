@@ -1462,7 +1462,7 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
         }
 
         // 5. Update the original agreement to contain ONLY the returned items
-        rental.equipmentItems = returnedItems.map((item: any) => ({ ...item, returned: true }));
+        rental.equipmentItems = returnedItems.map((item: any) => ({ ...item, returned: true, returnedDate: ret.date }));
         rental.equipmentId = returnedItems.map((item: any) => item.equipmentId).join(", ");
         rental.serial = returnedItems.map((item: any) => item.serial).join(", ");
         rental.equipment = returnedItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");

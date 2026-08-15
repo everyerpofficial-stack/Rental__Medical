@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { getOwners, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
+import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
 
 export const isOwnOwner = (ownerName?: string) => {
   if (!ownerName) return false;
@@ -157,19 +157,26 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     }
   }, [eq]);
 
-  const handleSave = () => {
+  const handleSave = (): boolean => {
     const finalCategory = isCustomCategory ? customCategory.trim() : category;
     if (!finalCategory) {
       toast.error(isCustomCategory ? "Please enter a custom category name." : "Please select a category.");
-      return;
+      return false;
     }
     if (!serial) {
       toast.error("Please enter a serial number.");
-      return;
+      return false;
+    }
+    const duplicate = getEquipment().find(
+      (e) => e.id !== eq?.id && e.serial.trim().toLowerCase() === serial.trim().toLowerCase()
+    );
+    if (duplicate) {
+      toast.error(`Serial number "${serial.trim()}" is already used by "${duplicate.name}" (${duplicate.id}). Each equipment must have a unique serial number.`);
+      return false;
     }
     if (!status) {
       toast.error("Please select a status.");
-      return;
+      return false;
     }
 
     let finalOwnerName = owner;
@@ -178,17 +185,17 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       const indName = newOwnerIndividual.trim();
       if (!orgName) {
         toast.error("Please enter the new owner's organization name.");
-        return;
+        return false;
       }
       if (!indName) {
         toast.error("Please enter the new owner's individual name.");
-        return;
+        return false;
       }
       if (newOwnerPhone.trim()) {
         const digits = newOwnerPhone.replace(/\D/g, "");
         if (digits.length !== 10) {
           toast.error("New Owner Phone Number must be exactly 10 digits.");
-          return;
+          return false;
         }
       }
 
@@ -210,7 +217,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     } else {
       if (!owner) {
         toast.error("Please select an owner.");
-        return;
+        return false;
       }
     }
 
@@ -237,6 +244,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     saveEquipment(savedEq);
     toast.success(eq ? `Equipment "${finalCategory}" updated successfully.` : "New equipment item created successfully.");
     if (onSave) onSave(savedEq);
+    return true;
   };
 
   return (
@@ -374,7 +382,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
             <Button variant="outline" type="button">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="button" onClick={handleSave}>Save Equipment</Button>
+            <Button
+              type="button"
+              onClick={(e) => {
+                if (!handleSave()) e.preventDefault();
+              }}
+            >
+              Save Equipment
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

@@ -1149,10 +1149,12 @@ function ReturnsPage() {
                     const phone3 = r.contactNumber3 || cust?.contactNumber3 || "";
                     const phones = [phone1, phone2, phone3].filter(Boolean).join(" ");
                     const displayPhone = phone1 ? ` · ${phone1}` : "";
+                    const rentDateStr = r.start ? formatDateDDMMYYYY(r.start) : "";
+                    const displayRentDate = rentDateStr ? ` · Rent Date: ${rentDateStr}` : "";
                     return {
                       value: r.id,
-                      label: `${r.id} — ${r.customer}${displayPhone} (${r.status})`,
-                      searchTerms: `${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""}`,
+                      label: `${r.id} — ${r.customer}${displayPhone}${displayRentDate}`,
+                      searchTerms: `${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr}`,
                     };
                   })}
                 />
@@ -1319,11 +1321,19 @@ function ReturnsPage() {
                             </div>
 
                             {/* Top corner indicator badge for already returned items */}
-                            {isReturned && (
-                              <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-muted-foreground bg-muted border border-border/30 px-1.5 py-0.5 rounded">
-                                Returned
-                              </span>
-                            )}
+                            {isReturned && (() => {
+                              const retRecord = mockReturns.find(r => 
+                                (r.returnedEquipmentIds && r.returnedEquipmentIds.includes(item.equipmentId)) ||
+                                (r.agreement === selectedRental.id)
+                              );
+                              const retDateRaw = item.returnedDate || item.returnDate || retRecord?.date || selectedRental.end;
+                              const formattedRetDate = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
+                              return (
+                                <span className="absolute top-1.5 right-1.5 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shadow-2xs">
+                                  Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
+                                </span>
+                              );
+                            })()}
                           </div>
                         );
                       })}

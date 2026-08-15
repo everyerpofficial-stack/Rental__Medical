@@ -24,6 +24,7 @@ import {
   Mail, MapPinned, Hash, Users, Clock, Filter,
   AlertTriangle, FolderOpen, FileCheck2, FileImage, FileText,
   FileDigit, Receipt, ChevronRight, CreditCard, CheckCircle2,
+  ShieldCheck, ShieldAlert,
 } from "lucide-react";
 import { ImportCsvDialog, type ImportColumn } from "@/components/ImportCsvDialog";
 import { customers } from "@/lib/mock-data";
@@ -42,6 +43,7 @@ import {
   printDocumentFile,
   downloadBase64File,
   saveDocument,
+  deleteDocument,
   useDatabaseTrigger,
   getNextCustomerNumber,
   getNextDocumentNumber,
@@ -105,6 +107,12 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
   const contactNumber3Digits = (row.contactNumber3 || "").replace(/\D/g, "");
   if (contactNumber3Digits && contactNumber3Digits.length !== 10) return { ok: false, error: `${name}: Alternative Phone 1 must be exactly 10 digits` };
 
+  const normalizedName = name.toLowerCase();
+  const isDuplicate = getCustomers().some(
+    (c) => c.name.trim().toLowerCase() === normalizedName && c.phone.replace(/\D/g, "") === phoneDigits
+  );
+  if (isDuplicate) return { ok: false, error: `${name}: Customer with this name and phone number already exists` };
+
   saveCustomer({
     id: getNextCustomerNumber(),
     name,
@@ -152,6 +160,7 @@ function CustomerFormDialog({
   const [pincode, setPincode] = useState(customer?.pincode || "");
   const [notes, setNotes] = useState(customer?.notes || "");
   const [selectedFiles, setSelectedFiles] = useState<Array<{ id?: string; name: string; size: string; fileData?: string; isExisting?: boolean }>>([]);
+  const [removedDocIds, setRemovedDocIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -170,6 +179,7 @@ function CustomerFormDialog({
       setPincode(customer?.pincode || "");
       setNotes(customer?.notes || "");
       setSelectedFiles([]);
+      setRemovedDocIds([]);
 
       if (customer?.id) {
         try {
@@ -248,6 +258,20 @@ function CustomerFormDialog({
       return;
     }
 
+    const normalizedName = name.trim().toLowerCase();
+    const normalizedPhone = phone.replace(/\D/g, "");
+    const isDuplicate = getCustomers().some(
+      (c) =>
+        c.id !== customer?.id &&
+        c.name.trim().toLowerCase() === normalizedName &&
+        c.phone.replace(/\D/g, "") === normalizedPhone
+    );
+    if (isDuplicate) {
+      toast.error(`A customer named "${name.trim()}" with this phone number already exists.`);
+      setIsSubmitting(false);
+      return;
+    }
+
     const id = customer?.id || getNextCustomerNumber();
     const newCustomer = {
       id,
@@ -268,6 +292,9 @@ function CustomerFormDialog({
       notes,
     };
     saveCustomer(newCustomer);
+
+    // Remove ID proofs the user deleted from this dialog
+    removedDocIds.forEach((docId) => deleteDocument(docId));
 
     // Save newly uploaded ID proofs
     selectedFiles.forEach((file) => {
@@ -314,7 +341,13 @@ function CustomerFormDialog({
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => {
+      const file = prev[index];
+      if (file?.isExisting && file.id) {
+        setRemovedDocIds((ids) => [...ids, file.id!]);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   return (
@@ -1235,13 +1268,16 @@ function CustomerPayDueDialog({
   return (
     <>
       <Button
-        variant="outline"
         size="sm"
-        className="h-7 px-2 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200 gap-1"
-        onClick={() => setOpen(true)}
-        title="Pay Customer Due"
+        className={`h-7 px-2.5 text-[11px] font-bold gap-1 transition-all ${
+          dueInfo.totalDue > 0
+            ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+            : "bg-muted/80 text-foreground hover:bg-muted border border-border/60"
+        }`}
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        title="Pay / Record Payment"
       >
-        <CreditCard className="h-3 w-3" /> Pay Due
+        <CreditCard className="h-3.5 w-3.5" /> Pay
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -1391,6 +1427,21 @@ function CustomersPage() {
   }, [dbVersion]);
 
   const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const documentsList = useMemo(() => getDocuments(), [dbVersion]);
+
+  // Build a set of customer IDs that have KYC pending (no aadhaar, no PAN, no ID Proof docs)
+  const kycPendingSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of customers) {
+      const hasAadhaar = !!(c as any).aadhaar;
+      const hasPan = !!(c as any).pan;
+      const hasIdProofDoc = documentsList.some((d: any) => d.customerId === c.id && d.type === "ID Proof");
+      if (!hasAadhaar && !hasPan && !hasIdProofDoc) {
+        set.add(c.id);
+      }
+    }
+    return set;
+  }, [customers, documentsList]);
 
   const filteredCustomers = sortLatestFirst(
     customers.filter((c) => {
@@ -1415,8 +1466,11 @@ function CustomersPage() {
       const matchesCity =
         cityFilter === "all" || c.city.toLowerCase() === cityFilter.toLowerCase();
       const matchesStatus =
-        statusFilter === "all-status" ||
-        c.status.toLowerCase() === statusFilter.toLowerCase();
+        statusFilter === "all-status"
+          ? true
+          : statusFilter === "KYC Pending"
+            ? kycPendingSet.has(c.id)
+            : c.status.toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesCity && matchesStatus;
     })
   );
@@ -1424,7 +1478,7 @@ function CustomersPage() {
   // Dynamic stats
   const totalCount = customers.length;
   const activeCount = customers.filter(c => c.status === "Active").length;
-  const pendingCount = customers.filter(c => c.status === "Pending").length;
+  const pendingKycCount = kycPendingSet.size;
   const overdueCount = customers.filter(c => c.status === "Overdue").length;
 
   return (
@@ -1487,7 +1541,7 @@ function CustomersPage() {
         {[
           { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary",            border: "border-border/60" },
           { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success",             border: "border-border/60" },
-          { l: "Pending KYC",     v: pendingCount.toString(),    icon: Clock,     color: "text-warning-foreground",  border: "border-border/60" },
+          { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground",  border: "border-border/60" },
           { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive",          border: "border-border/60" },
         ].map((s, i) => (
           <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}>
@@ -1548,6 +1602,7 @@ function CustomersPage() {
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="Overdue">Overdue</SelectItem>
+                  <SelectItem value="KYC Pending">KYC Pending</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1563,6 +1618,7 @@ function CustomersPage() {
                   <TableHead>City</TableHead>
                   <TableHead>Rentals</TableHead>
                   <TableHead>Due Balance</TableHead>
+                  <TableHead>KYC</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-32 text-right">Actions</TableHead>
                 </TableRow>
@@ -1570,7 +1626,7 @@ function CustomersPage() {
               <TableBody>
                 {filteredCustomers.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-12 text-center text-[13px] text-muted-foreground">
+                    <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
                       No customers match your search or filter.
                     </TableCell>
                   </TableRow>
@@ -1632,15 +1688,21 @@ function CustomersPage() {
                         );
                       })()}
                     </TableCell>
+                    <TableCell>
+                      {kycPendingSet.has(c.id) ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10.5px] font-bold text-amber-700">
+                          <ShieldAlert className="h-3 w-3" /> Pending
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700">
+                          <ShieldCheck className="h-3 w-3" /> Verified
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell><StatusBadge status={c.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 transition-opacity">
-                        {(() => {
-                          const dueInfo = getCustomerDueBalance(c.id, c.name);
-                          return dueInfo.totalDue > 0 ? (
-                            <CustomerPayDueDialog customer={c} onSave={refresh} />
-                          ) : null;
-                        })()}
+                        <CustomerPayDueDialog customer={c} onSave={refresh} />
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1703,7 +1765,14 @@ function CustomersPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-semibold text-[13.5px] truncate">{c.name}</p>
-                        <StatusBadge status={c.status} />
+                        <div className="flex items-center gap-1.5">
+                          {kycPendingSet.has(c.id) && (
+                            <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+                              <ShieldAlert className="h-2.5 w-2.5" /> KYC
+                            </span>
+                          )}
+                          <StatusBadge status={c.status} />
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="info-row">
@@ -1719,14 +1788,19 @@ function CustomersPage() {
                       {(() => {
                         const dueInfo = getCustomerDueBalance(c.id, c.name);
                         return (
-                          <p className="text-[11px] font-medium mt-1">
-                            Due Balance:{" "}
-                            {dueInfo.totalDue > 0 ? (
-                              <strong className="text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")} (Pending)</strong>
-                            ) : (
-                              <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
-                            )}
-                          </p>
+                          <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/40">
+                            <p className="text-[11px] font-medium">
+                              Due Balance:{" "}
+                              {dueInfo.totalDue > 0 ? (
+                                <strong className="text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")} (Pending)</strong>
+                              ) : (
+                                <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
+                              )}
+                            </p>
+                            <div onClick={(e) => e.stopPropagation()}>
+                              <CustomerPayDueDialog customer={c} onSave={refresh} />
+                            </div>
+                          </div>
                         );
                       })()}
                     </div>

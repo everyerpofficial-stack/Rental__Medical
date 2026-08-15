@@ -409,10 +409,10 @@ function PayDialog({
     <>
       <Button
         size="sm"
-        className="h-7 px-3 text-[11px] font-bold gap-1 bg-success hover:bg-success/90 text-white animate-[pulse_3s_infinite]"
+        className="h-7 px-3 text-[11px] font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
         onClick={() => setOpen(true)}
       >
-        <CreditCard className="h-3 w-3" /> Pay
+        <CreditCard className="h-3.5 w-3.5" /> Pay
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -1243,11 +1243,15 @@ function DuesPage() {
                                 <span className={isReturned ? "line-through text-muted-foreground/50" : "text-foreground/80 font-medium"}>
                                   {getEquipmentName(eqItem.equipmentId)}
                                 </span>
-                                {isReturned && (
-                                  <span className="inline-flex items-center rounded-md bg-success/8 px-1.5 py-0.5 text-[10px] font-bold text-success border border-success/15 shrink-0">
-                                    Returned
-                                  </span>
-                                )}
+                                {isReturned && (() => {
+                                  const retDateRaw = eqItem.returnedDate || eqItem.returnDate || r.end;
+                                  const formattedRetDate = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
+                                  return (
+                                    <span className="inline-flex items-center rounded-md bg-success/8 px-1.5 py-0.5 text-[10px] font-bold text-success border border-success/15 shrink-0">
+                                      Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             );
                           })}

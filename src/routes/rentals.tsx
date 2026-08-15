@@ -44,6 +44,7 @@ import {
   getReturnCalculatedRentPerItem,
   useDatabaseTrigger,
   saveDocument,
+  deleteDocument,
   getNextCustomerNumber,
   getNextDocumentNumber,
   getLocalYYYYMMDD,
@@ -193,6 +194,7 @@ export function parseManualLocationInput(input: string): { latitude: number; lon
 }
 
 interface AdditionalItem {
+  id?: string;
   name: string;
   amount: number;
   status: "Paid" | "Not Paid" | "Free of Cost";
@@ -206,16 +208,27 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [open, setOpen] = useState(false);
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
   const [equipmentList, setEquipmentList] = useState(() => getEquipment());
+  // BUG-FIX: customersList used to be recomputed via a bare getCustomers() call
+  // in the render body, which re-runs on every keystroke/selection in this
+  // dialog. getCustomers() -> getRentals() carries a self-healing repair pass
+  // plus a live status-correction sync to Google Sheets, so re-running it on
+  // every render made routine actions like picking equipment feel like they
+  // took 10-20s to register (the checkbox state itself updated instantly —
+  // the browser just couldn't paint until that heavy work finished). Load it
+  // like equipmentList: once on open, and again on remote db updates.
+  const [customersList, setCustomersList] = useState(() => getCustomers());
 
   useEffect(() => {
     if (open) {
       setEquipmentList(getEquipment());
+      setCustomersList(getCustomers());
     }
   }, [open]);
 
   useEffect(() => {
     const handleUpdate = () => {
       setEquipmentList(getEquipment());
+      setCustomersList(getCustomers());
     };
     window.addEventListener("medirent-db-updated", handleUpdate);
     return () => window.removeEventListener("medirent-db-updated", handleUpdate);
@@ -238,6 +251,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [isDeliveryPhotoChanged, setIsDeliveryPhotoChanged] = useState(false);
   const [isSignedDocChanged, setIsSignedDocChanged] = useState(false);
   const [isLocationChanged, setIsLocationChanged] = useState(false);
+  // Ids of documents already persisted for this rental, so save can reconcile
+  // removals/replacements instead of leaving orphaned document records behind.
+  const [initialDeliveryPhotoIds, setInitialDeliveryPhotoIds] = useState<string[]>([]);
+  const [existingSignedDocId, setExistingSignedDocId] = useState<string | null>(null);
+  const [existingLocationDocId, setExistingLocationDocId] = useState<string | null>(null);
   // Bug 8/9: QR scanner state — which equipment row index is being scanned
   const [scannerTargetIdx, setScannerTargetIdx] = useState<number | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -527,15 +545,20 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setIsDeliveryPhotoChanged(false);
       setIsSignedDocChanged(false);
       setIsLocationChanged(false);
+      setInitialDeliveryPhotoIds([]);
+      setExistingSignedDocId(null);
+      setExistingLocationDocId(null);
 
       if (rental) {
         try {
           const docs = getDocuments();
           const existingSignedDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Signed Agreement");
           const existingDeliveryPhotos = docs.filter((d: any) => d.rentalId === rental.id && d.type === "Delivery Photo");
-          
+          const existingLocationDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Location Tag");
+
           if (existingSignedDoc) {
             setSignedDocName(existingSignedDoc.name);
+            setExistingSignedDocId(existingSignedDoc.id);
             getDocumentWithFile(existingSignedDoc).then((fullDoc: any) => {
               if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
                 setSignedDocUrl(fullDoc.fileData);
@@ -543,6 +566,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
             });
           }
           if (existingDeliveryPhotos.length > 0) {
+            setInitialDeliveryPhotoIds(existingDeliveryPhotos.map((d: any) => d.id));
             Promise.all(existingDeliveryPhotos.map((d: any) => getDocumentWithFile(d))).then((fullDocs: any[]) => {
               const loadedPhotos = fullDocs
                 .filter((d) => d.fileData && d.fileData !== "NOT_FOUND")
@@ -554,6 +578,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 }));
               setDeliveryPhotos(loadedPhotos);
             });
+          }
+          if (existingLocationDoc) {
+            setExistingLocationDocId(existingLocationDoc.id);
           }
         } catch (err) {
           console.warn("Failed to load existing files for editing agreement:", err);
@@ -880,8 +907,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   };
 
   const durationDetails = getDurationDetails();
-
-  const customersList = getCustomers();
 
   const selectedCustomer = customersList.find(c => c.id === selectedCustomerId);
 
@@ -1232,6 +1257,18 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         setIsSubmitting(false);
         return;
       }
+
+      const normalizedName = custName.trim().toLowerCase();
+      const normalizedPhone = custPhone.replace(/\D/g, "");
+      const isDuplicateCustomer = getCustomers().some(
+        (c) => c.name.trim().toLowerCase() === normalizedName && c.phone.replace(/\D/g, "") === normalizedPhone
+      );
+      if (isDuplicateCustomer) {
+        toast.error(`A customer named "${custName.trim()}" with this phone number already exists. Select them from the customer list instead of adding new.`);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Create new customer
       const newCustId = getNextCustomerNumber();
       const newCust = {
@@ -1393,9 +1430,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
     saveRental(newRental);
 
-    // Save Signed Document if present
+    // Save Signed Document if present — reuse the existing doc id when
+    // replacing so it updates in place instead of leaving an orphaned record.
     if (signedDocUrl && signedDocName && (!rental || isSignedDocChanged)) {
-      const docId = getNextDocumentNumber();
+      const docId = existingSignedDocId || getNextDocumentNumber();
       saveDocument({
         id: docId,
         customerId: customerId,
@@ -1426,10 +1464,18 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         }
       });
     }
+    // Remove delivery photos the user deleted from the capture dialog
+    if (isDeliveryPhotoChanged) {
+      const keptIds = new Set(deliveryPhotos.map((p) => p.id).filter(Boolean));
+      initialDeliveryPhotoIds.forEach((docId) => {
+        if (!keptIds.has(docId)) deleteDocument(docId);
+      });
+    }
 
-    // Save Location Tag if present
+    // Save Location Tag if present — reuse the existing doc id when
+    // replacing so it updates in place instead of leaving an orphaned record.
     if (capturedLocation && (!rental || isLocationChanged)) {
-      const docId = getNextDocumentNumber();
+      const docId = existingLocationDocId || getNextDocumentNumber();
       const locationText = `Latitude: ${capturedLocation.latitude}\nLongitude: ${capturedLocation.longitude}\nAccuracy: ${capturedLocation.accuracy || "N/A"}m\nAddress: ${capturedLocation.address}\nTimestamp: ${capturedLocation.timestamp}`;
       // BUG-3 FIX: btoa() throws InvalidCharacterError on non-Latin1 characters
       // (e.g. Hindi/Kannada place names returned by Nominatim geocoding).
@@ -2003,6 +2049,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     e.preventDefault();
                     const newItems = [
                       {
+                        id: `custom-${Date.now()}-${Math.random().toString(36).slice(2)}`,
                         name: "",
                         amount: 0,
                         status: "Not Paid" as const,
@@ -2046,7 +2093,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         return 0;
                       })
                       .map(({ item, index }) => (
-                        <tr key={item.name || `custom-${index}`} className={`hover:bg-muted/10 transition-colors ${item.selected ? 'bg-primary/5' : ''}`}>
+                        <tr key={item.id || item.name || `row-${index}`} className={`hover:bg-muted/10 transition-colors ${item.selected ? 'bg-primary/5' : ''}`}>
                           <td className="p-2.5 text-center">
                             <input
                               type="checkbox"
