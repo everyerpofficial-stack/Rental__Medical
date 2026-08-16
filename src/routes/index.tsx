@@ -25,6 +25,7 @@ import {
   useDatabaseTrigger,
   parseLocalDate,
   getPaidForEquipment,
+  formatDateDDMMYYYY,
 } from "@/lib/data-store";
 import { toast } from "sonner";
 
@@ -381,6 +382,13 @@ function Dashboard() {
     });
   });
   
+  // Sort activities newest first
+  dynamicActivities.sort((a, b) => {
+    const timeA = parseLocalDate(a.time).getTime();
+    const timeB = parseLocalDate(b.time).getTime();
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
+  
   const filteredActivities = dynamicActivities.filter((a) => {
     if (activeActivity === "All") return true;
     return activityTypeMap[a.type] === activeActivity;
@@ -666,7 +674,7 @@ function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-medium leading-snug text-foreground/90 truncate">{a.text}</p>
                         <div className="mt-0.5 flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground">{a.time}</span>
+                          <span className="text-[10px] text-muted-foreground">{formatDateDDMMYYYY(a.time)}</span>
                           <span className={`rounded px-1 py-px text-[9px] font-semibold ${activityLabelColor[a.tone]}`}>
                             {activityTypeMap[a.type] ?? a.type}
                           </span>

@@ -1265,15 +1265,13 @@ function CustomerPayDueDialog({
     onSave();
   };
 
+  if (dueInfo.totalDue <= 0) return null;
+
   return (
     <>
       <Button
         size="sm"
-        className={`h-7 px-2.5 text-[11px] font-bold gap-1 transition-all ${
-          dueInfo.totalDue > 0
-            ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-            : "bg-muted/80 text-foreground hover:bg-muted border border-border/60"
-        }`}
+        className="h-7 px-2.5 text-[11px] font-bold gap-1 transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
         title="Pay / Record Payment"
       >
