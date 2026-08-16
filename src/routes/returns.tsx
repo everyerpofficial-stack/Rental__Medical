@@ -22,6 +22,7 @@ import {
   QrCode,
   Search,
   User,
+  MapPin,
   Calendar,
   Check,
   Activity,
@@ -756,9 +757,7 @@ function ReturnsPage() {
   const [pendingBalance, setPendingBalance] = useState("0");
   const [totalPaidAmount, setTotalPaidAmount] = useState("0");
   const [notes, setNotes] = useState("");
-  const [collectedBy, setCollectedBy] = useState(() => {
-    return typeof window !== "undefined" ? (localStorage.getItem("medirent-user-name") || "") : "";
-  });
+  const [collectedBy, setCollectedBy] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -916,7 +915,7 @@ function ReturnsPage() {
         setDuePaymentStatus("Paid");
         setDuePaymentMode("Cash");
         setDueTxRef("");
-        setCollectedBy(typeof window !== "undefined" ? (localStorage.getItem("medirent-user-name") || "") : "");
+        setCollectedBy("");
         
         const activeIds = rentalEquipments
           .filter((item: any) => !item.returned)
@@ -1344,8 +1343,20 @@ function ReturnsPage() {
                           {selectedRental.customer}
                           <StatusBadge status={selectedRental.status} />
                         </h4>
-                        <p className="text-[11.5px] text-muted-foreground mt-0.5">Agreement ID: <span className="font-mono font-bold text-foreground/80">{selectedRental.id}</span> · Contact: {selectedCustomer?.phone || "No phone registered"}</p>
-                        <p className="text-[11px] text-muted-foreground">Period: <span className="font-semibold text-foreground/70">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="font-semibold text-foreground/70">{returnDate ? formatDateDDMMYYYY(returnDate) : (selectedRental.end ? formatDateDDMMYYYY(selectedRental.end) : "Ongoing")}</span></p>
+                        <p className="text-[11.5px] text-muted-foreground mt-0.5">Agreement ID: <span className="font-mono font-bold text-foreground/80">{selectedRental.id}</span> · Contact: {selectedCustomer?.phone || (selectedRental as any)?.phone || "No phone registered"}</p>
+                        {(() => {
+                          const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
+                          const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";
+                          const custCity = selectedCustomer?.city || (selectedRental as any)?.city || "";
+                          const fullAddr = [custAddr, custArea, custCity].filter(Boolean).join(", ");
+                          return fullAddr ? (
+                            <p className="text-[11.5px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-primary opacity-80" />
+                              <span><strong>Address:</strong> {fullAddr}</span>
+                            </p>
+                          ) : null;
+                        })()}
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Period: <span className="font-semibold text-foreground/70">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="font-semibold text-foreground/70">{returnDate ? formatDateDDMMYYYY(returnDate) : (selectedRental.end ? formatDateDDMMYYYY(selectedRental.end) : "Ongoing")}</span></p>
                       </div>
                     </div>
                   </div>
