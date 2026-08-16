@@ -10,15 +10,15 @@ import { toast } from "sonner";
 import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
 import { cn, capitalizeWords } from "@/lib/utils";
 
-export const isOwnOwner = (ownerName?: string) => {
+export const isOwnOwner = (ownerName?: any) => {
   if (!ownerName) return false;
-  const val = ownerName.toLowerCase().trim();
+  const val = String(ownerName).toLowerCase().trim();
   if (val === "deepak" || val === "relife" || val.includes("relife")) return true;
   
   try {
     const ownersList = getOwners();
-    const match = ownersList.find(o => o.name.toLowerCase().trim() === val);
-    if (match && match.ownerName && match.ownerName.toLowerCase().trim() === "deepak") {
+    const match = ownersList.find(o => String(o.name || "").toLowerCase().trim() === val);
+    if (match && match.ownerName && String(match.ownerName).toLowerCase().trim() === "deepak") {
       return true;
     }
   } catch (e) {
@@ -183,7 +183,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       (e) => e.id !== eq?.id && String(e.serial || "").trim().toLowerCase() === String(serial || "").trim().toLowerCase()
     );
     if (duplicate) {
-      toast.error(`Serial number "${serial.trim()}" is already used by "${duplicate.name}" (${duplicate.id}). Each equipment must have a unique serial number.`);
+      toast.error(`Serial number "${String(serial || "").trim()}" is already used by "${duplicate.name}" (${duplicate.id}). Each equipment must have a unique serial number.`);
       return false;
     }
     if (!status) {
@@ -280,7 +280,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
           <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] font-semibold animate-[fade-in_0.2s_ease-out] mb-1">
             <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
             <span>
-              Serial number <strong>"{serial.trim()}"</strong> already exists in inventory for <strong>{duplicateEq.name}</strong> ({duplicateEq.id})!
+              Serial number <strong>"{String(serial || "").trim()}"</strong> already exists in inventory for <strong>{duplicateEq.name}</strong> ({duplicateEq.id})!
             </span>
           </div>
         )}
