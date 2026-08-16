@@ -1348,7 +1348,34 @@ function ReturnsPage() {
                           {selectedRental.customer}
                           <StatusBadge status={selectedRental.status} />
                         </h4>
-                        <p className="text-[11.5px] text-muted-foreground mt-0.5">Agreement ID: <span className="font-mono font-bold text-foreground/80">{selectedRental.id}</span> · Contact: {selectedCustomer?.phone || (selectedRental as any)?.phone || "No phone registered"}</p>
+                        {(() => {
+                          const p1 = selectedCustomer?.phone || (selectedRental as any)?.phone || "";
+                          const p2 = selectedCustomer?.altPhone || (selectedRental as any)?.altPhone || "";
+                          const p3 = selectedCustomer?.contactNumber3 || (selectedRental as any)?.contactNumber3 || "";
+                          return (
+                            <div className="text-[11.5px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <span>Agreement ID: <span className="font-mono font-bold text-foreground/80">{selectedRental.id}</span></span>
+                              {p1 && (
+                                <span className="flex items-center gap-1">
+                                  · Contact: <a href={`tel:${p1}`} className="hover:underline font-semibold text-foreground/80">{p1}</a>
+                                </span>
+                              )}
+                              {p2 && (
+                                <span className="flex items-center gap-1">
+                                  · Alt: <a href={`tel:${p2}`} className="hover:underline text-foreground/80">{p2}</a>
+                                </span>
+                              )}
+                              {p3 && (
+                                <span className="flex items-center gap-1">
+                                  · Alt 1: <a href={`tel:${p3}`} className="hover:underline text-foreground/80">{p3}</a>
+                                </span>
+                              )}
+                              {!p1 && !p2 && !p3 && (
+                                <span>· No phone registered</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {(() => {
                           const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
                           const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";

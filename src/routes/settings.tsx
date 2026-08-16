@@ -361,11 +361,21 @@ function upsertRow(sh, row) {
 function deleteRow(sh, id) {
   if (sh.getLastRow() < 2 || sh.getLastColumn() === 0) return;
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var idCol = headers.indexOf("id");
+  var idCol = -1;
+  var targetId = String(id).trim();
+  for (var h = 0; h < headers.length; h++) {
+    var hName = String(headers[h] || "").trim().toLowerCase();
+    if (hName === "id" || hName === "fileid") {
+      idCol = h;
+      break;
+    }
+  }
   if (idCol === -1) return;
   var data = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues();
-  for (var i = 0; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(id)) { sh.deleteRow(i + 2); break; }
+  for (var i = data.length - 1; i >= 0; i--) {
+    if (String(data[i][idCol]).trim() === targetId) {
+      sh.deleteRow(i + 2);
+    }
   }
 }
 

@@ -21,7 +21,7 @@ import {
   Plus, Search, Download, FileText, Mail, CalendarDays, MessageCircle,
   MoreHorizontal, Edit, Trash2, XCircle, FileCheck2, Clock, AlertTriangle,
   ShieldCheck, Fingerprint, PenTool, Camera, FileUp, CheckCircle2, MapPin,
-  X, QrCode
+  X, QrCode, Phone
 } from "lucide-react";
 import {
   getRentals,
@@ -4349,7 +4349,37 @@ function RentalsPage() {
                     </TableCell>
                     <TableCell>
                       <p className="font-semibold text-[13px]">{r.customer}</p>
-                      <p className="text-[10px] font-mono text-muted-foreground">{r.customerId}</p>
+                      {(() => {
+                        const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                        const p1 = r.phone || cust?.phone || "";
+                        const p2 = r.altPhone || cust?.altPhone || "";
+                        const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
+                        return (
+                          <div className="space-y-0.5 mt-0.5 max-w-[200px]">
+                            <p className="text-[10px] font-mono text-muted-foreground">{r.customerId}</p>
+                            {(p1 || p2 || p3) && (
+                              <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                                {p1 && (
+                                  <span className="flex items-center gap-0.5 text-foreground font-medium">
+                                    <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
+                                    <a href={`tel:${p1}`} className="hover:underline hover:text-primary">{p1}</a>
+                                  </span>
+                                )}
+                                {p2 && (
+                                  <span className="text-[10px]">
+                                    Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary">{p2}</a>
+                                  </span>
+                                )}
+                                {p3 && (
+                                  <span className="text-[10px]">
+                                    Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary">{p3}</a>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <p className="text-[13px] text-foreground/80">{r.equipment}</p>
@@ -4482,6 +4512,28 @@ function RentalsPage() {
                           {r.id}
                         </span>
                         <p className="font-semibold text-[13.5px] mt-1">{r.customer}</p>
+                        {(() => {
+                          const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                          const p1 = r.phone || cust?.phone || "";
+                          const p2 = r.altPhone || cust?.altPhone || "";
+                          const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
+                          return (p1 || p2 || p3) ? (
+                            <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
+                              {p1 && (
+                                <span className="flex items-center gap-0.5 text-foreground font-medium">
+                                  <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
+                                  <a href={`tel:${p1}`} className="hover:underline">{p1}</a>
+                                </span>
+                              )}
+                              {p2 && (
+                                <span>Alt: <a href={`tel:${p2}`} className="hover:underline">{p2}</a></span>
+                              )}
+                              {p3 && (
+                                <span>Alt 1: <a href={`tel:${p3}`} className="hover:underline">{p3}</a></span>
+                              )}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
                       <StatusBadge status={r.status} />
                     </div>

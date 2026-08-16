@@ -342,13 +342,11 @@ function CustomerFormDialog({
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles((prev) => {
-      const file = prev[index];
-      if (file?.isExisting && file.id) {
-        setRemovedDocIds((ids) => [...ids, file.id!]);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
+    const fileToRemove = selectedFiles[index];
+    if (fileToRemove?.isExisting && fileToRemove.id) {
+      setRemovedDocIds((prev) => (prev.includes(fileToRemove.id!) ? prev : [...prev, fileToRemove.id!]));
+    }
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -614,6 +612,7 @@ const getDocDetails = (type: string) => {
 
 function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer | null; open: boolean; onClose: () => void }) {
   if (!customer) return null;
+  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
   const rentals = getRentals();
   const payments = getPayments();
   const documents = getDocuments();
@@ -760,9 +759,27 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                               <p className="text-[12.5px] font-semibold truncate text-foreground">{d.name}</p>
                               <p className="text-[10px] text-muted-foreground">{d.size} · {formatDateDDMMYYYY(d.date)}</p>
                             </div>
-                            <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 rounded-md shrink-0" onClick={() => setPreviewDoc(d)}>
-                              View
-                            </Button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 rounded-md" onClick={() => setPreviewDoc(d)}>
+                                View
+                              </Button>
+                              {!isStaff && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                                  onClick={() => {
+                                    if (window.confirm(`Are you sure you want to delete "${d.name}"?`)) {
+                                      deleteDocument(d.id);
+                                      toast.success(`Document "${d.name}" deleted successfully.`);
+                                    }
+                                  }}
+                                  title="Delete Document"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1026,6 +1043,22 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                           >
                             <Download className="h-3 w-3 mr-1" /> Download
                           </Button>
+                          {!isStaff && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6.5 text-[11px] px-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete "${d.name}"?`)) {
+                                  deleteDocument(d.id);
+                                  toast.success(`Document "${d.name}" deleted.`);
+                                }
+                              }}
+                              title="Delete Document"
+                            >
+                              <Trash2 className="h-3 w-3 mr-1" /> Delete
+                            </Button>
+                          )}
                         </div>
                       </div>
                     );
@@ -1676,13 +1709,27 @@ function CustomersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                          <Phone className="h-3 w-3" />{c.phone}
+                      <div className="space-y-0.5 max-w-[220px]">
+                        <div className="flex items-center gap-1.5 text-[12px] text-foreground font-medium">
+                          <Phone className="h-3 w-3 text-primary shrink-0" />
+                          <a href={`tel:${c.phone}`} className="hover:underline hover:text-primary">{c.phone}</a>
                         </div>
+                        {c.altPhone && (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span className="text-[9.5px] font-bold uppercase text-muted-foreground/60">Alt:</span>
+                            <a href={`tel:${c.altPhone}`} className="hover:underline hover:text-primary">{c.altPhone}</a>
+                          </div>
+                        )}
+                        {c.contactNumber3 && (
+                          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <span className="text-[9.5px] font-bold uppercase text-muted-foreground/60">Alt 1:</span>
+                            <a href={`tel:${c.contactNumber3}`} className="hover:underline hover:text-primary">{c.contactNumber3}</a>
+                          </div>
+                        )}
                         {c.email && (
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
-                            <Mail className="h-2.5 w-2.5" />{c.email}
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 truncate">
+                            <Mail className="h-2.5 w-2.5 shrink-0" />
+                            <span className="truncate">{c.email}</span>
                           </div>
                         )}
                       </div>
@@ -1773,27 +1820,27 @@ function CustomersPage() {
           </div>
 
           {/* Mobile Card List — visible only on mobile */}
-          <div className="sm:hidden">
+          <div className="sm:hidden divide-y divide-border/60">
             {filteredCustomers.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
                 No customers match your search or filter.
               </div>
             ) : (
-              <div className="divide-y divide-border/60">
-                {filteredCustomers.map((c, idx) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-3 px-4 py-3.5 active:bg-muted/40 transition-colors"
-                    onClick={() => { setProfileCustomer(c); setProfileOpen(true); }}
-                  >
-                    <Avatar className="h-10 w-10 shrink-0">
+              filteredCustomers.map((c, idx) => (
+                <div 
+                  key={c.id} 
+                  className="px-4 py-3.5 active:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => { setProfileCustomer(c); setProfileOpen(true); }}
+                >
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-9 w-9 shrink-0 mt-0.5">
                       <AvatarFallback className={`${avatarHues[idx % avatarHues.length]} text-[12px] font-bold`}>
                         {c.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("")}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-[13.5px] truncate">{c.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-[13.5px] text-foreground">{c.name}</p>
                         <div className="flex items-center gap-1.5">
                           {kycPendingSet.has(c.id) && (
                             <span className="inline-flex items-center gap-0.5 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
@@ -1803,12 +1850,24 @@ function CustomersPage() {
                           <StatusBadge status={c.status} />
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="info-row">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {c.phone}
+                      <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 mt-1 text-[11.5px] text-muted-foreground">
+                        <span className="flex items-center gap-1 text-foreground font-medium">
+                          <Phone className="h-3 w-3 text-primary shrink-0" />
+                          <a href={`tel:${c.phone}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>{c.phone}</a>
                         </span>
-                        <span className="info-row">
+                        {c.altPhone && (
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <span className="text-[9px] font-bold uppercase text-muted-foreground/60">Alt:</span>
+                            <a href={`tel:${c.altPhone}`} className="hover:underline text-foreground/80" onClick={(e) => e.stopPropagation()}>{c.altPhone}</a>
+                          </span>
+                        )}
+                        {c.contactNumber3 && (
+                          <span className="flex items-center gap-1 text-[11px]">
+                            <span className="text-[9px] font-bold uppercase text-muted-foreground/60">Alt 1:</span>
+                            <a href={`tel:${c.contactNumber3}`} className="hover:underline text-foreground/80" onClick={(e) => e.stopPropagation()}>{c.contactNumber3}</a>
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 ml-auto">
                           <MapPin className="h-3 w-3 shrink-0" />
                           {c.city}
                         </span>
@@ -1835,8 +1894,8 @@ function CustomersPage() {
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             )}
           </div>
         </CardContent>

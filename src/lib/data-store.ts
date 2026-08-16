@@ -6,7 +6,7 @@ import {
   payments as initialPayments,
   returns as initialReturns,
 } from "./mock-data";
-import { syncRowToSheet, deleteRowFromSheet, isGSheetsEnabled, SHEETS, readSheetData, getPendingSyncs, cleanStalePendingSyncs, sheetsRequest } from "./google-sheets";
+import { syncRowToSheet, deleteRowFromSheet, isGSheetsEnabled, SHEETS, readSheetData, getPendingSyncs, cleanStalePendingSyncs, sheetsRequest, getDeletedRecords } from "./google-sheets";
 
 // Helper to check for SSR
 const isBrowser = typeof window !== "undefined";
@@ -548,6 +548,13 @@ export function deleteCustomer(id: string) {
   const list = getCustomers().filter((c) => c.id !== id);
   setStorageItem("medirent-customers", list);
   if (isGSheetsEnabled()) deleteRowFromSheet(SHEETS.CUSTOMERS, id);
+
+  // Clean up associated ID Proof / customer documents
+  try {
+    const docs = getDocuments().filter((d) => d.customerId === id);
+    docs.forEach((d) => deleteDocument(d.id));
+  } catch (_e) {}
+
   return list;
 }
 
@@ -3913,11 +3920,24 @@ export async function syncFromSheetsToLocalStorage(force = false) {
     if (data) {
       let mergedData = [...(data as any[])];
       const pending = pendingSyncs.filter((s) => s.sheet === entity.sheet);
-      
-      // 1. Handle pending deletes
-      const deletedIds = new Set(pending.filter((p) => p.type === "delete").map((p) => p.id));
+      const deletedRecords = getDeletedRecords().filter((r) => r.sheet === entity.sheet);
+
+      // 1. Handle pending and persistent tombstones
+      const deletedIds = new Set([
+        ...pending.filter((p) => p.type === "delete").map((p) => String(p.id)),
+        ...deletedRecords.map((r) => String(r.id)),
+      ]);
+
       if (deletedIds.size > 0) {
-        mergedData = mergedData.filter((item) => !deletedIds.has(item.id));
+        // If Google Sheets still returned items that were deleted locally, purge them from remote as well
+        const survivingDeleted = mergedData.filter((item) => deletedIds.has(String(item.id)));
+        if (survivingDeleted.length > 0 && isGSheetsEnabled()) {
+          console.log(`[GSheets] Purging ${survivingDeleted.length} surviving deleted item(s) from ${entity.sheet}`);
+          survivingDeleted.forEach((item) => {
+            deleteRowFromSheet(entity.sheet, String(item.id));
+          });
+        }
+        mergedData = mergedData.filter((item) => !deletedIds.has(String(item.id)));
       }
       
       // 2. Handle pending upserts

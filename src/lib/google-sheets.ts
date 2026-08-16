@@ -149,6 +149,56 @@ interface PendingSync {
   timestamp: number;
 }
 
+export interface DeletedRecord {
+  sheet: string;
+  id: string;
+  timestamp: number;
+}
+
+export function getDeletedRecords(): DeletedRecord[] {
+  if (!isBrowser) return [];
+  try {
+    const list = JSON.parse(localStorage.getItem("medirent-deleted-records") || "[]");
+    const now = Date.now();
+    // Keep tombstones for 30 days to avoid stale remote resurrection
+    const fresh = list.filter((r: DeletedRecord) => now - r.timestamp < 30 * 24 * 60 * 60 * 1000);
+    if (fresh.length !== list.length) {
+      localStorage.setItem("medirent-deleted-records", JSON.stringify(fresh));
+    }
+    return fresh;
+  } catch {
+    return [];
+  }
+}
+
+export function recordDeletedId(sheet: string, id: string) {
+  if (!isBrowser || !id) return;
+  const records = getDeletedRecords();
+  const strId = String(id);
+  const filtered = records.filter((r) => !(r.sheet === sheet && String(r.id) === strId));
+  filtered.push({
+    sheet,
+    id: strId,
+    timestamp: Date.now(),
+  });
+  localStorage.setItem("medirent-deleted-records", JSON.stringify(filtered));
+}
+
+export function isRecordDeleted(sheet: string, id: string): boolean {
+  if (!isBrowser || !id) return false;
+  const records = getDeletedRecords();
+  const strId = String(id);
+  return records.some((r) => r.sheet === sheet && String(r.id) === strId);
+}
+
+export function clearDeletedRecord(sheet: string, id: string) {
+  if (!isBrowser || !id) return;
+  const records = getDeletedRecords();
+  const strId = String(id);
+  const filtered = records.filter((r) => !(r.sheet === sheet && String(r.id) === strId));
+  localStorage.setItem("medirent-deleted-records", JSON.stringify(filtered));
+}
+
 export function getPendingSyncs(): PendingSync[] {
   if (!isBrowser) return [];
   try {
@@ -211,6 +261,9 @@ export function syncRowToSheet(sheet: string, row: Record<string, unknown>) {
   if (!row || !row.id) return;
   const id = String(row.id);
 
+  // Clear any tombstone if an item with this ID is intentionally saved
+  clearDeletedRecord(sheet, id);
+
   // Track this locally as a pending upsert
   addPendingSync("upsert", sheet, id, row);
 
@@ -233,17 +286,23 @@ export function syncRowToSheet(sheet: string, row: Record<string, unknown>) {
 
 /** Delete a row from a sheet by id */
 export function deleteRowFromSheet(sheet: string, id: string) {
-  // Track this locally as a pending delete
-  addPendingSync("delete", sheet, id);
+  if (!id) return;
+  const strId = String(id);
 
-  sheetsRequest("delete", { sheet, id })
+  // Record tombstone persistently so background sync never restores it
+  recordDeletedId(sheet, strId);
+
+  // Track this locally as a pending delete
+  addPendingSync("delete", sheet, strId);
+
+  sheetsRequest("delete", { sheet, id: strId })
     .then((res) => {
       if (res.success) {
-        removePendingSync(sheet, id);
+        removePendingSync(sheet, strId);
       }
     })
     .catch((err) => {
-      console.warn(`[GSheets] Delete sync failed for ${sheet}/${id}:`, err);
+      console.warn(`[GSheets] Delete sync failed for ${sheet}/${strId}:`, err);
     });
 }
 
