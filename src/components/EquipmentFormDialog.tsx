@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
-import { capitalizeWords } from "@/lib/utils";
+import { cn, capitalizeWords } from "@/lib/utils";
 
 export const isOwnOwner = (ownerName?: string) => {
   if (!ownerName) return false;
@@ -259,6 +260,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     return true;
   };
 
+  const duplicateEq = useMemo(() => {
+    const cleanSerial = serial.trim().toLowerCase();
+    if (!cleanSerial) return null;
+    return getEquipment().find(
+      (e) => e.id !== eq?.id && e.serial && e.serial.trim().toLowerCase() === cleanSerial
+    );
+  }, [serial, eq]);
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild onClick={() => setIsOpen(true)}>{trigger}</DialogTrigger>
@@ -266,6 +275,16 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
+
+        {duplicateEq && (
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] font-semibold animate-[fade-in_0.2s_ease-out] mb-1">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+            <span>
+              Serial number <strong>"{serial.trim()}"</strong> already exists in inventory for <strong>{duplicateEq.name}</strong> ({duplicateEq.id})!
+            </span>
+          </div>
+        )}
+
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2 flex flex-col justify-end">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Category</Label>
@@ -296,7 +315,23 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
               />
             </div>
           )}
-          <Field label="Serial Number"    placeholder="e.g. PHE-77821"        value={serial} onChange={(e) => setSerial(e.target.value)} />
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <span>Serial Number *</span>
+              {duplicateEq && <span className="text-rose-600 font-bold text-[10.5px]">DUPLICATE SERIAL</span>}
+            </Label>
+            <Input
+              placeholder="e.g. PHE-77821"
+              value={serial}
+              onChange={(e) => setSerial(e.target.value)}
+              className={cn("bg-background h-10 transition-colors", duplicateEq && "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20 text-rose-900 font-semibold")}
+            />
+            {duplicateEq && (
+              <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Duplicate serial number found in inventory!
+              </p>
+            )}
+          </div>
           <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(capitalizeWords(e.target.value))} />
           <Field label="Manufacturer"     placeholder="e.g. Philips"          value={manufacturer} onChange={(e) => setManufacturer(capitalizeWords(e.target.value))} />
           <div className="space-y-1.5 flex flex-col justify-end">
