@@ -1186,6 +1186,41 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     );
   };
 
+  const totalDepositVal = selectedEquipments.reduce((sum, item) => sum + (Number(item.deposit) || 0), 0);
+  const totalMonthlyRentVal = selectedEquipments.reduce((sum, item) => sum + (Number(item.monthlyRent) || 0), 0);
+  const totalDays = durationDetails?.totalDays || 30;
+  const isOngoing = !endDate;
+  const totalRentVal = selectedEquipments.reduce((sum, item) => {
+    if (item.rentCycle === "Monthly") {
+      return sum + (Number(item.monthlyRent) || 0);
+    } else {
+      if (isOngoing) {
+        return sum + (Number(item.dailyRent) || 0); // Exactly 1 day upfront rate for daily cycle
+      } else {
+        return sum + (totalDays * (Number(item.dailyRent) || 0));
+      }
+    }
+  }, 0);
+  const totalSerialsVal = selectedEquipments.map(item => item.serial || "XXXX").join(", ");
+  const totalNamesVal = selectedEquipments.map(item => equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");
+
+  const rentToAdd = Number(rentPaidAmount) || 0;
+  const depositToAdd = depositPaymentStatus === "Paid" ? totalDepositVal : (depositPaymentStatus === "Partial" ? (Number(depositPaidAmount) || 0) : 0);
+
+  // Each selected additional item individually
+  const selectedAdditionalItems = additionalItems.filter(i => i.selected);
+  const additionalItemsTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Free of Cost" ? 0 : i.amount), 0);
+  const additionalItemsCollectedTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Paid" ? i.amount : 0), 0);
+
+  const totalCharges = totalRentVal + totalDepositVal + additionalItemsTotal;
+  const totalUpfrontPaid = rentToAdd + depositToAdd + additionalItemsCollectedTotal;
+
+  // Payment split display
+  const cashAmt = Number(cashPaidAmount) || 0;
+  const bankAmt = Number(bankUpiPaidAmount) || 0;
+  const splitTotal = cashAmt + bankAmt;
+  const splitMismatch = paymentMode === "Cash+Bank" && splitTotal !== totalUpfrontPaid && splitTotal > 0;
+
   const handleSave = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -1506,44 +1541,45 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     if (onSave) onSave();
   };
 
-  const [activeTab, setActiveTab] = useState("agreement");
-
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) setActiveTab("agreement"); }}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent 
-        className="!max-w-none w-screen h-screen max-h-screen flex flex-col p-0 gap-0 rounded-none"
+        className="max-w-3xl lg:max-w-6xl w-full h-[90vh] max-h-[90vh] flex flex-col p-6 overflow-hidden gap-0"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        {/* Sticky Header */}
-        <DialogHeader className="flex flex-row items-center gap-3 px-6 py-3 border-b border-border/60 bg-background shrink-0">
-          <DialogTitle className="text-[15px] font-bold flex-1">{title}</DialogTitle>
-          {hasDraft && (
-            <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 text-primary px-3 py-1 rounded-lg text-[11px] font-semibold">
-              <span>Draft found</span>
-              <Button size="sm" variant="outline" className="h-6 text-[10px] bg-background text-primary border-primary/20 hover:bg-primary/5 px-2" onClick={handleRestoreDraft}>Restore</Button>
-              <Button size="sm" variant="ghost" className="h-6 text-[10px] text-muted-foreground hover:text-destructive px-1" onClick={handleDiscardDraft}>Discard</Button>
-            </div>
-          )}
+        <DialogHeader className="shrink-0 pb-2 border-b">
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        {/* Tab Navigation */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
-          <TabsList className="shrink-0 w-full justify-start rounded-none border-b border-border/60 bg-muted/30 h-10 gap-0 px-4">
-            <TabsTrigger value="agreement" className="text-[12px] rounded-sm px-4 h-8 data-[state=active]:bg-background data-[state=active]:shadow-sm">📋 Agreement</TabsTrigger>
-            <TabsTrigger value="customer" className="text-[12px] rounded-sm px-4 h-8 data-[state=active]:bg-background data-[state=active]:shadow-sm">👤 Customer</TabsTrigger>
-            <TabsTrigger value="equipment" className="text-[12px] rounded-sm px-4 h-8 data-[state=active]:bg-background data-[state=active]:shadow-sm">🔧 Equipment</TabsTrigger>
-            <TabsTrigger value="verification" className="text-[12px] rounded-sm px-4 h-8 data-[state=active]:bg-background data-[state=active]:shadow-sm">🛡️ Verification</TabsTrigger>
-            <TabsTrigger value="payment" className="text-[12px] rounded-sm px-4 h-8 data-[state=active]:bg-background data-[state=active]:shadow-sm">💳 Payment</TabsTrigger>
-          </TabsList>
+        <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-y-auto lg:overflow-hidden min-h-0 mt-4">
+          {/* Left Column: Scrollable Form */}
+          <div className="flex-1 lg:overflow-y-auto lg:pr-4 space-y-4 min-h-0">
+            {hasDraft && (
+              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg text-xs font-semibold mb-2">
+                <span>We found a saved draft. Would you like to restore your progress?</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-7 text-[11px] bg-background text-primary border-primary/20 hover:bg-primary/5" onClick={handleRestoreDraft}>
+                    Restore Draft
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground hover:text-destructive" onClick={handleDiscardDraft}>
+                    Discard
+                  </Button>
+                </div>
+              </div>
+            )}
 
-          {/* ── Tab 1: Agreement Details ── */}
-          <TabsContent value="agreement" className="flex-1 overflow-auto p-6 mt-0">
-            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+            <div className="grid gap-4 py-2 sm:grid-cols-2">
+              {/* Agreement Info & Dates */}
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement Number (Auto-Generated)</Label>
-                <Input placeholder="Auto-generated" value={agreementId} readOnly className="bg-muted/30 cursor-not-allowed font-mono font-bold text-primary" />
+                <Input
+                  placeholder="Auto-generated"
+                  value={agreementId}
+                  readOnly
+                  className="bg-muted/30 cursor-not-allowed font-mono font-bold text-primary"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement Date (Rent Start Date)</Label>
@@ -1557,209 +1593,518 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Referred By</Label>
                 <Input placeholder="e.g. Dr. Sharma" value={referredBy} onChange={(e) => setReferredBy(e.target.value)} />
               </div>
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
-                <Textarea placeholder="Special delivery instructions, patient condition notes, etc." className="resize-none min-h-[80px]" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-              </div>
-            </div>
-          </TabsContent>
 
-          {/* ── Tab 2: Customer ── */}
-          <TabsContent value="customer" className="flex-1 overflow-auto p-6 mt-0">
-            <div className="max-w-2xl space-y-1.5 rounded-lg border border-border/60 bg-muted/20 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {isNewCustomer ? "New Customer Details" : "Customer Selection"}
-                </Label>
-                <Button variant="ghost" size="sm" className="h-6 text-[11px] text-primary hover:bg-primary/10 px-2" onClick={(e) => { e.preventDefault(); setIsNewCustomer(!isNewCustomer); }}>
-                  {isNewCustomer ? "Choose Existing Customer" : "+ Add New Customer"}
-                </Button>
-              </div>
-              {isNewCustomer ? (
-                <div className="grid gap-3 sm:grid-cols-2 mt-3 pt-3 border-t border-border/50">
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Full Name *</Label>
-                    <Input placeholder="Patient or guardian name" value={custName} onChange={(e) => setCustName(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Address</Label>
-                    <Input placeholder="Full address" value={custAddress} onChange={(e) => setCustAddress(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Area</Label>
-                    <Input placeholder="Area / Locality" value={custArea} onChange={(e) => setCustArea(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">City</Label>
-                    <Input value={custCity} onChange={(e) => setCustCity(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
-                    <Select value={custState} onValueChange={setCustState}>
-                      <SelectTrigger className="bg-background"><SelectValue placeholder="Select state" /></SelectTrigger>
-                      <SelectContent>{["Karnataka"].map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pincode</Label>
-                    <Input value={custPincode} onChange={(e) => setCustPincode(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Primary Number *</Label>
-                    <Input placeholder="10-digit phone number" value={custPhone} onChange={(e) => { const digits = e.target.value.replace(/\D/g, ""); if (digits.length > 10) { if (digits.startsWith("91")) setCustPhone(digits.slice(-10)); else if (digits.startsWith("0")) setCustPhone(digits.slice(-10)); else setCustPhone(digits.slice(0, 10)); } else { setCustPhone(digits); } }} maxLength={14} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone</Label>
-                    <Input placeholder="optional (10 digits)" value={custAltPhone} onChange={(e) => { const digits = e.target.value.replace(/\D/g, ""); if (digits.length > 10) { if (digits.startsWith("91")) setCustAltPhone(digits.slice(-10)); else if (digits.startsWith("0")) setCustAltPhone(digits.slice(-10)); else setCustAltPhone(digits.slice(0, 10)); } else { setCustAltPhone(digits); } }} maxLength={14} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone 1</Label>
-                    <Input placeholder="optional (10 digits)" value={custContactNumber3} onChange={(e) => { const digits = e.target.value.replace(/\D/g, ""); if (digits.length > 10) { if (digits.startsWith("91")) setCustContactNumber3(digits.slice(-10)); else if (digits.startsWith("0")) setCustContactNumber3(digits.slice(-10)); else setCustContactNumber3(digits.slice(0, 10)); } else { setCustContactNumber3(digits); } }} maxLength={14} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Email</Label>
-                    <Input placeholder="email@domain.com" value={custEmail} onChange={(e) => setCustEmail(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aadhaar Number</Label>
-                    <Input placeholder="12-digit Aadhaar number" value={custAadhaar} onChange={(e) => setCustAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))} maxLength={12} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">PAN Number</Label>
-                    <Input placeholder="ABCDE1234F" value={custPan} onChange={(e) => setCustPan(e.target.value)} />
-                  </div>
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                      <span>ID Proof Upload</span>
-                      {custFiles.length > 0 && <span className="text-primary font-bold">({custFiles.length} file{custFiles.length === 1 ? "" : "s"})</span>}
-                    </Label>
-                    <CustomerIDProofDialog initialFiles={custFiles} onSave={(files) => { setCustFiles(files); }} trigger={
-                      <div className="border-2 border-dashed border-border/60 hover:bg-muted/10 transition-colors rounded-xl p-3 text-center cursor-pointer flex flex-col items-center justify-center min-h-[70px] bg-background/50">
-                        {custFiles.length > 0 ? (
-                          <div><p className="text-[12px] font-bold text-primary truncate max-w-[280px]">{custFiles.length} ID Proof File{custFiles.length === 1 ? "" : "s"} Selected</p><p className="text-[10px] text-muted-foreground">{custFiles.map((f) => f.name).join(", ")} · Click to change/add</p></div>
-                        ) : (
-                          <div className="flex flex-col items-center text-muted-foreground hover:text-primary transition-colors"><FileUp className="h-5 w-5 mb-0.5 text-muted-foreground/60" /><p className="text-[12px] font-semibold">Click to upload ID Proofs</p><p className="text-[10px] text-muted-foreground/80">Multiple Aadhaar, PAN, Photo — PDF or image files</p></div>
-                        )}
-                      </div>
-                    } />
-                  </div>
-                  <div className="sm:col-span-2 space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
-                    <Textarea placeholder="Any special notes about this customer…" className="resize-none min-h-[70px] bg-background" value={custNotes} onChange={(e) => setCustNotes(e.target.value)} />
-                  </div>
+              {/* Customer Selection or Creation */}
+              <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 mb-2">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {isNewCustomer ? "New Customer Details" : "Customer Selection"}
+                  </Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[11px] text-primary hover:bg-primary/10 px-2"
+                    onClick={(e) => { e.preventDefault(); setIsNewCustomer(!isNewCustomer); }}
+                  >
+                    {isNewCustomer ? "Choose Existing Customer" : "+ Add New Customer"}
+                  </Button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <Combobox value={selectedCustomerId} onValueChange={setSelectedCustomerId} placeholder="Select existing customer" searchPlaceholder="Search customer by name or ID..." emptyText="No customer found." options={customersList.map((c) => ({ value: c.id, label: `${c.name} — ${c.id}`, searchTerms: `${c.phone} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}` }))} />
-                  {selectedCustomer && (
-                    <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3">
-                      <ReadOnlyField label="Full Name" value={selectedCustomer.name} />
-                      <ReadOnlyField label="Primary Number" value={selectedCustomer.phone} />
-                      <ReadOnlyField label="Alternative Phone" value={selectedCustomer.altPhone || "—"} />
-                      <ReadOnlyField label="Alternative Phone 1" value={selectedCustomer.contactNumber3 || "—"} />
-                      <ReadOnlyField label="Email" value={selectedCustomer.email || "—"} />
-                      <ReadOnlyField label="Aadhaar Number" value={selectedCustomer.aadhaar || "—"} />
-                      <ReadOnlyField label="PAN Number" value={selectedCustomer.pan || "—"} />
-                      <ReadOnlyField label="Address" value={selectedCustomer.address} />
-                      <ReadOnlyField label="Area" value={selectedCustomer.area || "—"} />
-                      <ReadOnlyField label="City" value={selectedCustomer.city} />
-                      <ReadOnlyField label="State" value={selectedCustomer.state} />
-                      <ReadOnlyField label="Pincode" value={selectedCustomer.pincode} />
-                      <ReadOnlyField label="Notes" value={selectedCustomer.notes || "—"} className="sm:col-span-2" />
+                
+                {isNewCustomer ? (
+                  <div className="grid gap-3 sm:grid-cols-2 mt-3 pt-3 border-t border-border/50">
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Full Name *</Label>
+                      <Input placeholder="Patient or guardian name" value={custName} onChange={(e) => setCustName(e.target.value)} />
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </TabsContent>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Address</Label>
+                      <Input placeholder="Full address" value={custAddress} onChange={(e) => setCustAddress(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Area</Label>
+                      <Input placeholder="Area / Locality" value={custArea} onChange={(e) => setCustArea(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">City</Label>
+                      <Input value={custCity} onChange={(e) => setCustCity(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
+                      <Select value={custState} onValueChange={setCustState}>
+                        <SelectTrigger className="bg-background">
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["Karnataka"].map((s) => (
+                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pincode</Label>
+                      <Input value={custPincode} onChange={(e) => setCustPincode(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Primary Number *</Label>
+                      <Input 
+                        placeholder="10-digit phone number" 
+                        value={custPhone} 
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          if (digits.length > 10) {
+                            if (digits.startsWith("91")) setCustPhone(digits.slice(-10));
+                            else if (digits.startsWith("0")) setCustPhone(digits.slice(-10));
+                            else setCustPhone(digits.slice(0, 10));
+                          } else {
+                            setCustPhone(digits);
+                          }
+                        }} 
+                        maxLength={14}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone</Label>
+                      <Input 
+                        placeholder="optional (10 digits)" 
+                        value={custAltPhone} 
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          if (digits.length > 10) {
+                             if (digits.startsWith("91")) setCustAltPhone(digits.slice(-10));
+                             else if (digits.startsWith("0")) setCustAltPhone(digits.slice(-10));
+                             else setCustAltPhone(digits.slice(0, 10));
+                          } else {
+                            setCustAltPhone(digits);
+                          }
+                        }} 
+                        maxLength={14}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone 1</Label>
+                      <Input 
+                        placeholder="optional (10 digits)" 
+                        value={custContactNumber3} 
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          if (digits.length > 10) {
+                             if (digits.startsWith("91")) setCustContactNumber3(digits.slice(-10));
+                             else if (digits.startsWith("0")) setCustContactNumber3(digits.slice(-10));
+                             else setCustContactNumber3(digits.slice(0, 10));
+                          } else {
+                            setCustContactNumber3(digits);
+                          }
+                        }} 
+                        maxLength={14}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Email</Label>
+                      <Input placeholder="email@domain.com" value={custEmail} onChange={(e) => setCustEmail(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Aadhaar Number</Label>
+                      <Input 
+                        placeholder="12-digit Aadhaar number" 
+                        value={custAadhaar} 
+                        onChange={(e) => setCustAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))} 
+                        maxLength={12}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">PAN Number</Label>
+                      <Input placeholder="ABCDE1234F" value={custPan} onChange={(e) => setCustPan(e.target.value)} />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                        <span>ID Proof Upload</span>
+                        {custFiles.length > 0 && <span className="text-primary font-bold">({custFiles.length} file{custFiles.length === 1 ? "" : "s"})</span>}
+                      </Label>
+                      <CustomerIDProofDialog
+                        initialFiles={custFiles}
+                        onSave={(files) => {
+                          setCustFiles(files);
+                        }}
+                        trigger={
+                          <div className="border-2 border-dashed border-border/60 hover:bg-muted/10 transition-colors rounded-xl p-3 text-center cursor-pointer flex flex-col items-center justify-center min-h-[70px] bg-background/50">
+                            {custFiles.length > 0 ? (
+                              <div>
+                                <p className="text-[12px] font-bold text-primary truncate max-w-[280px]">{custFiles.length} ID Proof File{custFiles.length === 1 ? "" : "s"} Selected</p>
+                                <p className="text-[10px] text-muted-foreground">{custFiles.map((f) => f.name).join(", ")} · Click to change/add</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center text-muted-foreground hover:text-primary transition-colors">
+                                <FileUp className="h-5 w-5 mb-0.5 text-muted-foreground/60" />
+                                <p className="text-[12px] font-semibold">Click to upload ID Proofs</p>
+                                <p className="text-[10px] text-muted-foreground/80">Multiple Aadhaar, PAN, Photo — PDF or image files</p>
+                              </div>
+                            )}
+                          </div>
+                        }
+                      />
+                    </div>
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
+                      <Textarea placeholder="Any special notes about this customer…" className="resize-none min-h-[70px] bg-background" value={custNotes} onChange={(e) => setCustNotes(e.target.value)} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Combobox
+                      value={selectedCustomerId}
+                      onValueChange={setSelectedCustomerId}
+                      placeholder="Select existing customer"
+                      searchPlaceholder="Search customer by name or ID..."
+                      emptyText="No customer found."
+                      options={customersList.map((c) => ({
+                        value: c.id,
+                        label: `${c.name} — ${c.id}`,
+                        searchTerms: `${c.phone} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
+                      }))}
+                    />
+                    {selectedCustomer && (
+                      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3">
+                        <ReadOnlyField label="Full Name" value={selectedCustomer.name} />
+                        <ReadOnlyField label="Primary Number" value={selectedCustomer.phone} />
+                        <ReadOnlyField label="Alternative Phone" value={selectedCustomer.altPhone || "—"} />
+                        <ReadOnlyField label="Alternative Phone 1" value={selectedCustomer.contactNumber3 || "—"} />
+                        <ReadOnlyField label="Email" value={selectedCustomer.email || "—"} />
+                        <ReadOnlyField label="Aadhaar Number" value={selectedCustomer.aadhaar || "—"} />
+                        <ReadOnlyField label="PAN Number" value={selectedCustomer.pan || "—"} />
+                        <ReadOnlyField label="Address" value={selectedCustomer.address} />
+                        <ReadOnlyField label="Area" value={selectedCustomer.area || "—"} />
+                        <ReadOnlyField label="City" value={selectedCustomer.city} />
+                        <ReadOnlyField label="State" value={selectedCustomer.state} />
+                        <ReadOnlyField label="Pincode" value={selectedCustomer.pincode} />
+                        <ReadOnlyField label="Notes" value={selectedCustomer.notes || "—"} className="sm:col-span-2" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-          {/* ── Tab 3: Equipment ── */}
-          <TabsContent value="equipment" className="flex-1 overflow-auto p-6 mt-0">
-            <div className="space-y-4 max-w-4xl">
-              {/* Equipment Items Header */}
-              <div className="flex items-center justify-between border-b border-border pb-1.5">
-                <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">Equipment Items Selection</Label>
+              {/* Equipment Items Header & Add button */}
+              <div className="sm:col-span-2 flex items-center justify-between border-b border-border pb-1.5 mt-2">
+                <div className="flex flex-col">
+                  <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
+                    Equipment Items Selection
+                  </Label>
+                </div>
                 <div className="flex gap-2">
-                  <EquipmentFormDialog title="Register New Equipment" trigger={
-                    <Button variant="outline" size="sm" type="button" className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2">
-                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Register New Equipment
-                    </Button>
-                  } onSave={(newEq) => {
-                    setEquipmentList(getEquipment());
-                    if (newEq) {
-                      setSelectedEquipments(prev => {
-                        const newItem = { equipmentId: newEq.id, serial: newEq.serial, rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" };
-                        const updated = (prev.length === 1 && !prev[0].equipmentId) ? [newItem] : [...prev, newItem];
-                        setTimeout(() => { syncAdditionalItemsWithEquipments(updated); }, 0);
-                        return updated;
-                      });
+                  <EquipmentFormDialog
+                    title="Register New Equipment"
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Register New Equipment
+                      </Button>
                     }
-                  }} />
-                  <Button variant="outline" size="sm" type="button" className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2" onClick={(e) => { e.preventDefault(); const updated = [...selectedEquipments, { equipmentId: "", serial: "", rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" }]; setSelectedEquipments(updated); syncAdditionalItemsWithEquipments(updated); }}>
+                    onSave={(newEq) => {
+                      setEquipmentList(getEquipment());
+                      if (newEq) {
+                        setSelectedEquipments(prev => {
+                          const newItem = {
+                            equipmentId: newEq.id,
+                            serial: newEq.serial,
+                            rentCycle: "Monthly",
+                            rentRate: "",
+                            monthlyRent: "",
+                            dailyRent: "",
+                            deposit: "",
+                          };
+                          const updated = (prev.length === 1 && !prev[0].equipmentId) ? [newItem] : [...prev, newItem];
+                          setTimeout(() => {
+                            syncAdditionalItemsWithEquipments(updated);
+                          }, 0);
+                          return updated;
+                        });
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const updated = [...selectedEquipments, { equipmentId: "", serial: "", rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" }];
+                      setSelectedEquipments(updated);
+                      syncAdditionalItemsWithEquipments(updated);
+                    }}
+                  >
                     <Plus className="mr-1 h-3.5 w-3.5" /> Add Equipment
                   </Button>
-                  <Button variant="outline" size="sm" type="button" className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2" onClick={(e) => { e.preventDefault(); setIsBulkScannerOpen(true); }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    type="button"
+                    className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsBulkScannerOpen(true);
+                    }}
+                  >
                     <QrCode className="mr-1 h-3.5 w-3.5" /> Scan Equipment
                   </Button>
                 </div>
               </div>
 
-              {/* Equipment Rows */}
-              <div className="space-y-3">
+              <div className="sm:col-span-2 space-y-4">
                 {selectedEquipments.map((eqItem, idx) => {
                   const isSelectedElsewhere = (id: string) => selectedEquipments.some((item, i) => i !== idx && item.equipmentId === id);
-                  const itemsForSelect = equipmentList.filter(e =>
-                    (e.status === "Available" || e.id === eqItem.equipmentId || rental?.equipmentItems?.some((ri: any) => ri.equipmentId === e.id))
+                  const itemsForSelect = equipmentList.filter(e => 
+                    (e.status === "Available" || e.id === eqItem.equipmentId || rental?.equipmentItems?.some((ri: any) => ri.equipmentId === e.id)) 
                     && !isSelectedElsewhere(e.id)
                   );
+
                   return (
                     <div key={idx} className="grid gap-3 sm:grid-cols-6 items-end p-3 rounded-lg border border-border bg-card/50 relative group">
                       {selectedEquipments.length > 1 && (
-                        <Button variant="ghost" size="icon" type="button" className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => { e.preventDefault(); const filtered = selectedEquipments.filter((_, i) => i !== idx); setSelectedEquipments(filtered); syncAdditionalItemsWithEquipments(filtered); }}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
+                          className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            const filtered = selectedEquipments.filter((_, i) => i !== idx);
+                            setSelectedEquipments(filtered);
+                            syncAdditionalItemsWithEquipments(filtered);
+                          }}
+                        >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
+                      
+                      {/* Select Equipment */}
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Equipment</Label>
-                        <Combobox value={eqItem.equipmentId} onValueChange={(val) => { const newEquipments = [...selectedEquipments]; newEquipments[idx].equipmentId = val; if (!val) { newEquipments[idx].serial = ""; newEquipments[idx].monthlyRent = ""; newEquipments[idx].dailyRent = ""; newEquipments[idx].deposit = ""; newEquipments[idx].rentRate = ""; } else { const eq = equipmentList.find(e => e.id === val); if (eq) { newEquipments[idx].serial = eq.serial || ""; const cycle = newEquipments[idx].rentCycle || "Monthly"; const defaultMonthly = (eq.monthlyRent || eq.rentRate || 0).toString(); const defaultDaily = (eq.dailyRent || (eq.monthlyRent ? Math.round(eq.monthlyRent / 30) : 0)).toString(); newEquipments[idx].monthlyRent = defaultMonthly !== "0" ? defaultMonthly : ""; newEquipments[idx].dailyRent = defaultDaily !== "0" ? defaultDaily : ""; newEquipments[idx].deposit = (eq.deposit || 0).toString(); if (cycle === "Daily") { newEquipments[idx].rentRate = defaultDaily !== "0" ? defaultDaily : (defaultMonthly !== "0" ? Math.round(Number(defaultMonthly) / 30).toString() : ""); } else { newEquipments[idx].rentRate = defaultMonthly !== "0" ? defaultMonthly : ""; } } } setSelectedEquipments(newEquipments); syncAdditionalItemsWithEquipments(newEquipments); }} placeholder="Select equipment" searchPlaceholder="Search equipment by name, serial, owner..." emptyText="No equipment found." options={itemsForSelect.map((e) => { const displayName = e.name || e.category || "Equipment"; const serialNum = e.serial || "No Serial"; return { value: e.id, label: serialNum !== "No Serial" ? `${displayName} — ${serialNum}` : displayName }; })} className="h-9" />
+                        <Combobox
+                          value={eqItem.equipmentId}
+                          onValueChange={(val) => {
+                            const newEquipments = [...selectedEquipments];
+                            newEquipments[idx].equipmentId = val;
+                            if (!val) {
+                              newEquipments[idx].serial = "";
+                              newEquipments[idx].monthlyRent = "";
+                              newEquipments[idx].dailyRent = "";
+                              newEquipments[idx].deposit = "";
+                              newEquipments[idx].rentRate = "";
+                            } else {
+                              const eq = equipmentList.find(e => e.id === val);
+                              if (eq) {
+                                newEquipments[idx].serial = eq.serial || "";
+                                const cycle = newEquipments[idx].rentCycle || "Monthly";
+                                const defaultMonthly = (eq.monthlyRent || eq.rentRate || 0).toString();
+                                const defaultDaily = (eq.dailyRent || (eq.monthlyRent ? Math.round(eq.monthlyRent / 30) : 0)).toString();
+                                
+                                newEquipments[idx].monthlyRent = defaultMonthly !== "0" ? defaultMonthly : "";
+                                newEquipments[idx].dailyRent = defaultDaily !== "0" ? defaultDaily : "";
+                                newEquipments[idx].deposit = (eq.deposit || 0).toString();
+                                
+                                if (cycle === "Daily") {
+                                  newEquipments[idx].rentRate = defaultDaily !== "0" ? defaultDaily : (defaultMonthly !== "0" ? Math.round(Number(defaultMonthly) / 30).toString() : "");
+                                } else {
+                                  newEquipments[idx].rentRate = defaultMonthly !== "0" ? defaultMonthly : "";
+                                }
+                              }
+                            }
+                            setSelectedEquipments(newEquipments);
+                            syncAdditionalItemsWithEquipments(newEquipments);
+                          }}
+                          placeholder="Select equipment"
+                          searchPlaceholder="Search equipment by name, serial, owner..."
+                          emptyText="No equipment found."
+                          options={itemsForSelect.map((e) => {
+                            const displayName = e.name || e.category || "Equipment";
+                            const serialNum = e.serial || "No Serial";
+                            return {
+                              value: e.id,
+                              label: serialNum !== "No Serial" ? `${displayName} — ${serialNum}` : displayName,
+                            };
+                          })}
+                          className="h-9"
+                        />
                       </div>
+
+                      {/* Serial Number */}
                       <div className="space-y-1.5">
                         <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Serial Number</Label>
-                        <Input placeholder="Type serial..." value={eqItem.serial || ""} onChange={(e) => { const val = e.target.value; const newEquipments = selectedEquipments.map((item, i) => { if (i === idx) { const updated = { ...item, serial: val }; if (!val.trim()) { updated.equipmentId = ""; } else { const eq = equipmentList.find(eItem => { const s = String(eItem.serial || "").trim().toLowerCase(); return s !== "" && s === val.trim().toLowerCase(); }); if (eq) { const isAvailable = eq.status === "Available" || eq.id === item.equipmentId || rental?.equipmentItems?.some((ri: any) => ri.equipmentId === eq.id); if (isAvailable) { updated.equipmentId = eq.id; updated.serial = eq.serial; } else { toast.warning(`Equipment with serial "${val}" is currently "${eq.status}"`); } } } return updated; } return item; }); setSelectedEquipments(newEquipments); syncAdditionalItemsWithEquipments(newEquipments); }} className="h-9 font-mono text-[12px] w-full" />
+                        <Input 
+                          placeholder="Type serial..." 
+                          value={eqItem.serial || ""} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            
+                            const newEquipments = selectedEquipments.map((item, i) => {
+                              if (i === idx) {
+                                const updated = { ...item, serial: val };
+                                if (!val.trim()) {
+                                  updated.equipmentId = "";
+                                } else {
+                                  const eq = equipmentList.find(eItem => {
+                                    const s = String(eItem.serial || "").trim().toLowerCase();
+                                    return s !== "" && s === val.trim().toLowerCase();
+                                  });
+                                  
+                                  if (eq) {
+                                    const isAvailable = eq.status === "Available" || eq.id === item.equipmentId || rental?.equipmentItems?.some((ri: any) => ri.equipmentId === eq.id);
+                                    if (isAvailable) {
+                                      updated.equipmentId = eq.id;
+                                      updated.serial = eq.serial;
+                                    } else {
+                                      toast.warning(`Equipment with serial "${val}" is currently "${eq.status}"`);
+                                    }
+                                  }
+                                }
+                                return updated;
+                              }
+                              return item;
+                            });
+                            
+                            setSelectedEquipments(newEquipments);
+                            syncAdditionalItemsWithEquipments(newEquipments);
+                          }}
+                          className="h-9 font-mono text-[12px] w-full"
+                        />
                       </div>
+
+                      {/* Rent Cycle */}
                       <div className="space-y-1.5">
                         <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Cycle</Label>
-                        <Select value={eqItem.rentCycle || "Monthly"} onValueChange={(val: "Monthly" | "Daily") => { const newEquipments = [...selectedEquipments]; newEquipments[idx].rentCycle = val; const mRentNum = Number(newEquipments[idx].monthlyRent) || 0; const dRentNum = Number(newEquipments[idx].dailyRent) || 0; const currRate = Number(newEquipments[idx].rentRate) || 0; if (val === "Monthly") { const newM = mRentNum > 0 ? mRentNum : (dRentNum > 0 ? dRentNum * 30 : (currRate > 0 ? currRate * 30 : 0)); newEquipments[idx].rentRate = newM > 0 ? newM.toString() : ""; newEquipments[idx].monthlyRent = newEquipments[idx].rentRate; newEquipments[idx].dailyRent = newM > 0 ? Math.round(newM / 30).toString() : ""; } else { const newD = dRentNum > 0 ? dRentNum : (mRentNum > 0 ? Math.round(mRentNum / 30) : (currRate > 0 ? currRate : 0)); newEquipments[idx].rentRate = newD > 0 ? newD.toString() : ""; newEquipments[idx].dailyRent = newEquipments[idx].rentRate; newEquipments[idx].monthlyRent = newD > 0 ? (newD * 30).toString() : ""; } setSelectedEquipments(newEquipments); if (agreementDate) { const parts = agreementDate.split("-"); if (parts.length === 3) { const year = parseInt(parts[0], 10); const month = parseInt(parts[1], 10) - 1; const day = parseInt(parts[2], 10); if (val === "Daily") { setEndDate(getLocalYYYYMMDD(new Date(year, month, day))); } else { setEndDate(getLocalYYYYMMDD(new Date(year, month + 1, day))); } } } }}>
+                        <Select
+                          value={eqItem.rentCycle || "Monthly"}
+                          onValueChange={(val: "Monthly" | "Daily") => {
+                            const newEquipments = [...selectedEquipments];
+                            newEquipments[idx].rentCycle = val;
+                            const mRentNum = Number(newEquipments[idx].monthlyRent) || 0;
+                            const dRentNum = Number(newEquipments[idx].dailyRent) || 0;
+                            const currRate = Number(newEquipments[idx].rentRate) || 0;
+
+                            if (val === "Monthly") {
+                              const newM = mRentNum > 0 ? mRentNum : (dRentNum > 0 ? dRentNum * 30 : (currRate > 0 ? currRate * 30 : 0));
+                              newEquipments[idx].rentRate = newM > 0 ? newM.toString() : "";
+                              newEquipments[idx].monthlyRent = newEquipments[idx].rentRate;
+                              newEquipments[idx].dailyRent = newM > 0 ? Math.round(newM / 30).toString() : "";
+                            } else {
+                              const newD = dRentNum > 0 ? dRentNum : (mRentNum > 0 ? Math.round(mRentNum / 30) : (currRate > 0 ? currRate : 0));
+                              newEquipments[idx].rentRate = newD > 0 ? newD.toString() : "";
+                              newEquipments[idx].dailyRent = newEquipments[idx].rentRate;
+                              newEquipments[idx].monthlyRent = newD > 0 ? (newD * 30).toString() : "";
+                            }
+                            setSelectedEquipments(newEquipments);
+                            if (agreementDate) {
+                              const parts = agreementDate.split("-");
+                              if (parts.length === 3) {
+                                const year = parseInt(parts[0], 10);
+                                const month = parseInt(parts[1], 10) - 1;
+                                const day = parseInt(parts[2], 10);
+                                if (val === "Daily") {
+                                  setEndDate(getLocalYYYYMMDD(new Date(year, month, day)));
+                                } else {
+                                  setEndDate(getLocalYYYYMMDD(new Date(year, month + 1, day)));
+                                }
+                              }
+                            }
+                          }}
+                        >
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="Monthly">Monthly</SelectItem><SelectItem value="Daily">Daily</SelectItem></SelectContent>
+                          <SelectContent>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Daily">Daily</SelectItem>
+                          </SelectContent>
                         </Select>
                       </div>
+
+                      {/* Rent Rate */}
                       <div className="space-y-1.5">
-                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{eqItem.rentCycle === "Daily" ? "Daily Rent (₹)" : "Monthly Rent (₹)"}</Label>
-                        <Input placeholder={eqItem.rentCycle === "Daily" ? "e.g. 120" : "e.g. 3500"} value={eqItem.rentRate || ""} className="h-9" onChange={(e) => { const val = e.target.value; const newEquipments = [...selectedEquipments]; newEquipments[idx].rentRate = val; const numeric = Number(val); if (!isNaN(numeric) && numeric > 0) { if (newEquipments[idx].rentCycle === "Daily") { newEquipments[idx].dailyRent = val; newEquipments[idx].monthlyRent = (numeric * 30).toString(); } else { newEquipments[idx].monthlyRent = val; newEquipments[idx].dailyRent = Math.round(numeric / 30).toString(); } } setSelectedEquipments(newEquipments); }} />
+                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {eqItem.rentCycle === "Daily" ? "Daily Rent (₹)" : "Monthly Rent (₹)"}
+                        </Label>
+                        <Input 
+                          placeholder={eqItem.rentCycle === "Daily" ? "e.g. 120" : "e.g. 3500"} 
+                          value={eqItem.rentRate || ""} 
+                          className="h-9"
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const newEquipments = [...selectedEquipments];
+                            newEquipments[idx].rentRate = val;
+                            const numeric = Number(val);
+                            if (!isNaN(numeric) && numeric > 0) {
+                              if (newEquipments[idx].rentCycle === "Daily") {
+                                newEquipments[idx].dailyRent = val;
+                                newEquipments[idx].monthlyRent = (numeric * 30).toString();
+                              } else {
+                                newEquipments[idx].monthlyRent = val;
+                                newEquipments[idx].dailyRent = Math.round(numeric / 30).toString();
+                              }
+                            }
+                            setSelectedEquipments(newEquipments);
+                          }}
+                        />
                       </div>
+
+                      {/* Security Deposit */}
                       <div className="space-y-1.5">
                         <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit (₹)</Label>
-                        <Input placeholder="e.g. 7000" value={eqItem.deposit} className="h-9" onChange={(e) => { const newEquipments = [...selectedEquipments]; newEquipments[idx].deposit = e.target.value; setSelectedEquipments(newEquipments); }} />
+                        <Input 
+                          placeholder="e.g. 7000" 
+                          value={eqItem.deposit} 
+                          className="h-9"
+                          onChange={(e) => {
+                            const newEquipments = [...selectedEquipments];
+                            newEquipments[idx].deposit = e.target.value;
+                            setSelectedEquipments(newEquipments);
+                          }}
+                        />
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Additional Items Checklist */}
-              <div className="space-y-3 rounded-xl border border-border/60 bg-muted/5 p-4">
+              {/* Predefined Additional Amount Checklist */}
+              <div className="sm:col-span-2 space-y-3 rounded-xl border border-border/60 bg-muted/5 p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1.5 border-b border-border/50 gap-2">
-                  <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">Additional Amount Items Checklist</Label>
+                  <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
+                    Additional Amount Items Checklist
+                  </Label>
                   <div className="flex items-center gap-3">
-                    <Button type="button" variant="outline" size="sm" className="h-7 text-[11px] text-primary border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 px-3" onClick={(e) => { e.preventDefault(); const newItems = [{ id: `custom-${Date.now()}-${Math.random().toString(36).slice(2)}`, name: "", amount: 0, status: "Not Paid" as const, selected: true, isCustom: true }, ...additionalItems]; setAdditionalItems(newItems); }}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] text-primary border-dashed border-primary/40 hover:border-primary hover:bg-primary/5 px-3"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const newItems = [
+                          {
+                            id: `custom-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                            name: "",
+                            amount: 0,
+                            status: "Not Paid" as const,
+                            selected: true,
+                            isCustom: true
+                          },
+                          ...additionalItems
+                        ];
+                        setAdditionalItems(newItems);
+                      }}
+                    >
                       <Plus className="mr-1 h-3 w-3" /> Add Custom Item
                     </Button>
                     <span className="text-[10px] text-muted-foreground font-mono">Select to include item</span>
                   </div>
                 </div>
+                
                 <div className="rounded-lg border border-border/50 overflow-hidden bg-background">
-                  <div className="max-h-[220px] overflow-y-auto">
+                  <div className="max-h-[250px] overflow-y-auto">
                     <table className="w-full text-left text-[12.5px]">
                       <thead className="bg-muted/40 text-[10px] uppercase font-bold text-muted-foreground border-b border-border/50 sticky top-0">
                         <tr>
@@ -1770,239 +2115,654 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
-                        {additionalItems.map((item, index) => ({ item, index })).sort((a, b) => { if (a.item.isCustom && !b.item.isCustom) return -1; if (!a.item.isCustom && b.item.isCustom) return 1; if (a.item.selected && !b.item.selected) return -1; if (!a.item.selected && b.item.selected) return 1; return 0; }).map(({ item, index }) => (
-                          <tr key={item.id || item.name || `row-${index}`} className={`hover:bg-muted/10 transition-colors ${item.selected ? 'bg-primary/5' : ''}`}>
-                            <td className="p-2.5 text-center"><input type="checkbox" checked={item.selected} onChange={(e) => { const newItems = [...additionalItems]; newItems[index].selected = e.target.checked; setAdditionalItems(newItems); updateCalculatedCharges(newItems, item.name); }} className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer" /></td>
-                            <td className="p-2.5 font-medium text-foreground">{item.isCustom ? (<div className="flex items-center gap-1.5 w-full"><Input placeholder="Enter item name..." value={item.name} onChange={(e) => { const newItems = [...additionalItems]; newItems[index].name = e.target.value; setAdditionalItems(newItems); }} className="h-7 text-[12px] p-1.5 flex-1 bg-card border-border/80 focus-visible:ring-primary/20" /><Button size="icon" variant="ghost" type="button" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={(e) => { e.preventDefault(); const newItems = additionalItems.filter((_, i) => i !== index); setAdditionalItems(newItems); updateCalculatedCharges(newItems); }}><Trash2 className="h-3.5 w-3.5" /></Button></div>) : item.name}</td>
-                            <td className="p-2.5 text-right"><Input type="number" disabled={!item.selected} value={item.amount === 0 ? "" : item.amount} onChange={(e) => { const newItems = [...additionalItems]; newItems[index].amount = Number(e.target.value) || 0; setAdditionalItems(newItems); updateCalculatedCharges(newItems, item.name); }} className="h-7 w-20 text-[12px] p-1.5 text-right ml-auto bg-card disabled:opacity-50 disabled:bg-muted/30" /></td>
-                            <td className="p-2.5"><Select disabled={!item.selected} value={item.status} onValueChange={(val: any) => { const newItems = [...additionalItems]; newItems[index].status = val; setAdditionalItems(newItems); updateCalculatedCharges(newItems, item.name); }}><SelectTrigger className="h-7 text-[11px] bg-background disabled:opacity-50 disabled:bg-muted/30"><SelectValue placeholder="Status" /></SelectTrigger><SelectContent><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Not Paid">Not Paid</SelectItem><SelectItem value="Free of Cost">Free of Cost</SelectItem></SelectContent></Select></td>
-                          </tr>
-                        ))}
+                        {additionalItems
+                          .map((item, index) => ({ item, index }))
+                          .sort((a, b) => {
+                            if (a.item.isCustom && !b.item.isCustom) return -1;
+                            if (!a.item.isCustom && b.item.isCustom) return 1;
+                            if (a.item.selected && !b.item.selected) return -1;
+                            if (!a.item.selected && b.item.selected) return 1;
+                            return 0;
+                          })
+                          .map(({ item, index }) => (
+                            <tr key={item.id || item.name || `row-${index}`} className={`hover:bg-muted/10 transition-colors ${item.selected ? 'bg-primary/5' : ''}`}>
+                              <td className="p-2.5 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={item.selected}
+                                  onChange={(e) => {
+                                    const newItems = [...additionalItems];
+                                    newItems[index].selected = e.target.checked;
+                                    setAdditionalItems(newItems);
+                                    updateCalculatedCharges(newItems, item.name);
+                                  }}
+                                  className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-2.5 font-medium text-foreground">
+                                {item.isCustom ? (
+                                  <div className="flex items-center gap-1.5 w-full">
+                                    <Input
+                                      placeholder="Enter item name..."
+                                      value={item.name}
+                                      onChange={(e) => {
+                                        const newItems = [...additionalItems];
+                                        newItems[index].name = e.target.value;
+                                        setAdditionalItems(newItems);
+                                      }}
+                                      className="h-7 text-[12px] p-1.5 flex-1 bg-card border-border/80 focus-visible:ring-primary/20"
+                                    />
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      type="button"
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        const newItems = additionalItems.filter((_, i) => i !== index);
+                                        setAdditionalItems(newItems);
+                                        updateCalculatedCharges(newItems);
+                                      }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  item.name
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right">
+                                <Input
+                                  type="number"
+                                  disabled={!item.selected}
+                                  value={item.amount === 0 ? "" : item.amount}
+                                  onChange={(e) => {
+                                    const newItems = [...additionalItems];
+                                    newItems[index].amount = Number(e.target.value) || 0;
+                                    setAdditionalItems(newItems);
+                                    updateCalculatedCharges(newItems, item.name);
+                                  }}
+                                  className="h-7 w-20 text-[12px] p-1.5 text-right ml-auto bg-card disabled:opacity-50 disabled:bg-muted/30"
+                                />
+                              </td>
+                              <td className="p-2.5">
+                                <Select
+                                  disabled={!item.selected}
+                                  value={item.status}
+                                  onValueChange={(val: any) => {
+                                    const newItems = [...additionalItems];
+                                    newItems[index].status = val;
+                                    setAdditionalItems(newItems);
+                                    updateCalculatedCharges(newItems, item.name);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-[11px] bg-background disabled:opacity-50 disabled:bg-muted/30">
+                                    <SelectValue placeholder="Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Paid">Paid</SelectItem>
+                                    <SelectItem value="Not Paid">Not Paid</SelectItem>
+                                    <SelectItem value="Free of Cost">Free of Cost</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
                 </div>
               </div>
-            </div>
-          </TabsContent>
 
-          {/* ── Tab 4: Security & Verification ── */}
-          <TabsContent value="verification" className="flex-1 overflow-auto p-6 mt-0">
-            <div className="max-w-3xl space-y-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <h4 className="text-[13px] font-semibold text-foreground">Security &amp; Verification</h4>
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
+                <Textarea
+                  placeholder="Special delivery instructions, patient condition notes, etc."
+                  className="resize-none min-h-[80px]"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                />
               </div>
-              <div className="grid gap-4 sm:grid-cols-5">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8"><Fingerprint className="h-3.5 w-3.5" /> Thumbprint Scan</Label>
-                  <ThumbprintCaptureDialog onSave={setThumbprintUrl} trigger={
-                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative">
-                      {thumbprintUrl ? (<><img src={thumbprintUrl} alt="Thumbprint" className="h-full w-full object-contain bg-white rounded p-1" /><div className="absolute inset-0 bg-background/80 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"><span className="text-[10px] font-medium text-foreground">Click to re-scan</span></div></>) : (<><Fingerprint className="h-6 w-6 text-muted-foreground/50 mb-2" /><span className="text-[10px] font-medium text-muted-foreground">Click to capture</span></>)}
-                    </div>
-                  } />
+
+              {/* Security & Verification */}
+              <div className="sm:col-span-2 space-y-3 rounded-lg border border-border/60 bg-muted/10 p-4 mt-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  <h4 className="text-[13px] font-semibold text-foreground">Security & Verification</h4>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8"><PenTool className="h-3.5 w-3.5" /> Digital Signature</Label>
-                  <SignaturePadDialog onSave={setSignatureUrl} trigger={
-                    <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative">
-                      {signatureUrl ? (<><img src={signatureUrl} alt="Signature" className="h-full w-full object-contain bg-white rounded p-1" /><div className="absolute inset-0 bg-background/80 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"><span className="text-[10px] font-medium text-foreground">Click to re-sign</span></div></>) : (<><PenTool className="h-6 w-6 text-muted-foreground/50 mb-2" /><span className="text-[10px] font-medium text-muted-foreground">Sign agreement</span></>)}
-                    </div>
-                  } />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between h-8"><span className="flex items-center gap-1"><Camera className="h-3.5 w-3.5" /> Delivery Photo {deliveryPhotos.length > 0 && `(${deliveryPhotos.length})`}</span></Label>
-                  <DeliveryPhotoCaptureDialog initialPhotos={deliveryPhotos} onSave={(photos) => { setDeliveryPhotos(photos); setIsDeliveryPhotoChanged(true); }} trigger={
-                    <div className="border-2 border-dashed border-border/60 bg-background rounded-lg h-24 overflow-hidden relative hover:bg-muted/10 transition-colors cursor-pointer flex flex-col items-center justify-center">
-                      {deliveryPhotos.length > 0 ? (<div className="w-full h-full flex flex-col items-center justify-center space-y-1 p-1"><div className="flex items-center justify-center gap-1.5 max-w-full overflow-hidden">{deliveryPhotos.slice(0, 3).map((photo, i) => { const isImg = photo.url.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(photo.name); return (<div key={i} className="h-11 w-11 rounded overflow-hidden border border-border bg-muted/20 shrink-0">{isImg ? (<img src={photo.url} alt={`Delivery ${i}`} className="w-full h-full object-cover" />) : (<div className="w-full h-full flex flex-col items-center justify-center p-0.5 text-[8px] text-primary bg-primary/10"><FileText className="h-4 w-4" /></div>)}</div>); })}</div><p className="text-[10px] text-center text-primary font-bold">{deliveryPhotos.length} File{deliveryPhotos.length === 1 ? "" : "s"} Attached · Click to manage</p></div>) : (<div className="flex flex-col items-center justify-center w-full h-full p-2 text-center"><Camera className="h-6 w-6 text-muted-foreground/50 mb-1" /><span className="text-[10px] font-semibold text-muted-foreground leading-tight">Take Photo / Upload</span><span className="text-[9px] text-muted-foreground/60 mt-0.5">Click to open &amp; upload multiple</span></div>)}
-                    </div>
-                  } />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8"><FileUp className="h-3.5 w-3.5" /> Signed Document</Label>
-                  <SignedDocumentCaptureDialog onSave={(url, name) => { setSignedDocUrl(url); setSignedDocName(name); setIsSignedDocChanged(true); }} trigger={
-                    <div className="border-2 border-dashed border-border/60 bg-background rounded-lg h-24 overflow-hidden relative hover:bg-muted/10 transition-colors cursor-pointer">
-                      {signedDocUrl ? (<div className="relative w-full h-full group bg-muted/20 flex items-center justify-center">{signedDocUrl.startsWith("data:application/pdf") || signedDocUrl === "PDF" ? (<div className="flex flex-col items-center justify-center w-full h-full p-2"><FileText className="h-8 w-8 text-primary mb-1" /><span className="text-[10px] font-bold text-primary truncate max-w-full px-2">{signedDocName || "PDF Uploaded"}</span></div>) : (<img src={signedDocUrl} alt="Signed Doc" className="w-full h-full object-cover" />)}<div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity"><span className="text-[10px] font-bold text-foreground">Click to change</span></div></div>) : (<div className="flex flex-col items-center justify-center w-full h-full p-2 text-center"><FileUp className="h-6 w-6 text-muted-foreground/50 mb-1" /><span className="text-[10px] font-semibold text-muted-foreground leading-tight">Upload PDF / Image</span><span className="text-[9px] text-muted-foreground/60 mt-0.5">Click anywhere to open</span></div>)}
-                    </div>
-                  } />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8"><MapPin className="h-3.5 w-3.5" /> Location Tag</Label>
-                  <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
-                    <DialogTrigger asChild>
-                      <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative text-center">
-                        {capturedLocation ? (<div className="flex flex-col items-center justify-center w-full h-full p-1"><CheckCircle2 className="h-5 w-5 text-success mb-1" /><span className="text-[9px] font-bold text-success">Location Tagged</span><span className="text-[8px] text-muted-foreground truncate w-full px-2" title={capturedLocation.address}>{capturedLocation.latitude !== 0 ? `${capturedLocation.latitude.toFixed(4)}, ${capturedLocation.longitude.toFixed(4)}` : capturedLocation.address}</span></div>) : (<><MapPin className="h-6 w-6 text-muted-foreground/50 mb-1" /><span className="text-[10px] font-medium text-muted-foreground leading-tight">{isCapturingLocation ? "Tagging..." : "Tag Location"}</span></>)}
-                      </div>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[420px] p-6">
-                      <DialogHeader><DialogTitle className="flex items-center gap-2 text-[15px] font-bold"><MapPin className="h-4.5 w-4.5 text-primary" /> Location Tagging &amp; Directions</DialogTitle></DialogHeader>
-                      <div className="space-y-4 py-3">
-                        {capturedLocation && (<div className="rounded-lg bg-muted/40 border border-border p-3.5 space-y-2 text-[12.5px]"><p className="font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Location Tagged</p>{capturedLocation.latitude !== 0 || capturedLocation.longitude !== 0 ? (<p className="font-mono text-[11px] text-muted-foreground">GPS Coordinates: {capturedLocation.latitude.toFixed(6)}, {capturedLocation.longitude.toFixed(6)}</p>) : null}<p className="text-[11.5px] text-foreground/80 break-all font-medium">Address/Details: {capturedLocation.address}</p><p className="text-[9.5px] text-muted-foreground">Tagged at: {capturedLocation.timestamp}</p><div className="flex gap-2 pt-1.5"><Button type="button" variant="default" size="sm" className="w-full text-[11.5px] h-8 bg-emerald-600 hover:bg-emerald-700" onClick={() => { const url = getDirectionsUrl(capturedLocation.latitude, capturedLocation.longitude, capturedLocation.address); if (url) window.open(url, "_blank"); }}>Direct to Directions</Button><Button type="button" variant="outline" size="sm" className="w-full text-destructive border-destructive/20 hover:bg-destructive/10 text-[11.5px] h-8" onClick={() => setCapturedLocation(null)}>Remove Tag</Button></div></div>)}
-                        <div className="space-y-3">
-                          <p className="text-[12px] text-muted-foreground">Tag the location of this delivery/agreement:</p>
-                          <Button type="button" variant="outline" className="w-full h-9.5 text-[12px] font-bold border-primary/20 hover:bg-primary/5 hover:text-primary flex justify-center items-center" disabled={isCapturingLocation} onClick={() => { handleCaptureLocation(); setIsLocationDialogOpen(false); }}><MapPin className="mr-2 h-4 w-4 shrink-0" />{isCapturingLocation ? "Capturing Location..." : "Capture GPS Location Automatically"}</Button>
-                          <div className="relative flex py-1 items-center"><div className="flex-grow border-t border-border/60"></div><span className="flex-shrink mx-3 text-muted-foreground text-[9px] font-bold uppercase tracking-wider">or Enter Manually</span><div className="flex-grow border-t border-border/60"></div></div>
-                          <div className="space-y-2">
-                            <Label className="text-[11px] font-bold text-muted-foreground">Google Maps URL / Coordinates / Address</Label>
-                            <Textarea placeholder="Paste Google Maps URL (e.g. https://maps.app.goo.gl/...), raw lat/long coordinates (e.g. 12.9716,77.5946), or address..." value={manualLocationInput} onChange={(e) => setManualLocationInput(e.target.value)} className="text-[12px] min-h-[70px] bg-background border-border/70" />
-                            <Button type="button" className="w-full h-8.5 text-[11.5px] font-bold" onClick={() => { if (!manualLocationInput.trim()) { toast.error("Please enter a link, coordinates, or address first."); return; } const parsed = parseManualLocationInput(manualLocationInput); setCapturedLocation({ latitude: parsed.latitude, longitude: parsed.longitude, address: parsed.address, accuracy: 0, timestamp: new Date().toLocaleString() }); setManualLocationInput(""); setIsLocationDialogOpen(false); toast.success("Manual location tagged successfully!"); }}>Tag Manual Location</Button>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
+                      <Fingerprint className="h-3.5 w-3.5" /> Thumbprint Scan
+                    </Label>
+                    <ThumbprintCaptureDialog
+                      onSave={setThumbprintUrl}
+                      trigger={
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative">
+                          {thumbprintUrl ? (
+                            <>
+                              <img src={thumbprintUrl} alt="Thumbprint" className="h-full w-full object-contain bg-white rounded p-1" />
+                              <div className="absolute inset-0 bg-background/80 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="text-[10px] font-medium text-foreground">Click to re-scan</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Fingerprint className="h-6 w-6 text-muted-foreground/50 mb-2" />
+                              <span className="text-[10px] font-medium text-muted-foreground">Click to capture</span>
+                            </>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
+                      <PenTool className="h-3.5 w-3.5" /> Digital Signature
+                    </Label>
+                    <SignaturePadDialog
+                      onSave={setSignatureUrl}
+                      trigger={
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-3 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative">
+                          {signatureUrl ? (
+                            <>
+                              <img src={signatureUrl} alt="Signature" className="h-full w-full object-contain bg-white rounded p-1" />
+                              <div className="absolute inset-0 bg-background/80 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="text-[10px] font-medium text-foreground">Click to re-sign</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <PenTool className="h-6 w-6 text-muted-foreground/50 mb-2" />
+                              <span className="text-[10px] font-medium text-muted-foreground">Sign agreement</span>
+                            </>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between h-8">
+                      <span className="flex items-center gap-1">
+                        <Camera className="h-3.5 w-3.5" /> Delivery Photo {deliveryPhotos.length > 0 && `(${deliveryPhotos.length})`}
+                      </span>
+                    </Label>
+                    <DeliveryPhotoCaptureDialog
+                      initialPhotos={deliveryPhotos}
+                      onSave={(photos) => {
+                        setDeliveryPhotos(photos);
+                        setIsDeliveryPhotoChanged(true);
+                      }}
+                      trigger={
+                        <div className="border-2 border-dashed border-border/60 bg-background rounded-lg h-24 overflow-hidden relative hover:bg-muted/10 transition-colors cursor-pointer flex flex-col items-center justify-center">
+                          {deliveryPhotos.length > 0 ? (
+                            <div className="w-full h-full flex flex-col items-center justify-center space-y-1 p-1">
+                              <div className="flex items-center justify-center gap-1.5 max-w-full overflow-hidden">
+                                {deliveryPhotos.slice(0, 3).map((photo, i) => {
+                                  const isImg = photo.url.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(photo.name);
+                                  return (
+                                    <div key={i} className="h-11 w-11 rounded overflow-hidden border border-border bg-muted/20 shrink-0">
+                                      {isImg ? (
+                                        <img src={photo.url} alt={`Delivery ${i}`} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center p-0.5 text-[8px] text-primary bg-primary/10">
+                                          <FileText className="h-4 w-4" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[10px] text-center text-primary font-bold">
+                                {deliveryPhotos.length} File{deliveryPhotos.length === 1 ? "" : "s"} Attached · Click to manage
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center w-full h-full p-2 text-center">
+                              <Camera className="h-6 w-6 text-muted-foreground/50 mb-1" />
+                              <span className="text-[10px] font-semibold text-muted-foreground leading-tight">Take Photo / Upload</span>
+                              <span className="text-[9px] text-muted-foreground/60 mt-0.5">Click to open & upload multiple</span>
+                            </div>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
+                      <FileUp className="h-3.5 w-3.5" /> Signed Document
+                    </Label>
+                    <SignedDocumentCaptureDialog
+                      onSave={(url, name) => {
+                        setSignedDocUrl(url);
+                        setSignedDocName(name);
+                        setIsSignedDocChanged(true);
+                      }}
+                      trigger={
+                        <div className="border-2 border-dashed border-border/60 bg-background rounded-lg h-24 overflow-hidden relative hover:bg-muted/10 transition-colors cursor-pointer">
+                          {signedDocUrl ? (
+                            <div className="relative w-full h-full group bg-muted/20 flex items-center justify-center">
+                              {signedDocUrl.startsWith("data:application/pdf") || signedDocUrl === "PDF" ? (
+                                <div className="flex flex-col items-center justify-center w-full h-full p-2">
+                                  <FileText className="h-8 w-8 text-primary mb-1" />
+                                  <span className="text-[10px] font-bold text-primary truncate max-w-full px-2">{signedDocName || "PDF Uploaded"}</span>
+                                </div>
+                              ) : (
+                                <img src={signedDocUrl} alt="Signed Doc" className="w-full h-full object-cover" />
+                              )}
+                              <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity">
+                                <span className="text-[10px] font-bold text-foreground">Click to change</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center w-full h-full p-2 text-center">
+                              <FileUp className="h-6 w-6 text-muted-foreground/50 mb-1" />
+                              <span className="text-[10px] font-semibold text-muted-foreground leading-tight">Upload PDF / Image</span>
+                              <span className="text-[9px] text-muted-foreground/60 mt-0.5">Click anywhere to open</span>
+                            </div>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
+                      <MapPin className="h-3.5 w-3.5" /> Location Tag
+                    </Label>
+                    <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
+                      <DialogTrigger asChild>
+                        <div className="flex flex-col items-center justify-center border-2 border-dashed border-border/60 rounded-lg p-2 bg-background hover:bg-muted/30 transition-colors cursor-pointer h-24 overflow-hidden relative text-center">
+                          {capturedLocation ? (
+                            <div className="flex flex-col items-center justify-center w-full h-full p-1">
+                              <CheckCircle2 className="h-5 w-5 text-success mb-1" />
+                              <span className="text-[9px] font-bold text-success">Location Tagged</span>
+                              <span className="text-[8px] text-muted-foreground truncate w-full px-2" title={capturedLocation.address}>
+                                {capturedLocation.latitude !== 0 ? `${capturedLocation.latitude.toFixed(4)}, ${capturedLocation.longitude.toFixed(4)}` : capturedLocation.address}
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <MapPin className="h-6 w-6 text-muted-foreground/50 mb-1" />
+                              <span className="text-[10px] font-medium text-muted-foreground leading-tight">
+                                {isCapturingLocation ? "Tagging..." : "Tag Location"}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[420px] p-6">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold"><MapPin className="h-4.5 w-4.5 text-primary" /> Location Tagging & Directions</DialogTitle>
+                        </DialogHeader>
+                        
+                        <div className="space-y-4 py-3">
+                          {capturedLocation && (
+                            <div className="rounded-lg bg-muted/40 border border-border p-3.5 space-y-2 text-[12.5px]">
+                              <p className="font-bold text-emerald-600 flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> Location Tagged</p>
+                              {capturedLocation.latitude !== 0 || capturedLocation.longitude !== 0 ? (
+                                <p className="font-mono text-[11px] text-muted-foreground">GPS Coordinates: {capturedLocation.latitude.toFixed(6)}, {capturedLocation.longitude.toFixed(6)}</p>
+                              ) : null}
+                              <p className="text-[11.5px] text-foreground/80 break-all font-medium">Address/Details: {capturedLocation.address}</p>
+                              <p className="text-[9.5px] text-muted-foreground">Tagged at: {capturedLocation.timestamp}</p>
+                              
+                              <div className="flex gap-2 pt-1.5">
+                                <Button 
+                                  type="button" 
+                                  variant="default" 
+                                  size="sm" 
+                                  className="w-full text-[11.5px] h-8 bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() => {
+                                    const url = getDirectionsUrl(capturedLocation.latitude, capturedLocation.longitude, capturedLocation.address);
+                                    if (url) window.open(url, "_blank");
+                                  }}
+                                >
+                                  Direct to Directions
+                                </Button>
+                                <Button 
+                                  type="button" 
+                                  variant="outline" 
+                                  size="sm" 
+                                  className="w-full text-destructive border-destructive/20 hover:bg-destructive/10 text-[11.5px] h-8"
+                                  onClick={() => setCapturedLocation(null)}
+                                >
+                                  Remove Tag
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-3">
+                            <p className="text-[12px] text-muted-foreground">Tag the location of this delivery/agreement:</p>
+                            
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              className="w-full h-9.5 text-[12px] font-bold border-primary/20 hover:bg-primary/5 hover:text-primary flex justify-center items-center"
+                              disabled={isCapturingLocation}
+                              onClick={() => {
+                                handleCaptureLocation();
+                                setIsLocationDialogOpen(false);
+                              }}
+                            >
+                              <MapPin className="mr-2 h-4 w-4 shrink-0" />
+                              {isCapturingLocation ? "Capturing Location..." : "Capture GPS Location Automatically"}
+                            </Button>
+                            
+                            <div className="relative flex py-1 items-center">
+                              <div className="flex-grow border-t border-border/60"></div>
+                              <span className="flex-shrink mx-3 text-muted-foreground text-[9px] font-bold uppercase tracking-wider">or Enter Manually</span>
+                              <div className="flex-grow border-t border-border/60"></div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-[11px] font-bold text-muted-foreground">Google Maps URL / Coordinates / Address</Label>
+                              <Textarea 
+                                placeholder="Paste Google Maps URL (e.g. https://maps.app.goo.gl/...), raw lat/long coordinates (e.g. 12.9716,77.5946), or address..." 
+                                value={manualLocationInput}
+                                onChange={(e) => setManualLocationInput(e.target.value)}
+                                className="text-[12px] min-h-[70px] bg-background border-border/70"
+                              />
+                              <Button 
+                                type="button" 
+                                className="w-full h-8.5 text-[11.5px] font-bold"
+                                onClick={() => {
+                                  if (!manualLocationInput.trim()) {
+                                    toast.error("Please enter a link, coordinates, or address first.");
+                                    return;
+                                  }
+                                  const parsed = parseManualLocationInput(manualLocationInput);
+                                  setCapturedLocation({
+                                    latitude: parsed.latitude,
+                                    longitude: parsed.longitude,
+                                    address: parsed.address,
+                                    accuracy: 0,
+                                    timestamp: new Date().toLocaleString()
+                                  });
+                                  setManualLocationInput("");
+                                  setIsLocationDialogOpen(false);
+                                  toast.success("Manual location tagged successfully!");
+                                }}
+                              >
+                                Tag Manual Location
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  These verification methods add a layer of security to the rental agreement. At least one method is recommended.
+                </p>
               </div>
-              <p className="text-[11px] text-muted-foreground">These verification methods add a layer of security to the rental agreement. At least one method is recommended.</p>
             </div>
-          </TabsContent>
 
-          {/* ── Tab 5: Payment ── */}
-          <TabsContent value="payment" className="flex-1 overflow-auto p-6 mt-0">
-            {(() => {
-              const totalDepositVal = selectedEquipments.reduce((sum, item) => sum + (Number(item.deposit) || 0), 0);
-              const totalMonthlyRentVal = selectedEquipments.reduce((sum, item) => sum + (Number(item.monthlyRent) || 0), 0);
-              const totalDays = durationDetails?.totalDays || 30;
-              const isOngoing = !endDate;
-              const totalRentVal = selectedEquipments.reduce((sum, item) => {
-                if (item.rentCycle === "Monthly") { return sum + (Number(item.monthlyRent) || 0); }
-                else { if (isOngoing) { return sum + (Number(item.dailyRent) || 0); } else { return sum + (totalDays * (Number(item.dailyRent) || 0)); } }
-              }, 0);
-              const totalSerialsVal = selectedEquipments.map(item => item.serial || "XXXX").join(", ");
-              const totalNamesVal = selectedEquipments.map(item => equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");
-              const rentToAdd = Number(rentPaidAmount) || 0;
-              const depositToAdd = depositPaymentStatus === "Paid" ? totalDepositVal : (depositPaymentStatus === "Partial" ? (Number(depositPaidAmount) || 0) : 0);
-              const selectedAdditionalItems = additionalItems.filter(i => i.selected);
-              const additionalItemsTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Free of Cost" ? 0 : i.amount), 0);
-              const additionalItemsCollectedTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Paid" ? i.amount : 0), 0);
-              const totalCharges = totalRentVal + totalDepositVal + additionalItemsTotal;
-              const totalUpfrontPaid = rentToAdd + depositToAdd + additionalItemsCollectedTotal;
-              const cashAmt = Number(cashPaidAmount) || 0;
-              const bankAmt = Number(bankUpiPaidAmount) || 0;
-              const splitTotal = cashAmt + bankAmt;
-              const splitMismatch = paymentMode === "Cash+Bank" && splitTotal !== totalUpfrontPaid && splitTotal > 0;
-              return (
-                <div className="max-w-2xl space-y-4">
-                  {/* Itemized Breakdown */}
-                  <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20"><span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Upfront Charges — Itemized Breakdown</span></div>
-                    <table className="w-full text-[13px]">
-                      <tbody className="divide-y divide-border/40">
-                        <tr><td className="px-4 py-2 text-muted-foreground">Rent ({rentalPaymentStatus})</td><td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalRentVal.toLocaleString("en-IN")}</td></tr>
-                        <tr><td className="px-4 py-2 text-muted-foreground">Security Deposit ({depositPaymentStatus})</td><td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalDepositVal.toLocaleString("en-IN")}</td></tr>
-                        {selectedAdditionalItems.map((item, i) => (<tr key={i}><td className="px-4 py-2 text-muted-foreground">{item.name} <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-semibold ${item.status === 'Paid' ? 'bg-success/10 text-success' : item.status === 'Free of Cost' ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning-foreground'}`}>{item.status}</span></td><td className="px-4 py-2 text-right font-semibold text-foreground">{item.status === 'Free of Cost' ? <span className="text-primary">Free</span> : `₹${item.amount.toLocaleString('en-IN')}`}</td></tr>))}
-                        <tr className="bg-muted/5"><td className="px-4 py-2 text-muted-foreground font-semibold">Total Upfront Charges</td><td className="px-4 py-2 text-right font-bold text-foreground">₹{totalCharges.toLocaleString("en-IN")}</td></tr>
-                        <tr className="bg-muted/30 font-bold"><td className="px-4 py-2.5 text-foreground font-bold">Total Collected</td><td className="px-4 py-2.5 text-right text-primary font-display text-[15px]">₹{totalUpfrontPaid.toLocaleString("en-IN")}</td></tr>
-                      </tbody>
-                    </table>
-                    <div className="px-4 py-2 border-t border-border/50 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                      <div>Mode: <strong className="text-foreground">{String(paymentMode)}</strong></div>
-                      {paymentMode === "Cash+Bank" && (<><div>Cash: <strong className="text-success">₹{cashAmt.toLocaleString("en-IN")}</strong></div><div>Bank/UPI: <strong className="text-primary">₹{bankAmt.toLocaleString("en-IN")}</strong></div></>)}
-                      {paymentCollectedBy && <div>Collected by: <strong className="text-foreground">{String(paymentCollectedBy)}</strong></div>}
-                    </div>
-                    {splitMismatch && (<div className="px-4 py-2 bg-destructive/10 text-destructive text-[11.5px] font-semibold border-t border-destructive/20 flex items-center gap-1">⚠️ Total cash + bank payments (₹{splitTotal.toLocaleString("en-IN")}) does not match total upfront charges (₹{totalUpfrontPaid.toLocaleString("en-IN")}).</div>)}
-                  </div>
-                  {/* Payment Options */}
-                  <div className="grid gap-4 sm:grid-cols-2 items-end rounded-xl border border-border/60 bg-muted/10 p-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Payment Option</Label>
-                      <Select value={rentalPaymentStatus} onValueChange={handleRentalPaymentStatusChange}><SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50"><SelectValue placeholder="Select Option" /></SelectTrigger><SelectContent><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Not Paid">Not Paid</SelectItem><SelectItem value="Partial">Partial</SelectItem></SelectContent></Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Payment Option</Label>
-                      <Select value={depositPaymentStatus} onValueChange={handleDepositPaymentStatusChange}><SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50"><SelectValue placeholder="Select Option" /></SelectTrigger><SelectContent><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Not Paid">Not Paid</SelectItem><SelectItem value="Partial">Partial</SelectItem></SelectContent></Select>
-                    </div>
-                    {rentalPaymentStatus === "Partial" && (<div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Paid Amount (₹)</Label><Input type="number" placeholder="Enter amount" value={rentPaidAmount} onChange={(e) => handleRentPaidAmountChange(e.target.value)} className="bg-background h-10" /></div>)}
-                    {depositPaymentStatus === "Partial" && (<div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Paid Amount (₹)</Label><Input type="number" placeholder="Enter amount" value={depositPaidAmount} onChange={(e) => handleDepositPaidAmountChange(e.target.value)} className="bg-background h-10" /></div>)}
-                    {(rentalPaymentStatus === "Paid" || rentalPaymentStatus === "Partial" || Number(rentPaidAmount) > 0 || depositPaymentStatus === "Paid" || depositPaymentStatus === "Partial" || Number(depositPaidAmount) > 0) && (
-                      <>
-                        <div className="space-y-1.5"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label><Select value={paymentMode} onValueChange={(val: any) => setPaymentMode(val)}><SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50"><SelectValue placeholder="Select Mode" /></SelectTrigger><SelectContent><SelectItem value="Cash">Cash</SelectItem><SelectItem value="Bank">Bank</SelectItem><SelectItem value="Cash+Bank">Cash+Bank</SelectItem></SelectContent></Select></div>
-                        {paymentMode === "Cash+Bank" && (<><div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Paid Amount (₹)</Label><Input type="number" placeholder="Cash amount" value={cashPaidAmount} onChange={(e) => setCashPaidAmount(e.target.value)} className="bg-background h-10" /></div><div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bank/UPI Paid Amount (₹)</Label><Input type="number" placeholder="Bank/UPI amount" value={bankUpiPaidAmount} onChange={(e) => setBankUpiPaidAmount(e.target.value)} className="bg-background h-10" /></div></>)}
-                        <div className="space-y-1.5"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="bg-background h-10" /></div>
-                        <div className="space-y-1.5"><Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label><Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(e.target.value)} className="bg-background h-10" /></div>
-                      </>
-                    )}
-                  </div>
-                  {/* Footer Actions */}
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <AgreementPreviewDialog
-                      rental={rental ? {
-                        ...rental,
-                        id: agreementId,
-                        customer: isNewCustomer ? custName : (selectedCustomer?.name || ""),
-                        equipment: totalNamesVal,
-                        serial: totalSerialsVal,
-                        deposit: totalDepositVal,
-                        monthlyRent: totalMonthlyRentVal,
-                        rentalPaymentStatus,
-                        depositPaymentStatus,
-                        rentPaidAmount: Number(rentPaidAmount) || 0,
-                        paymentMode,
-                        paymentDate,
-                        paymentCollectedBy,
-                        cashPaidAmount: paymentMode === "Cash" ? totalUpfrontPaid : (paymentMode === "Bank" ? 0 : (Number(cashPaidAmount) || 0)),
-                        bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
-                        additionalItems,
-                        rentalDuration: durationDetails.text,
-                        totalRent: durationDetails.totalRent,
-                        totalInitialCharges: totalUpfrontPaid,
-                        removalCharges: Number(removalCharges) || 0,
-                        equipmentItems: selectedEquipments.map(item => {
-                          const oldItem = rental?.equipmentItems?.find((oi: any) => oi.equipmentId === item.equipmentId);
-                          return { equipmentId: item.equipmentId, name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown", serial: item.serial || "XXXX", monthlyRent: Number(item.monthlyRent) || 0, dailyRent: Number(item.dailyRent) || 0, deposit: Number(item.deposit) || 0, returned: oldItem ? !!oldItem.returned : false };
-                        }),
-                      } : {
-                        id: agreementId,
-                        customer: isNewCustomer ? custName : (selectedCustomer?.name || ""),
-                        equipment: totalNamesVal,
-                        serial: totalSerialsVal,
-                        deposit: totalDepositVal,
-                        monthlyRent: totalMonthlyRentVal,
-                        customerId: "",
-                        equipmentId: selectedEquipments.map(item => item.equipmentId).join(", "),
-                        start: agreementDate,
-                        end: endDate,
-                        dailyRent: selectedEquipments.reduce((sum, item) => sum + (Number(item.dailyRent) || 0), 0),
-                        deliveryCharges: Number(deliveryCharges) || 0,
-                        removalCharges: Number(removalCharges) || 0,
-                        installationCharges: Number(installationCharges) || 0,
-                        additionalCharges: Number(additionalCharges) || 0,
-                        remarks: "",
-                        status: "Active",
-                        rentalPaymentStatus,
-                        depositPaymentStatus,
-                        rentPaidAmount: Number(rentPaidAmount) || 0,
-                        paymentMode,
-                        paymentDate,
-                        paymentCollectedBy,
-                        cashPaidAmount: paymentMode === "Cash" ? totalUpfrontPaid : (paymentMode === "Bank" ? 0 : (Number(cashPaidAmount) || 0)),
-                        bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
-                        additionalItems,
-                        rentalDuration: durationDetails.text,
-                        totalRent: durationDetails.totalRent,
-                        totalInitialCharges: totalUpfrontPaid,
-                        equipmentItems: selectedEquipments.map(item => ({ equipmentId: item.equipmentId, name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown", serial: item.serial || "XXXX", monthlyRent: Number(item.monthlyRent) || 0, dailyRent: Number(item.dailyRent) || 0, deposit: Number(item.deposit) || 0, returned: false })),
-                      }}
-                      signatureUrl={signatureUrl}
-                      thumbprintUrl={thumbprintUrl}
-                      trigger={<Button variant="outline" type="button"><FileText className="mr-1.5 h-3.5 w-3.5" />Preview Agreement</Button>}
-                    />
-                    <Button variant="outline" type="button" onClick={() => toast.success(`Agreement emailed successfully to customer.`)}><Mail className="mr-1.5 h-3.5 w-3.5" />Email Agreement</Button>
-                    <DialogClose asChild><Button variant="outline" type="button">Cancel</Button></DialogClose>
-                    {!isStaff && rental && rental.status === "Pending Approval" && (
-                      <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => { approveRental(rental.id); toast.success(`Agreement ${rental.id} approved successfully!`); setOpen(false); if (onSave) onSave(); }}>
-                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Approve Agreement
-                      </Button>
-                    )}
-                    <Button type="button" onClick={handleSave} disabled={isSubmitting}><FileText className="mr-1.5 h-3.5 w-3.5" />Save Agreement</Button>
-                  </div>
+            {/* Commercial Payment Options (Global to Agreement) */}
+            <div className="grid gap-4 sm:grid-cols-2 items-end rounded-xl border border-border/60 bg-muted/10 p-4 mt-4 animate-in fade-in duration-200">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Payment Option</Label>
+                <Select value={rentalPaymentStatus} onValueChange={handleRentalPaymentStatusChange}>
+                  <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                    <SelectValue placeholder="Select Option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Not Paid">Not Paid</SelectItem>
+                    <SelectItem value="Partial">Partial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Payment Option</Label>
+                <Select value={depositPaymentStatus} onValueChange={handleDepositPaymentStatusChange}>
+                  <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                    <SelectValue placeholder="Select Option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Not Paid">Not Paid</SelectItem>
+                    <SelectItem value="Partial">Partial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Show rent paid amount only if status is Partial */}
+              {rentalPaymentStatus === "Partial" && (
+                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Paid Amount (₹)</Label>
+                  <Input type="number" placeholder="Enter amount" value={rentPaidAmount} onChange={(e) => handleRentPaidAmountChange(e.target.value)} className="bg-background h-10" />
                 </div>
-              );
-            })()}
-          </TabsContent>
-        </Tabs>
+              )}
+
+              {/* Show deposit paid amount only if status is Partial */}
+              {depositPaymentStatus === "Partial" && (
+                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Paid Amount (₹)</Label>
+                  <Input type="number" placeholder="Enter amount" value={depositPaidAmount} onChange={(e) => handleDepositPaidAmountChange(e.target.value)} className="bg-background h-10" />
+                </div>
+              )}
+
+              {(rentalPaymentStatus === "Paid" || rentalPaymentStatus === "Partial" || Number(rentPaidAmount) > 0 || depositPaymentStatus === "Paid" || depositPaymentStatus === "Partial" || Number(depositPaidAmount) > 0) && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+                    <Select value={paymentMode} onValueChange={(val: any) => setPaymentMode(val)}>
+                      <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                        <SelectValue placeholder="Select Mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="Bank">Bank</SelectItem>
+                        <SelectItem value="Cash+Bank">Cash+Bank</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {paymentMode === "Cash+Bank" && (
+                    <>
+                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Paid Amount (₹)</Label>
+                        <Input
+                          type="number"
+                          placeholder="Cash amount"
+                          value={cashPaidAmount}
+                          onChange={(e) => setCashPaidAmount(e.target.value)}
+                          className="bg-background h-10"
+                        />
+                      </div>
+                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bank/UPI Paid Amount (₹)</Label>
+                        <Input
+                          type="number"
+                          placeholder="Bank/UPI amount"
+                          value={bankUpiPaidAmount}
+                          onChange={(e) => setBankUpiPaidAmount(e.target.value)}
+                          className="bg-background h-10"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+                    <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="bg-background h-10" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label>
+                    <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(e.target.value)} className="bg-background h-10" />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Sticky Summary & Actions */}
+          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-h-0">
+            {/* Itemized Breakdown Table */}
+            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Upfront Charges — Itemized Breakdown</span>
+              </div>
+              <table className="w-full text-[13px]">
+                <tbody className="divide-y divide-border/40">
+                  <tr>
+                    <td className="px-4 py-2 text-muted-foreground">Rent ({rentalPaymentStatus})</td>
+                    <td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalRentVal.toLocaleString("en-IN")}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-2 text-muted-foreground">Security Deposit ({depositPaymentStatus})</td>
+                    <td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalDepositVal.toLocaleString("en-IN")}</td>
+                  </tr>
+                  {selectedAdditionalItems.map((item, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2 text-muted-foreground">{item.name} <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded font-semibold ${item.status === 'Paid' ? 'bg-success/10 text-success' : item.status === 'Free of Cost' ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning-foreground'}`}>{item.status}</span></td>
+                      <td className="px-4 py-2 text-right font-semibold text-foreground">{item.status === 'Free of Cost' ? <span className="text-primary">Free</span> : `₹${item.amount.toLocaleString('en-IN')}`}</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-muted/5">
+                    <td className="px-4 py-2 text-muted-foreground font-semibold">Total Upfront Charges</td>
+                    <td className="px-4 py-2 text-right font-bold text-foreground">₹{totalCharges.toLocaleString("en-IN")}</td>
+                  </tr>
+                  <tr className="bg-muted/30 font-bold">
+                    <td className="px-4 py-2.5 text-foreground font-bold">Total Collected</td>
+                    <td className="px-4 py-2.5 text-right text-primary font-display text-[15px]">₹{totalUpfrontPaid.toLocaleString("en-IN")}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="px-4 py-2 border-t border-border/50 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                <div>Mode: <strong className="text-foreground">{String(paymentMode)}</strong></div>
+                {paymentMode === "Cash+Bank" && (
+                  <>
+                    <div>Cash: <strong className="text-success">₹{cashAmt.toLocaleString("en-IN")}</strong></div>
+                    <div>Bank/UPI: <strong className="text-primary">₹{bankAmt.toLocaleString("en-IN")}</strong></div>
+                  </>
+                )}
+                {paymentCollectedBy && <div>Collected by: <strong className="text-foreground">{String(paymentCollectedBy)}</strong></div>}
+              </div>
+              {splitMismatch && (
+                <div className="px-4 py-2 bg-destructive/10 text-destructive text-[11.5px] font-semibold border-t border-destructive/20 flex items-center gap-1">
+                  ⚠️ Total cash + bank payments (₹{splitTotal.toLocaleString("en-IN")}) does not match total upfront charges (₹{totalUpfrontPaid.toLocaleString("en-IN")}).
+                </div>
+              )}
+            </div>
+
+            {/* Dialog Footer Actions */}
+            <div className="flex flex-col gap-2 mt-auto border-t pt-4">
+              <AgreementPreviewDialog
+                rental={rental ? {
+                  ...rental,
+                  id: agreementId,
+                  customer: isNewCustomer ? custName : (selectedCustomer?.name || ""),
+                  equipment: totalNamesVal,
+                  serial: totalSerialsVal,
+                  deposit: totalDepositVal,
+                  monthlyRent: totalMonthlyRentVal,
+                  rentalPaymentStatus,
+                  depositPaymentStatus,
+                  rentPaidAmount: Number(rentPaidAmount) || 0,
+                  paymentMode,
+                  paymentDate,
+                  paymentCollectedBy,
+                  cashPaidAmount: paymentMode === "Cash" ? totalUpfrontPaid : (paymentMode === "Bank" ? 0 : (Number(cashPaidAmount) || 0)),
+                  bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
+                  additionalItems,
+                  rentalDuration: durationDetails.text,
+                  totalRent: durationDetails.totalRent,
+                  totalInitialCharges: totalUpfrontPaid,
+                  removalCharges: Number(removalCharges) || 0,
+                  equipmentItems: selectedEquipments.map(item => {
+                    const oldItem = rental?.equipmentItems?.find((oi: any) => oi.equipmentId === item.equipmentId);
+                    return {
+                      equipmentId: item.equipmentId,
+                      name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown",
+                      serial: item.serial || "XXXX",
+                      monthlyRent: Number(item.monthlyRent) || 0,
+                      dailyRent: Number(item.dailyRent) || 0,
+                      deposit: Number(item.deposit) || 0,
+                      returned: oldItem ? !!oldItem.returned : false,
+                    };
+                  }),
+                } : {
+                  id: agreementId,
+                  customer: isNewCustomer ? custName : (selectedCustomer?.name || ""),
+                  equipment: totalNamesVal,
+                  serial: totalSerialsVal,
+                  deposit: totalDepositVal,
+                  monthlyRent: totalMonthlyRentVal,
+                  customerId: "",
+                  equipmentId: selectedEquipments.map(item => item.equipmentId).join(", "),
+                  start: agreementDate,
+                  end: endDate,
+                  dailyRent: selectedEquipments.reduce((sum, item) => sum + (Number(item.dailyRent) || 0), 0),
+                  deliveryCharges: Number(deliveryCharges) || 0,
+                  removalCharges: Number(removalCharges) || 0,
+                  installationCharges: Number(installationCharges) || 0,
+                  additionalCharges: Number(additionalCharges) || 0,
+                  remarks: "",
+                  status: "Active",
+                  rentalPaymentStatus,
+                  depositPaymentStatus,
+                  rentPaidAmount: Number(rentPaidAmount) || 0,
+                  paymentMode,
+                  paymentDate,
+                  paymentCollectedBy,
+                  cashPaidAmount: paymentMode === "Cash" ? totalUpfrontPaid : (paymentMode === "Bank" ? 0 : (Number(cashPaidAmount) || 0)),
+                  bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
+                  additionalItems,
+                  rentalDuration: durationDetails.text,
+                  totalRent: durationDetails.totalRent,
+                  totalInitialCharges: totalUpfrontPaid,
+                  equipmentItems: selectedEquipments.map(item => ({
+                    equipmentId: item.equipmentId,
+                    name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown",
+                    serial: item.serial || "XXXX",
+                    monthlyRent: Number(item.monthlyRent) || 0,
+                    dailyRent: Number(item.dailyRent) || 0,
+                    deposit: Number(item.deposit) || 0,
+                    returned: false,
+                  })),
+                }}
+                signatureUrl={signatureUrl}
+                thumbprintUrl={thumbprintUrl}
+                trigger={<Button variant="outline" type="button" className="w-full justify-start"><FileText className="mr-1.5 h-3.5 w-3.5" />Preview Agreement</Button>}
+              />
+              <Button variant="outline" type="button" className="w-full justify-start" onClick={() => toast.success(`Agreement emailed successfully to customer.`)}><Mail className="mr-1.5 h-3.5 w-3.5" />Email Agreement</Button>
+              
+              <div className="flex gap-2 w-full mt-2">
+                <DialogClose asChild>
+                  <Button variant="outline" type="button" className="flex-1">Cancel</Button>
+                </DialogClose>
+                {!isStaff && rental && rental.status === "Pending Approval" && (
+                  <Button 
+                    type="button" 
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] px-2" 
+                    onClick={() => {
+                      approveRental(rental.id);
+                      toast.success(`Agreement ${rental.id} approved successfully!`);
+                      setOpen(false);
+                      if (onSave) onSave();
+                    }}
+                  >
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                    Approve
+                  </Button>
+                )}
+                <Button type="button" className="flex-1" onClick={handleSave} disabled={isSubmitting}><FileText className="mr-1.5 h-3.5 w-3.5" />Save</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Continuous Bulk QR Scanner modal */}
+        <QrScannerModal
+          isOpen={isBulkScannerOpen}
+          onOpenChange={setIsBulkScannerOpen}
+          bulkMode={true}
+          onScanSuccess={handleBulkScanSuccess}
+          title="Bulk Scan Equipment Serials"
+        />
       </DialogContent>
-      {/* QR Scanner modal — triggered per equipment row scan button */}
+      {/* Bug 8: QR Scanner modal — triggered per equipment row scan button */}
       <QrScannerModal
         isOpen={isScannerOpen}
         onOpenChange={(open) => {
@@ -2012,14 +2772,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         inlineMode={true}
         onScanSuccess={handleQrScanSuccess}
         title="Scan Equipment Barcode / QR Code"
-      />
-      {/* Continuous Bulk QR Scanner modal */}
-      <QrScannerModal
-        isOpen={isBulkScannerOpen}
-        onOpenChange={setIsBulkScannerOpen}
-        bulkMode={true}
-        onScanSuccess={handleBulkScanSuccess}
-        title="Bulk Scan Equipment Serials"
       />
     </Dialog>
   );
