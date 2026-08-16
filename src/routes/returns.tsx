@@ -128,37 +128,34 @@ function generateWhatsAppPickupMessage(params: {
   }
   const line3 = equipParts.join(" - ") || eqStr || "Equipment";
 
-  // Line 4: Return at Full Address / Area
-  const addrStr = params.address != null ? String(params.address).trim() : "";
+  // Line 4: Area ONLY (Do NOT show full street/C/o address)
   const areaStr = params.area != null ? String(params.area).trim() : "";
+  const addrStr = params.address != null ? String(params.address).trim() : "";
+
+  let displayArea = areaStr;
+  if (!displayArea && addrStr && addrStr !== "No address provided" && !addrStr.startsWith("http")) {
+    const parts = addrStr.split(",").map(s => s.trim()).filter(Boolean);
+    if (parts.length > 1) {
+      displayArea = parts[parts.length - 1];
+    } else {
+      displayArea = addrStr;
+    }
+  }
+  const line4 = displayArea || "Customer Location";
+
+  // Line 5: Map location link (ONLY if location is explicitly tagged in rental agreement)
+  let mapLink = "";
   const locAddrStr = params.locationAddress != null ? String(params.locationAddress).trim() : "";
 
-  const addressParts: string[] = [];
-  if (addrStr && addrStr !== "No address provided") {
-    addressParts.push(addrStr);
-  }
-  if (areaStr && !addressParts.some(p => p.toLowerCase().includes(areaStr.toLowerCase()))) {
-    addressParts.push(areaStr);
-  }
-  
-  const displayLocation = addressParts.join(", ") || (locAddrStr.startsWith("http") ? "" : locAddrStr) || areaStr || addrStr || "Customer Location";
-  const line4 = displayLocation;
-
-  // Line 5: Map location link
-  let mapLink = "";
   if (locAddrStr.startsWith("http://") || locAddrStr.startsWith("https://")) {
     mapLink = locAddrStr;
   } else if (addrStr.startsWith("http://") || addrStr.startsWith("https://")) {
     mapLink = addrStr;
   } else if (params.latitude && params.longitude && (Number(params.latitude) !== 0 || Number(params.longitude) !== 0)) {
     mapLink = `https://www.google.com/maps?q=${params.latitude},${params.longitude}`;
-  } else {
-    const queryParts: string[] = [];
-    if (addrStr && addrStr !== "No address provided") queryParts.push(addrStr);
-    if (areaStr && !queryParts.some(q => q.toLowerCase().includes(areaStr.toLowerCase()))) queryParts.push(areaStr);
-    const searchQuery = queryParts.join(", ") || areaStr || addrStr || "Mysore";
-    mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
   }
+  // Note: If location was NOT tagged in the rental agreement, mapLink remains empty "" (no search query fallback)
+
   const line5 = mapLink;
 
   // Line 6: Collect Amount or Refund Amount
