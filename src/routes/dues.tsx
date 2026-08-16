@@ -416,17 +416,17 @@ function PayDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-6">
-          <DialogHeader className="pb-2 border-b border-border/40">
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto p-4 sm:p-5">
+          <DialogHeader className="pb-1.5 border-b border-border/40">
+            <DialogTitle className="flex items-center gap-2 text-[15px]">
               <CreditCard className="h-4 w-4 text-primary" /> Record Rent Payment
             </DialogTitle>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto pr-1 py-3 my-1 space-y-3.5 max-h-[58vh]">
-            <div className="space-y-1.5">
+          <div className="space-y-2.5 py-1.5">
+            <div className="space-y-1">
               <div className="flex justify-between items-center">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Select Equipment</Label>
+                <Label className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Select Equipment</Label>
                 {activeEqItems.length > 1 && (
                   <button
                     type="button"
@@ -444,7 +444,7 @@ function PayDialog({
                   </button>
                 )}
               </div>
-              <div className={`space-y-1.5 overflow-y-auto pr-1 border rounded-lg p-1.5 bg-background/50 ${isMultiItem ? "max-h-80" : "max-h-36"}`}>
+              <div className={`space-y-1 border rounded-lg p-1.5 bg-background/50 ${isMultiItem ? "max-h-44 overflow-y-auto pr-1" : "max-h-none"}`}>
                 {eqItems.map((item: any) => {
                   const details = calcUnpaidDetailsForEquipment(rental, item.equipmentId);
                   const isReturned = !!item.returned;
@@ -572,29 +572,27 @@ function PayDialog({
               </div>
             </div>
 
-            <div className="bg-muted/30 rounded-lg p-2.5 text-[11px] space-y-1">
-              <div className="flex justify-between">
-                <span className="font-bold text-foreground">{rental.customer}</span>
-                <span className="font-mono text-primary font-semibold">{rental.id}</span>
+            <div className="bg-muted/20 rounded-lg p-2 text-[11px] space-y-1 border border-border/40">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-foreground truncate">{rental.customer}</span>
+                <span className="font-mono text-primary font-bold text-[11px] shrink-0">{rental.id}</span>
               </div>
               
-              <div className="border-t border-border/40 my-1 pt-1 space-y-1">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Selected Items:</span>
-                  <span className="font-semibold text-foreground">
-                    {selectedEqIds.length} of {activeEqItems.length || eqItems.length}
-                  </span>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-border/40 pt-1 text-[10.5px]">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Items:</span>
+                  <span className="font-semibold">{selectedEqIds.length} of {activeEqItems.length || eqItems.length}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Unpaid Duration:</span>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Unpaid:</span>
                   <span className="font-bold text-destructive">{selectedItemsDetails.unpaidText}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Total Paid to Date:</span>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Paid:</span>
                   <span className="font-semibold text-success">₹{selectedItemsDetails.grandTotalPaid.toLocaleString("en-IN")}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Remaining Balance:</span>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Remaining:</span>
                   <span className={`font-bold ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-success"}`}>
                     ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
                   </span>
