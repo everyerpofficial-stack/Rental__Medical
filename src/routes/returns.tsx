@@ -204,37 +204,55 @@ function generateWhatsAppPickupMessage(params: {
   }
   const line2 = phoneList.join(" & ") || "N/A";
 
-  // Line 3: Model Number (prefer model over serial)
+  // Line 3: Model Number ONLY (never display raw serial numbers)
   let modelStr = params.model != null ? String(params.model).trim() : "";
   const serialStr = params.serial != null ? String(params.serial).trim() : "";
   const eqStr = params.equipment != null ? String(params.equipment).trim() : "";
 
-  // If model is empty or "Standard", attempt to look up equipment in inventory by serial/id/name
-  if ((!modelStr || modelStr.toLowerCase() === "standard") && (serialStr || eqStr)) {
-    try {
-      const allEq = getEquipment();
-      const match = allEq.find(e => 
-        (serialStr && e.serial?.trim().toLowerCase() === serialStr.toLowerCase()) ||
-        (e.id && e.id.toLowerCase() === serialStr.toLowerCase()) ||
-        (eqStr && e.name?.trim().toLowerCase() === eqStr.toLowerCase())
-      );
-      if (match && match.model && match.model.trim() !== "" && match.model.toLowerCase() !== "standard") {
-        modelStr = match.model.trim();
-      }
-    } catch {
-      // ignore
+  const allEq = getEquipment();
+  let foundModel = "";
+  let foundName = "";
+
+  const match = allEq.find(e => 
+    (serialStr && e.serial?.trim().toLowerCase() === serialStr.toLowerCase()) ||
+    (serialStr && e.id?.toLowerCase() === serialStr.toLowerCase()) ||
+    (eqStr && e.name?.trim().toLowerCase() === eqStr.toLowerCase()) ||
+    (eqStr && e.id?.toLowerCase() === eqStr.toLowerCase())
+  );
+
+  if (match) {
+    if (match.model && match.model.trim() && match.model.toLowerCase() !== "standard") {
+      foundModel = match.model.trim();
+    }
+    if (match.name && match.name.trim()) {
+      foundName = match.name.trim();
     }
   }
 
-  const equipParts: string[] = [];
-  if (modelStr && modelStr.toLowerCase() !== "standard") {
-    equipParts.push(modelStr);
-  } else if (serialStr && serialStr !== "XXXX") {
-    equipParts.push(serialStr);
-  } else if (eqStr) {
-    equipParts.push(eqStr);
+  if (!foundModel && params.rental?.equipmentItems && params.rental.equipmentItems.length > 0) {
+    const itemModels = params.rental.equipmentItems
+      .map((item: any) => {
+        const itemEq = allEq.find(e => e.id === item.equipmentId || (e.serial && item.serial && e.serial.trim().toLowerCase() === item.serial.trim().toLowerCase()));
+        return itemEq?.model?.trim() || item.model?.trim() || itemEq?.name?.trim() || item.name?.trim();
+      })
+      .filter((m: string) => m && m.toLowerCase() !== "standard");
+    if (itemModels.length > 0) {
+      foundModel = Array.from(new Set(itemModels)).join(", ");
+    }
   }
-  const line3 = equipParts.join(" - ") || modelStr || serialStr || eqStr || "Equipment";
+
+  let line3 = "";
+  if (foundModel) {
+    line3 = foundModel;
+  } else if (modelStr && modelStr.toLowerCase() !== "standard" && modelStr !== serialStr) {
+    line3 = modelStr;
+  } else if (foundName) {
+    line3 = foundName;
+  } else if (eqStr && eqStr !== serialStr) {
+    line3 = eqStr;
+  } else {
+    line3 = "Medical Equipment";
+  }
 
   // Line 4: "Return at Area Name"
   const areaStr = params.area != null ? String(params.area).trim() : "";
