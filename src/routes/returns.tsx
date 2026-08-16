@@ -1425,18 +1425,18 @@ function ReturnsPage() {
                                 {eqName}
                               </span>
                               
-                              <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground mt-1">
-                                <div>
-                                  <span className="font-medium text-muted-foreground">Serial: </span>
-                                  <span className="font-mono font-bold text-foreground/80">{item.serial || "Not Set"}</span>
+                              <div className="space-y-0.5 text-[11.5px] text-muted-foreground mt-1">
+                                <div className="flex items-center justify-between gap-1 overflow-hidden">
+                                  <span className="shrink-0 font-medium text-muted-foreground">Serial:</span>
+                                  <span className="font-mono font-bold text-foreground/90 truncate">{item.serial || "Not Set"}</span>
                                 </div>
-                                <div>
-                                  <span className="font-medium text-muted-foreground">Model: </span>
-                                  <span className="font-semibold text-foreground/80">{modelNo}</span>
+                                <div className="flex items-center justify-between gap-1 overflow-hidden">
+                                  <span className="shrink-0 font-medium text-muted-foreground">Model:</span>
+                                  <span className="font-semibold text-foreground/90 truncate">{modelNo}</span>
                                 </div>
-                                <div className="col-span-2">
-                                  <span className="font-medium text-muted-foreground">Owner: </span>
-                                  <span className="font-semibold text-foreground/80">{ownerName}</span>
+                                <div className="flex items-center justify-between gap-1 overflow-hidden">
+                                  <span className="shrink-0 font-medium text-muted-foreground">Owner:</span>
+                                  <span className="font-semibold text-foreground/90 truncate">{ownerName}</span>
                                 </div>
                               </div>
 
