@@ -157,6 +157,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     }
   }, [isOpen, eq]);
 
+  const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHasAttemptedSave(false);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -170,6 +178,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
   }, [eq]);
 
   const handleSave = (): boolean => {
+    setHasAttemptedSave(true);
     const finalCategory = isCustomCategory ? customCategory.trim() : category;
     if (!finalCategory) {
       toast.error(isCustomCategory ? "Please enter a custom category name." : "Please select a category.");
@@ -285,51 +294,84 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
           </div>
         )}
 
+        {hasAttemptedSave && (!category || !serial) && !duplicateEq && (
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[12.5px] font-semibold animate-[fade-in_0.2s_ease-out] mb-1">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              Please select a <strong>Category</strong> and enter a <strong>Serial Number</strong> to save the equipment.
+            </span>
+          </div>
+        )}
+
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           <div className="space-y-1.5 sm:col-span-2 flex flex-col justify-end">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Category</Label>
-            <Combobox
-              options={categoryOptions}
-              value={category}
-              onValueChange={(val) => {
-                setCategory(val);
-                if (val === "Custom") {
-                  setIsCustomCategory(true);
-                } else {
-                  setIsCustomCategory(false);
-                }
-              }}
-              placeholder="Select category..."
-              searchPlaceholder="Search categories..."
-              emptyText="No category found."
-            />
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between mb-0.5">
+              <span>Category *</span>
+              {hasAttemptedSave && !category && <span className="text-rose-600 font-bold text-[10.5px]">REQUIRED FIELD</span>}
+            </Label>
+            <div className={cn("rounded-md transition-colors", hasAttemptedSave && !category && "ring-2 ring-rose-500 rounded-md")}>
+              <Combobox
+                options={categoryOptions}
+                value={category}
+                onValueChange={(val) => {
+                  setCategory(val);
+                  if (val === "Custom") {
+                    setIsCustomCategory(true);
+                  } else {
+                    setIsCustomCategory(false);
+                  }
+                }}
+                placeholder="Select category..."
+                searchPlaceholder="Search categories..."
+                emptyText="No category found."
+              />
+            </div>
+            {hasAttemptedSave && !category && (
+              <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Please select an equipment category.
+              </p>
+            )}
           </div>
           {isCustomCategory && (
             <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Custom Category Name</Label>
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Custom Category Name *</Label>
               <Input 
                 placeholder="Enter custom category name" 
                 value={customCategory} 
                 onChange={(e) => setCustomCategory(capitalizeWords(e.target.value))} 
-                className="bg-background h-10" 
+                className={cn("bg-background h-10", hasAttemptedSave && isCustomCategory && !customCategory.trim() && "border-rose-500 ring-rose-500")} 
               />
             </div>
           )}
           <div className="space-y-1.5">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
               <span>Serial Number *</span>
-              {duplicateEq && <span className="text-rose-600 font-bold text-[10.5px]">DUPLICATE SERIAL</span>}
+              {duplicateEq ? (
+                <span className="text-rose-600 font-bold text-[10.5px]">DUPLICATE SERIAL</span>
+              ) : (
+                hasAttemptedSave && !serial.trim() && <span className="text-rose-600 font-bold text-[10.5px]">REQUIRED FIELD</span>
+              )}
             </Label>
             <Input
               placeholder="e.g. PHE-77821"
               value={serial}
               onChange={(e) => setSerial(e.target.value)}
-              className={cn("bg-background h-10 transition-colors", duplicateEq && "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20 text-rose-900 font-semibold")}
+              className={cn(
+                "bg-background h-10 transition-colors",
+                duplicateEq && "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20 text-rose-900 font-semibold",
+                !duplicateEq && hasAttemptedSave && !serial.trim() && "border-rose-500 focus-visible:ring-rose-500"
+              )}
             />
-            {duplicateEq && (
+            {duplicateEq ? (
               <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Duplicate serial number found in inventory!
               </p>
+            ) : (
+              hasAttemptedSave && !serial.trim() && (
+                <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Please enter a serial number.
+                </p>
+              )
             )}
           </div>
           <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(capitalizeWords(e.target.value))} />
