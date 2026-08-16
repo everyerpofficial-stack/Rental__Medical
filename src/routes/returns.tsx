@@ -1098,6 +1098,7 @@ function ReturnsPage() {
           if (cashAmt + bankAmt !== actualPaidAmount) {
             bankAmt = Math.max(0, actualPaidAmount - cashAmt);
           }
+          const settlementEqId = returningItems.length === 1 ? returningItems[0].equipmentId : undefined;
           if (cashAmt > 0) {
             savePayment({
               id: getNextPaymentNumber(),
@@ -1105,6 +1106,7 @@ function ReturnsPage() {
               customer: selectedRental?.customer || "Unknown Customer",
               customerId: selectedRental?.customerId || "",
               agreement: selectedAgreement,
+              equipmentId: settlementEqId,
               amount: cashAmt,
               mode: "Cash",
               type: "Rent" as const,
@@ -1119,6 +1121,7 @@ function ReturnsPage() {
               customer: selectedRental?.customer || "Unknown Customer",
               customerId: selectedRental?.customerId || "",
               agreement: selectedAgreement,
+              equipmentId: settlementEqId,
               amount: bankAmt,
               mode: "Bank",
               type: "Rent" as const,
@@ -1128,12 +1131,14 @@ function ReturnsPage() {
             });
           }
         } else {
+          const settlementEqId = returningItems.length === 1 ? returningItems[0].equipmentId : undefined;
           savePayment({
             id: getNextPaymentNumber(),
             date: returnDate,
             customer: selectedRental?.customer || "Unknown Customer",
             customerId: selectedRental?.customerId || "",
             agreement: selectedAgreement,
+            equipmentId: settlementEqId,
             amount: actualPaidAmount,
             mode: duePaymentMode as any,
             type: "Rent" as const,

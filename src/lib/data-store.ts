@@ -4142,26 +4142,36 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
 
   const currentItemRent = cleanNum(currentItem.monthlyRent || currentItem.dailyRent || currentItem.rentRate);
   const totalRentalMonthlyRent = items.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-  const shareRatio = totalRentalMonthlyRent > 0 ? (currentItemRent / totalRentalMonthlyRent) : 1;
+  const shareRatio = totalRentalMonthlyRent > 0 ? (currentItemRent / totalRentalMonthlyRent) : (1 / Math.max(1, items.length));
 
-  // 1. Direct payments for this specific equipment
+  // 1. Direct payments for this specific equipment ID or notes mentioning this equipment
   const directPaid = paymentsList
-    .filter((p) => p.agreement === rental.id && p.equipmentId === equipmentId && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => p.equipmentId === equipmentId || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
     .reduce((sum, p) => sum + cleanNum(p.amount), 0);
 
-  // 2. Shared/Agreement-level payments (no specific equipmentId)
+  // 2. Shared/Agreement-level payments (not matching this item nor any other item's serial / equipmentId)
   const sharedPaymentsPaid = paymentsList
-    .filter((p) => p.agreement === rental.id && !p.equipmentId && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => {
+      if (p.equipmentId) return false;
+      if (p.notes) {
+        return !items.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()));
+      }
+      return true;
+    })
     .reduce((sum, p) => sum + cleanNum(p.amount), 0);
   
-  // 3. Initial advance paid on agreement creation
-  const initialPaid = (!excludeInitial && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial")) 
+  // 3. Initial advance paid on agreement creation (only if no recorded payments exist in paymentsList for this agreement)
+  const hasRecordedPayments = paymentsList.some((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"));
+
+  const initialPaid = (!excludeInitial && !hasRecordedPayments && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial")) 
     ? (Number(rental.rentPaidAmount) || Number(rental.totalRent) || Number(rental.monthlyRent) || 0) 
-    : 0;
+    : (!excludeInitial && hasRecordedPayments && rental.rentalPaymentStatus === "Paid" && !paymentsList.some(p => p.agreement === rental.id && p.equipmentId === equipmentId) && sharedPaymentsPaid === 0 ? Math.round((Number(rental.rentPaidAmount) || Number(rental.monthlyRent) || 0) * shareRatio) : 0);
 
-  const totalShared = sharedPaymentsPaid + initialPaid;
+  const totalShared = sharedPaymentsPaid;
 
-  return directPaid + Math.round(totalShared * shareRatio);
+  return directPaid + Math.round(totalShared * shareRatio) + initialPaid;
 }
 
 /** Real outstanding rent across all unreturned equipment items on a rental,
