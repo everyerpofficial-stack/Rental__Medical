@@ -214,7 +214,7 @@ function generateWhatsAppPickupMessage(params: {
   let foundName = "";
 
   const match = allEq.find(e => 
-    (serialStr && e.serial?.trim().toLowerCase() === serialStr.toLowerCase()) ||
+    (serialStr && String(e.serial || "").trim().toLowerCase() === serialStr.toLowerCase()) ||
     (serialStr && e.id?.toLowerCase() === serialStr.toLowerCase()) ||
     (eqStr && e.name?.trim().toLowerCase() === eqStr.toLowerCase()) ||
     (eqStr && e.id?.toLowerCase() === eqStr.toLowerCase())
@@ -232,7 +232,7 @@ function generateWhatsAppPickupMessage(params: {
   if (!foundModel && params.rental?.equipmentItems && params.rental.equipmentItems.length > 0) {
     const itemModels = params.rental.equipmentItems
       .map((item: any) => {
-        const itemEq = allEq.find(e => e.id === item.equipmentId || (e.serial && item.serial && e.serial.trim().toLowerCase() === item.serial.trim().toLowerCase()));
+        const itemEq = allEq.find(e => e.id === item.equipmentId || (e.serial && item.serial && String(e.serial || "").trim().toLowerCase() === String(item.serial || "").trim().toLowerCase()));
         return itemEq?.model?.trim() || item.model?.trim() || itemEq?.name?.trim() || item.name?.trim();
       })
       .filter((m: string) => m && m.toLowerCase() !== "standard");
