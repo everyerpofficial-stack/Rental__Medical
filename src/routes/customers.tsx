@@ -58,6 +58,7 @@ import {
   sortLatestFirst,
   extractIdNumber,
 } from "@/lib/data-store";
+import { capitalizeWords } from "@/lib/utils";
 import { AgreementPreviewDialog } from "./rentals";
 
 export const Route = createFileRoute("/customers")({
@@ -362,14 +363,14 @@ function CustomerFormDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <Field label="Full Name" placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(e.target.value)} />
+          <Field label="Full Name" placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(capitalizeWords(e.target.value))} />
           
           <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Address Details</h4>
           </div>
-          <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(e.target.value)} />
-          <Field label="City" value={city} onChange={(e) => setCity(e.target.value)} />
+          <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(capitalizeWords(e.target.value))} />
+          <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(capitalizeWords(e.target.value))} />
+          <Field label="City" value={city} onChange={(e) => setCity(capitalizeWords(e.target.value))} />
           <div className="space-y-1.5">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
             <Select value={state} onValueChange={setState}>
@@ -1444,23 +1445,53 @@ function CustomersPage() {
   const filteredCustomers = sortLatestFirst(
     customers.filter((c) => {
       const q = search.toLowerCase().trim();
+      const tokens = q.split(/\s+/).filter(Boolean);
       const custRentals = rentalsList.filter(r => r.customerId === c.id);
-      const matchesSearch =
-        !q ||
-        c.name.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q) ||
-        String(c.phone || "").toLowerCase().includes(q) ||
-        String(c.altPhone || "").toLowerCase().includes(q) ||
-        String(c.contactNumber3 || "").toLowerCase().includes(q) ||
-        String(c.area || "").toLowerCase().includes(q) ||
-        String(c.address || "").toLowerCase().includes(q) ||
-        String(c.aadhaar || "").toLowerCase().includes(q) ||
-        String(c.pan || "").toLowerCase().includes(q) ||
-        custRentals.some(r => 
-          String(r.serial || "").toLowerCase().includes(q) ||
-          String(r.equipment || "").toLowerCase().includes(q) ||
-          (r.equipmentItems && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(q)))
+
+      const wordStartsWith = (text: string, token: string) => {
+        if (!text) return false;
+        const words = text.toLowerCase().split(/[\s,./\\()-]+/).filter(Boolean);
+        return words.some(w => w.startsWith(token));
+      };
+
+      const matchesSearch = !q || tokens.every((token) => {
+        // Name: word prefix match (e.g. "Srinivas" starts with "srini")
+        if (wordStartsWith(c.name, token)) return true;
+
+        // Customer ID (e.g. CUS-0061 or 0061)
+        if (c.id.toLowerCase().includes(token)) return true;
+
+        // Phone numbers
+        const tokenDigits = token.replace(/\D/g, "");
+        if (tokenDigits.length >= 2) {
+          if (String(c.phone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+          if (String(c.altPhone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+          if (String(c.contactNumber3 || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+        } else {
+          if (String(c.phone || "").toLowerCase().includes(token)) return true;
+          if (String(c.altPhone || "").toLowerCase().includes(token)) return true;
+          if (String(c.contactNumber3 || "").toLowerCase().includes(token)) return true;
+        }
+
+        // Area & City (word prefix match)
+        if (wordStartsWith(c.area || "", token)) return true;
+        if (wordStartsWith(c.city || "", token)) return true;
+
+        // Aadhaar & PAN
+        if (c.aadhaar && c.aadhaar.toLowerCase().includes(token)) return true;
+        if (c.pan && c.pan.toLowerCase().includes(token)) return true;
+
+        // Active Rental Serials / Equipment names
+        const hasRentalMatch = custRentals.some(r =>
+          (r.serial && wordStartsWith(r.serial, token)) ||
+          (r.equipment && wordStartsWith(r.equipment, token)) ||
+          (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.serial && wordStartsWith(ei.serial, token)))
         );
+        if (hasRentalMatch) return true;
+
+        return false;
+      });
+
       const matchesCity =
         cityFilter === "all" || c.city.toLowerCase() === cityFilter.toLowerCase();
       const matchesStatus =

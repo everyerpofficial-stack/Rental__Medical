@@ -435,7 +435,20 @@ export function getNextEquipmentNumber(category: string): string {
   const prefix = (category || "EQ").substring(0, 3).toUpperCase().trim();
   if (!isBrowser) return `EQ-${prefix}-0001`;
   const key = `medirent-eq-counter-${prefix}`;
-  const current = parseInt(localStorage.getItem(key) || "0", 10);
+  let current = parseInt(localStorage.getItem(key) || "0", 10);
+  try {
+    const list = getStorageItem<any[]>("medirent-equipment", initialEquipment);
+    list.forEach((eq: any) => {
+      if (eq.id && typeof eq.id === "string" && eq.id.startsWith(`EQ-${prefix}-`)) {
+        const numPart = parseInt(eq.id.replace(`EQ-${prefix}-`, ""), 10);
+        if (!isNaN(numPart) && numPart > current) {
+          current = numPart;
+        }
+      }
+    });
+  } catch (e) {
+    // ignore
+  }
   const next = current + 1;
   localStorage.setItem(key, next.toString());
   return `EQ-${prefix}-${String(next).padStart(4, "0")}`;
@@ -634,7 +647,18 @@ export interface OwnerItem {
   status: "Active" | "Inactive";
 }
 
-const initialOwners: OwnerItem[] = [];
+const initialOwners: OwnerItem[] = [
+  {
+    id: "OWN-0001",
+    name: "ReLife",
+    ownerName: "Deepak",
+    inventorySeries: "",
+    phone: "",
+    email: "",
+    commissionRate: 100,
+    status: "Active",
+  },
+];
 
 export function getOwners(): OwnerItem[] {
   const list = getStorageItem("medirent-owners", initialOwners);

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
+import { capitalizeWords } from "@/lib/utils";
 
 export const isOwnOwner = (ownerName?: string) => {
   if (!ownerName) return false;
@@ -102,8 +103,10 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       value: o.name,
       label: o.ownerName ? `${o.ownerName} (${o.name})` : o.name,
     }));
+    const hasOwn = list.some((item) => isOwnOwner(item.value));
+    const baseList = hasOwn ? list : [{ value: "ReLife", label: "ReLife (Self Owned)" }, ...list];
     return [
-      ...list,
+      ...baseList,
       { value: "Add New Owner", label: "✨ Add New Owner..." }
     ];
   }, [owners]);
@@ -121,7 +124,8 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
 
   useEffect(() => {
     if (isOpen) {
-      setOwners(getOwners());
+      const fetchedOwners = getOwners();
+      setOwners(fetchedOwners);
       const isPredefined = eq?.category ? EQUIPMENT_CATEGORIES.includes(eq.category) : true;
       setCategory(isPredefined ? (eq?.category || "") : "Custom");
       setCustomCategory(isPredefined ? "" : (eq?.category || ""));
@@ -129,7 +133,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       setSerial(eq?.serial || "");
       setModel(eq?.model || "");
       setManufacturer(eq?.manufacturer || "");
-      setOwner(eq?.owner || "");
+      
+      if (eq?.owner) {
+        setOwner(eq.owner);
+      } else {
+        const defaultOwn = fetchedOwners.find((o) => isOwnOwner(o.name))?.name || fetchedOwners[0]?.name || "ReLife";
+        setOwner(defaultOwn);
+      }
+
       setPurchaseDate(eq?.purchaseDate ? ensureYYYYMMDD(eq.purchaseDate) : "");
       setPurchaseCost(eq?.purchaseCost?.toString() || "");
       setStatus(eq?.status || "Available");
@@ -244,6 +255,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
     saveEquipment(savedEq);
     toast.success(eq ? `Equipment "${finalCategory}" updated successfully.` : "New equipment item created successfully.");
     if (onSave) onSave(savedEq);
+    setIsOpen(false);
     return true;
   };
 
@@ -279,14 +291,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
               <Input 
                 placeholder="Enter custom category name" 
                 value={customCategory} 
-                onChange={(e) => setCustomCategory(e.target.value)} 
+                onChange={(e) => setCustomCategory(capitalizeWords(e.target.value))} 
                 className="bg-background h-10" 
               />
             </div>
           )}
           <Field label="Serial Number"    placeholder="e.g. PHE-77821"        value={serial} onChange={(e) => setSerial(e.target.value)} />
-          <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(e.target.value)} />
-          <Field label="Manufacturer"     placeholder="e.g. Philips"          value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} />
+          <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(capitalizeWords(e.target.value))} />
+          <Field label="Manufacturer"     placeholder="e.g. Philips"          value={manufacturer} onChange={(e) => setManufacturer(capitalizeWords(e.target.value))} />
           <div className="space-y-1.5 flex flex-col justify-end">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Owner</Label>
             <Combobox
@@ -327,13 +339,13 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
                   label="Organization Name *" 
                   placeholder="e.g. Zenith Medtech Solutions" 
                   value={newOwnerOrg} 
-                  onChange={(e) => setNewOwnerOrg(e.target.value)} 
+                  onChange={(e) => setNewOwnerOrg(capitalizeWords(e.target.value))} 
                 />
                 <Field 
                   label="Owner Name *" 
                   placeholder="e.g. Dr. Amit Vyas" 
                   value={newOwnerIndividual} 
-                  onChange={(e) => setNewOwnerIndividual(e.target.value)} 
+                  onChange={(e) => setNewOwnerIndividual(capitalizeWords(e.target.value))} 
                 />
                 <Field 
                   label="Contact Phone" 
@@ -352,7 +364,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
                   placeholder="Full business address..." 
                   className="sm:col-span-2" 
                   value={newOwnerAddress} 
-                  onChange={(e) => setNewOwnerAddress(e.target.value)} 
+                  onChange={(e) => setNewOwnerAddress(capitalizeWords(e.target.value))} 
                 />
               </div>
             </div>
@@ -381,16 +393,14 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
           <DialogClose asChild>
             <Button variant="outline" type="button">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button
-              type="button"
-              onClick={(e) => {
-                if (!handleSave()) e.preventDefault();
-              }}
-            >
-              Save Equipment
-            </Button>
-          </DialogClose>
+          <Button
+            type="button"
+            onClick={() => {
+              handleSave();
+            }}
+          >
+            Save Equipment
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

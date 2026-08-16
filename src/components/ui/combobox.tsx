@@ -28,6 +28,17 @@ interface ComboboxProps {
   className?: string;
 }
 
+const customFilter = (value: string, search: string) => {
+  if (!search) return 1;
+  const searchClean = search.toLowerCase().trim();
+  if (!searchClean) return 1;
+
+  const valueLower = value.toLowerCase();
+  const tokens = searchClean.split(/\s+/).filter(Boolean);
+  const allMatch = tokens.every((token) => valueLower.includes(token));
+  return allMatch ? 1 : 0;
+};
+
 export function Combobox({
   options,
   value,
@@ -38,6 +49,35 @@ export function Combobox({
   className,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+
+  React.useEffect(() => {
+    if (!open) {
+      setSearch("");
+    }
+  }, [open]);
+
+  const filteredOptions = React.useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return options;
+    const tokens = q.split(/\s+/).filter(Boolean);
+
+    return options.filter((option) => {
+      const haystack = `${option.label} ${option.value} ${option.searchTerms || ""}`.toLowerCase();
+
+      return tokens.every((token) => {
+        // If token consists of digits (e.g. phone number or agreement number), require exact digit substring match
+        const digitsOnly = token.replace(/\D/g, "");
+        if (digitsOnly.length >= 3) {
+          const haystackDigits = haystack.replace(/\D/g, "");
+          if (haystackDigits.includes(digitsOnly)) return true;
+        }
+
+        // Substring / word match
+        return haystack.includes(token);
+      });
+    });
+  }, [options, search]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -64,15 +104,22 @@ export function Combobox({
         sideOffset={4}
         style={{ width: "var(--radix-popover-trigger-width)" }}
       >
-        <Command className="w-full">
-          <CommandInput placeholder={searchPlaceholder} className="text-[13px] h-9 border-none focus:ring-0" />
+        <Command className="w-full" shouldFilter={false}>
+          <CommandInput 
+            value={search} 
+            onValueChange={setSearch} 
+            placeholder={searchPlaceholder} 
+            className="text-[13px] h-9 border-none focus:ring-0" 
+          />
           <CommandList className="max-h-[250px] overflow-y-auto w-full p-1">
-            <CommandEmpty className="py-3.5 text-center text-[12.5px] text-muted-foreground">{emptyText}</CommandEmpty>
+            {filteredOptions.length === 0 && (
+              <CommandEmpty className="py-3.5 text-center text-[12.5px] text-muted-foreground">{emptyText}</CommandEmpty>
+            )}
             <CommandGroup className="p-0">
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label + " " + option.value + " " + (option.searchTerms || "")}
+                  value={option.value}
                   onSelect={() => {
                     onValueChange(option.value === value ? "" : option.value);
                     setOpen(false);

@@ -56,6 +56,7 @@ import {
 import { EquipmentFormDialog } from "@/components/EquipmentFormDialog";
 import { isOwnOwner } from "@/components/EquipmentFormDialog";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { capitalizeWords } from "@/lib/utils";
 
 export const Route = createFileRoute("/rentals")({
   head: () => ({ meta: [{ title: "Rentals — Relife" }] }),
@@ -1587,11 +1588,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Consulting Hospital Name</Label>
-                <Input placeholder="e.g. Apollo Hospitals" value={consultingHospital} onChange={(e) => setConsultingHospital(e.target.value)} />
+                <Input placeholder="e.g. Apollo Hospitals" value={consultingHospital} onChange={(e) => setConsultingHospital(capitalizeWords(e.target.value))} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Referred By</Label>
-                <Input placeholder="e.g. Dr. Sharma" value={referredBy} onChange={(e) => setReferredBy(e.target.value)} />
+                <Input placeholder="e.g. Dr. Sharma" value={referredBy} onChange={(e) => setReferredBy(capitalizeWords(e.target.value))} />
               </div>
 
               {/* Customer Selection or Creation */}
@@ -1614,19 +1615,19 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   <div className="grid gap-3 sm:grid-cols-2 mt-3 pt-3 border-t border-border/50">
                     <div className="sm:col-span-2 space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Full Name *</Label>
-                      <Input placeholder="Patient or guardian name" value={custName} onChange={(e) => setCustName(e.target.value)} />
+                      <Input placeholder="Patient or guardian name" value={custName} onChange={(e) => setCustName(capitalizeWords(e.target.value))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Address</Label>
-                      <Input placeholder="Full address" value={custAddress} onChange={(e) => setCustAddress(e.target.value)} />
+                      <Input placeholder="Full address" value={custAddress} onChange={(e) => setCustAddress(capitalizeWords(e.target.value))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Area</Label>
-                      <Input placeholder="Area / Locality" value={custArea} onChange={(e) => setCustArea(e.target.value)} />
+                      <Input placeholder="Area / Locality" value={custArea} onChange={(e) => setCustArea(capitalizeWords(e.target.value))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">City</Label>
-                      <Input value={custCity} onChange={(e) => setCustCity(e.target.value)} />
+                      <Input value={custCity} onChange={(e) => setCustCity(capitalizeWords(e.target.value))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
@@ -1805,17 +1806,23 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       </Button>
                     }
                     onSave={(newEq) => {
-                      setEquipmentList(getEquipment());
+                      const updatedList = getEquipment();
+                      setEquipmentList(updatedList);
                       if (newEq) {
                         setSelectedEquipments(prev => {
+                          const eqAny = newEq as any;
+                          const defaultMonthly = (eqAny.monthlyRent || eqAny.rentRate || 0).toString();
+                          const defaultDaily = (eqAny.dailyRent || (eqAny.monthlyRent ? Math.round(eqAny.monthlyRent / 30) : 0)).toString();
+                          const defaultDeposit = (eqAny.deposit || 0).toString();
+
                           const newItem = {
                             equipmentId: newEq.id,
-                            serial: newEq.serial,
-                            rentCycle: "Monthly",
-                            rentRate: "",
-                            monthlyRent: "",
-                            dailyRent: "",
-                            deposit: "",
+                            serial: newEq.serial || "",
+                            rentCycle: "Monthly" as const,
+                            rentRate: defaultMonthly !== "0" ? defaultMonthly : "",
+                            monthlyRent: defaultMonthly !== "0" ? defaultMonthly : "",
+                            dailyRent: defaultDaily !== "0" ? defaultDaily : "",
+                            deposit: defaultDeposit !== "0" ? defaultDeposit : "",
                           };
                           const updated = (prev.length === 1 && !prev[0].equipmentId) ? [newItem] : [...prev, newItem];
                           setTimeout(() => {
@@ -2147,7 +2154,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                       value={item.name}
                                       onChange={(e) => {
                                         const newItems = [...additionalItems];
-                                        newItems[index].name = e.target.value;
+                                        newItems[index].name = capitalizeWords(e.target.value);
                                         setAdditionalItems(newItems);
                                       }}
                                       className="h-7 text-[12px] p-1.5 flex-1 bg-card border-border/80 focus-visible:ring-primary/20"
@@ -2589,7 +2596,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label>
-                    <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(e.target.value)} className="bg-background h-10" />
+                    <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(capitalizeWords(e.target.value))} className="bg-background h-10" />
                   </div>
                 </>
               )}

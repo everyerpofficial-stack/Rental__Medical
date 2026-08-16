@@ -840,8 +840,8 @@ function ExchangesPage() {
                       const displayPhone = phone1 ? ` · ${phone1}` : "";
                       return {
                         value: r.id,
-                        label: `${r.id} — ${r.customer}${displayPhone}`,
-                        searchTerms: `${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""}`,
+                        label: `${r.customer}${displayPhone}`,
+                        searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""}`,
                       };
                     })}
                   value={selectedAgreementId}

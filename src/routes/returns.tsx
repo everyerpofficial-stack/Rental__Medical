@@ -66,6 +66,96 @@ import {
   extractIdNumber,
 } from "@/lib/data-store";
 
+function extractMapLink(locationAddress?: string, address?: string, latitude?: any, longitude?: any, rental?: any, customer?: any): string {
+  const lat = Number(latitude || rental?.latitude || customer?.latitude) || 0;
+  const lng = Number(longitude || rental?.longitude || customer?.longitude) || 0;
+  if (lat !== 0 || lng !== 0) {
+    return `https://www.google.com/maps?q=${lat},${lng}`;
+  }
+
+  const extractUrl = (str?: string): string | null => {
+    if (!str) return null;
+    const urlMatch = str.match(/https?:\/\/[^\s]+/i);
+    return urlMatch ? urlMatch[0] : null;
+  };
+
+  const extractCoords = (str?: string): string | null => {
+    if (!str) return null;
+    const coordMatch = str.match(/([-\d.]+)\s*,\s*([-\d.]+)/);
+    if (coordMatch) {
+      const cLat = Number(coordMatch[1]);
+      const cLng = Number(coordMatch[2]);
+      if (!isNaN(cLat) && !isNaN(cLng) && (cLat !== 0 || cLng !== 0)) {
+        return `https://www.google.com/maps?q=${cLat},${cLng}`;
+      }
+    }
+    return null;
+  };
+
+  const targets = [
+    locationAddress,
+    rental?.locationAddress,
+    customer?.locationAddress,
+    address,
+    rental?.address,
+    customer?.address,
+    rental?.mapUrl,
+    rental?.googleMapsUrl,
+    rental?.mapLink,
+  ];
+
+  for (const t of targets) {
+    if (t && typeof t === "string") {
+      const url = extractUrl(t);
+      if (url) return url;
+    }
+  }
+
+  for (const t of targets) {
+    if (t && typeof t === "string") {
+      const mapFromCoord = extractCoords(t);
+      if (mapFromCoord) return mapFromCoord;
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const docs = JSON.parse(localStorage.getItem("medirent-documents") || "[]");
+      const agreementId = rental?.id || rental?.agreementNumber || rental?.agreementId;
+      const customerId = rental?.customerId || customer?.id;
+      
+      const locDoc = docs.find((d: any) => {
+        const isLoc = d.category === "Location Tagged" || d.category === "Location" || d.name?.toLowerCase().includes("location");
+        if (!isLoc) return false;
+        if (agreementId && (d.agreementId === agreementId || d.rentalId === agreementId)) return true;
+        if (customerId && d.customerId === customerId) return true;
+        return false;
+      });
+
+      if (locDoc) {
+        const fileData = locDoc.fileData || "";
+        const url = extractUrl(fileData);
+        if (url) return url;
+        const coords = extractCoords(fileData);
+        if (coords) return coords;
+
+        if (fileData.includes("base64,")) {
+          const b64 = fileData.split("base64,")[1];
+          const decoded = atob(b64);
+          const decUrl = extractUrl(decoded);
+          if (decUrl) return decUrl;
+          const decCoords = extractCoords(decoded);
+          if (decCoords) return decCoords;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return "";
+}
+
 function generateWhatsAppPickupMessage(params: {
   customerName?: any;
   rentDate?: any;
@@ -81,6 +171,8 @@ function generateWhatsAppPickupMessage(params: {
   longitude?: any;
   collectAmount?: number;
   refundAmount?: number;
+  rental?: any;
+  customer?: any;
 }) {
   const name = params.customerName ? String(params.customerName) : "Customer";
   
@@ -112,23 +204,39 @@ function generateWhatsAppPickupMessage(params: {
   }
   const line2 = phoneList.join(" & ") || "N/A";
 
-  // Line 3: Equipment / Serial / Model
-  const serialStr = params.serial != null ? String(params.serial) : "";
-  const modelStr = params.model != null ? String(params.model) : "";
-  const eqStr = params.equipment != null ? String(params.equipment) : "";
+  // Line 3: Model Number (prefer model over serial)
+  let modelStr = params.model != null ? String(params.model).trim() : "";
+  const serialStr = params.serial != null ? String(params.serial).trim() : "";
+  const eqStr = params.equipment != null ? String(params.equipment).trim() : "";
+
+  // If model is empty or "Standard", attempt to look up equipment in inventory by serial/id/name
+  if ((!modelStr || modelStr.toLowerCase() === "standard") && (serialStr || eqStr)) {
+    try {
+      const allEq = getEquipment();
+      const match = allEq.find(e => 
+        (serialStr && e.serial?.trim().toLowerCase() === serialStr.toLowerCase()) ||
+        (e.id && e.id.toLowerCase() === serialStr.toLowerCase()) ||
+        (eqStr && e.name?.trim().toLowerCase() === eqStr.toLowerCase())
+      );
+      if (match && match.model && match.model.trim() !== "" && match.model.toLowerCase() !== "standard") {
+        modelStr = match.model.trim();
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   const equipParts: string[] = [];
-  if (serialStr && serialStr !== "XXXX") {
-    equipParts.push(serialStr);
-  } else if (modelStr && modelStr !== "Standard") {
+  if (modelStr && modelStr.toLowerCase() !== "standard") {
     equipParts.push(modelStr);
-  }
-  if (equipParts.length === 0 && eqStr) {
+  } else if (serialStr && serialStr !== "XXXX") {
+    equipParts.push(serialStr);
+  } else if (eqStr) {
     equipParts.push(eqStr);
   }
-  const line3 = equipParts.join(" - ") || eqStr || "Equipment";
+  const line3 = equipParts.join(" - ") || modelStr || serialStr || eqStr || "Equipment";
 
-  // Line 4: Area ONLY (Do NOT show full street/C/o address)
+  // Line 4: "Return at Area Name"
   const areaStr = params.area != null ? String(params.area).trim() : "";
   const addrStr = params.address != null ? String(params.address).trim() : "";
 
@@ -141,21 +249,11 @@ function generateWhatsAppPickupMessage(params: {
       displayArea = addrStr;
     }
   }
-  const line4 = displayArea || "Customer Location";
+  const rawArea = displayArea || "Customer Location";
+  const line4 = rawArea.toLowerCase().startsWith("return at") ? rawArea : `Return at ${rawArea}`;
 
-  // Line 5: Map location link (ONLY if location is explicitly tagged in rental agreement)
-  let mapLink = "";
-  const locAddrStr = params.locationAddress != null ? String(params.locationAddress).trim() : "";
-
-  if (locAddrStr.startsWith("http://") || locAddrStr.startsWith("https://")) {
-    mapLink = locAddrStr;
-  } else if (addrStr.startsWith("http://") || addrStr.startsWith("https://")) {
-    mapLink = addrStr;
-  } else if (params.latitude && params.longitude && (Number(params.latitude) !== 0 || Number(params.longitude) !== 0)) {
-    mapLink = `https://www.google.com/maps?q=${params.latitude},${params.longitude}`;
-  }
-  // Note: If location was NOT tagged in the rental agreement, mapLink remains empty "" (no search query fallback)
-
+  // Line 5: Map location link (extracted from latitude/longitude, locationAddress, address, or tagged documents)
+  const mapLink = extractMapLink(params.locationAddress, params.address, params.latitude, params.longitude, params.rental, params.customer);
   const line5 = mapLink;
 
   // Line 6: Collect Amount or Refund Amount
@@ -227,8 +325,10 @@ function WhatsAppReturnMessageModal({
       longitude,
       collectAmount: pending > 0 ? pending : (ret?.refund < 0 ? Math.abs(ret.refund) : 0),
       refundAmount: ret?.refund > 0 ? ret.refund : 0,
+      rental,
+      customer,
     });
-  }, [customerName, rentDate, phone, altPhone, equipment, serial, model, area, address, locationAddress, latitude, longitude, pending, ret]);
+  }, [customerName, rentDate, phone, altPhone, equipment, serial, model, area, address, locationAddress, latitude, longitude, pending, ret, rental, customer]);
 
   useEffect(() => {
     if (open) {
@@ -867,12 +967,22 @@ function ReturnsPage() {
     .map((item: any) => getEquipment().find((e) => e.id === item.equipmentId)?.name || item.equipmentId)
     .join(", ") || selectedRental?.equipment || "Unknown Equipment";
 
-  const totalRentalDeposit = rentalEquipments.reduce((sum: number, item: any) => sum + cleanNum(item.deposit), 0);
+  const allItems = selectedRental?.equipmentItems || rentalEquipments;
+  const totalAllItemsDeposit = allItems.reduce((sum: number, item: any) => sum + cleanNum(item.deposit), 0) || cleanNum(selectedRental?.deposit);
   const returningItemsDeposit = returningItems.reduce((sum: number, item: any) => sum + cleanNum(item.deposit), 0);
-  const depositRatio = totalRentalDeposit > 0 ? (returningItemsDeposit / totalRentalDeposit) : 1;
-  const deposit = selectedRental && (selectedRental as any).depositPaidAmount !== undefined
-    ? Math.round(cleanNum((selectedRental as any).depositPaidAmount) * depositRatio)
-    : returningItemsDeposit;
+
+  let deposit = returningItemsDeposit;
+  if (selectedRental && (selectedRental as any).depositPaidAmount !== undefined && (selectedRental as any).depositPaidAmount !== null) {
+    const paidDep = cleanNum((selectedRental as any).depositPaidAmount);
+    const isFullyPaid = selectedRental.depositPaymentStatus === "Paid" || paidDep >= totalAllItemsDeposit;
+
+    if (isFullyPaid) {
+      deposit = returningItemsDeposit;
+    } else if (totalAllItemsDeposit > 0) {
+      const ratio = returningItemsDeposit / totalAllItemsDeposit;
+      deposit = Math.min(returningItemsDeposit, Math.round(paidDep * ratio));
+    }
+  }
 
   const dmg = cleanNum(damageCharges);
   const disc = cleanNum(discount);
@@ -1150,8 +1260,8 @@ function ReturnsPage() {
                     const displayRentDate = rentDateStr ? ` · Rent Date: ${rentDateStr}` : "";
                     return {
                       value: r.id,
-                      label: `${r.id} — ${r.customer}${displayPhone}${displayRentDate}`,
-                      searchTerms: `${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr}`,
+                      label: `${r.customer}${displayPhone}${displayRentDate}`,
+                      searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr}`,
                     };
                   })}
                 />
@@ -1914,6 +2024,8 @@ function ReturnsPage() {
                           longitude: (selectedRental as any)?.longitude,
                           collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
                           refundAmount: netRefund > 0 ? netRefund : 0,
+                          rental: selectedRental,
+                          customer: selectedCustomer,
                         });
                         navigator.clipboard.writeText(msg);
                         toast.success("WhatsApp pickup message copied to clipboard!");
@@ -1941,6 +2053,8 @@ function ReturnsPage() {
                           longitude: (selectedRental as any)?.longitude,
                           collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
                           refundAmount: netRefund > 0 ? netRefund : 0,
+                          rental: selectedRental,
+                          customer: selectedCustomer,
                         });
                         const cleanPhone = (selectedCustomer?.phone || (selectedRental as any)?.phone || "").replace(/\D/g, "");
                         const text = encodeURIComponent(msg);
@@ -1974,6 +2088,8 @@ function ReturnsPage() {
                     longitude: (selectedRental as any)?.longitude,
                     collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
                     refundAmount: netRefund > 0 ? netRefund : 0,
+                    rental: selectedRental,
+                    customer: selectedCustomer,
                   })}
                   className="font-mono text-[12.5px] bg-background border-emerald-300 dark:border-emerald-800 leading-relaxed font-semibold cursor-text text-foreground"
                 />
