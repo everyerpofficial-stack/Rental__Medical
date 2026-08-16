@@ -4397,90 +4397,68 @@ const initialIncomeExpenses: IncomeExpenseItem[] = [
   {
     id: "EXP-1001",
     date: getLocalYYYYMMDD(new Date()),
-    entity: "Jain Finance",
+    entity: "ReLife Medical Technologies",
     type: "Income",
-    category: "Interest Collection",
+    category: "Equipment Rentals",
     amount: 45000,
     paymentMode: "Bank Transfer",
     referenceNo: "HDFC982341",
-    description: "Monthly interest collection from active financing accounts",
+    description: "Monthly rental income collections for medical equipment",
   },
   {
     id: "EXP-1002",
     date: getLocalYYYYMMDD(new Date()),
-    entity: "Jain Finance",
+    entity: "ReLife Medical Technologies",
     type: "Income",
-    category: "Loan Processing Fee",
+    category: "Accessories & Spares",
     amount: 15000,
     paymentMode: "UPI",
-    referenceNo: "UPI/6548921/JF",
-    description: "Processing fee for Q3 financing disbursements",
+    referenceNo: "UPI/6548921/RL",
+    description: "Sales of oxygen masks, tubes, and accessories",
   },
   {
     id: "EXP-1003",
     date: getLocalYYYYMMDD(new Date()),
-    entity: "Jain Finance",
+    entity: "ReLife Medical Technologies",
     type: "Expense",
-    category: "Office Rent",
+    category: "Office & Warehouse Rent",
     amount: 12000,
     paymentMode: "Bank Transfer",
     referenceNo: "NEFT449812",
-    description: "Branch office monthly lease rental",
+    description: "Monthly lease for medical store & equipment warehouse",
   },
   {
     id: "EXP-1004",
     date: getLocalYYYYMMDD(new Date(Date.now() - 86400000 * 2)),
-    entity: "Jain Finance",
+    entity: "ReLife Medical Technologies",
     type: "Expense",
-    category: "Staff Salaries",
+    category: "Biomedical Staff Salaries",
     amount: 25000,
     paymentMode: "Bank Transfer",
     referenceNo: "SAL-2026-08",
-    description: "Monthly salary disbursement for field executive team",
+    description: "Monthly salary disbursement for biomedical tech & delivery team",
   },
   {
     id: "EXP-1005",
     date: getLocalYYYYMMDD(new Date()),
-    entity: "Jain Mobile",
+    entity: "ReLife Medical Technologies",
     type: "Income",
-    category: "Accessories Sales",
+    category: "Device Maintenance",
     amount: 18500,
     paymentMode: "Cash",
     referenceNo: "CS-8891",
-    description: "Store sales — chargers, cases, and screen guards",
+    description: "Oxygen concentrator service and repair charges",
   },
   {
     id: "EXP-1006",
-    date: getLocalYYYYMMDD(new Date(Date.now() - 86400000)),
-    entity: "Jain Mobile",
-    type: "Income",
-    category: "Device Repairs",
-    amount: 8200,
-    paymentMode: "UPI",
-    referenceNo: "UPI/771029/JM",
-    description: "Display replacement and repair service revenue",
-  },
-  {
-    id: "EXP-1007",
     date: getLocalYYYYMMDD(new Date(Date.now() - 86400000 * 3)),
-    entity: "Jain Mobile",
+    entity: "ReLife Medical Technologies",
     type: "Expense",
-    category: "Inventory Restock",
+    category: "Equipment Restock & Parts",
     amount: 32000,
     paymentMode: "Bank Transfer",
     referenceNo: "PO-99120",
-    description: "Bulk purchase of mobile accessories and spares",
-  },
-  {
-    id: "EXP-1008",
-    date: getLocalYYYYMMDD(new Date(Date.now() - 86400000 * 4)),
-    entity: "Jain Mobile",
-    type: "Expense",
-    category: "Electricity & Utility",
-    amount: 3500,
-    paymentMode: "UPI",
-    referenceNo: "EB-2026-AUG",
-    description: "Commercial power bill payment for store premises",
+    description: "Purchase of medical equipment spare parts and filters",
   },
 ];
 
@@ -4493,7 +4471,15 @@ export function getIncomeExpenses(): IncomeExpenseItem[] {
   }
   try {
     const list = JSON.parse(stored);
-    return Array.isArray(list) ? list : initialIncomeExpenses;
+    if (!Array.isArray(list)) return initialIncomeExpenses;
+
+    const cleaned = list.filter((e: any) => 
+      !e.entity || (!e.entity.includes("Jain Finance") && !e.entity.includes("Jain Mobile"))
+    );
+    if (cleaned.length !== list.length) {
+      setStorageItem("medirent-income-expenses", cleaned);
+    }
+    return cleaned.length > 0 ? cleaned : initialIncomeExpenses;
   } catch (_) {
     return initialIncomeExpenses;
   }

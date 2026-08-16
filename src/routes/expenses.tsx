@@ -44,27 +44,26 @@ export const Route = createFileRoute("/expenses")({
   component: ExpensesPage,
 });
 
-const DEFAULT_ENTITIES = ["All Entities", "Jain Finance", "Jain Mobile", "MediRent Healthcare"];
+const DEFAULT_ENTITIES = ["All Entities", "ReLife Medical Technologies", "ReLife Healthcare"];
 
 const CATEGORIES_INCOME = [
-  "Interest Collection",
-  "Loan Processing Fee",
-  "Accessories Sales",
-  "Device Repairs",
-  "Rental Collection",
-  "Consultation",
-  "Other Income",
+  "Equipment Rentals",
+  "Accessories & Spares Sales",
+  "Device Maintenance",
+  "Oxygen Cylinder Refills",
+  "Security Deposit Forfeiture",
+  "Other Medical Income",
 ];
 
 const CATEGORIES_EXPENSE = [
-  "Office Rent",
-  "Staff Salaries",
-  "Inventory Restock",
+  "Office & Warehouse Rent",
+  "Biomedical Staff Salaries",
+  "Equipment Restock & Parts",
   "Electricity & Utility",
-  "Equipment Maintenance",
-  "Travel & Conveyance",
-  "Vendor Payment",
-  "Miscellaneous Expense",
+  "Device Repairs & Service",
+  "Travel & Delivery Conveyance",
+  "Marketing & Operations",
+  "Other Medical Expense",
 ];
 
 const CHART_COLORS = ["#0284c7", "#16a34a", "#eab308", "#f97316", "#8b5cf6", "#ec4899", "#64748b"];
@@ -679,7 +678,7 @@ function ExpensesPage() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         initialItem={editingItem}
-        defaultEntity={selectedEntity === "All Entities" ? "Jain Finance" : selectedEntity}
+        defaultEntity={selectedEntity === "All Entities" ? "ReLife Medical Technologies" : selectedEntity}
         onSave={refreshData}
       />
     </AppShell>
@@ -784,9 +783,8 @@ function IncomeExpenseFormDialog({
                 <SelectValue placeholder="Select Business" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Jain Finance">Jain Finance</SelectItem>
-                <SelectItem value="Jain Mobile">Jain Mobile</SelectItem>
-                <SelectItem value="MediRent Healthcare">MediRent Healthcare</SelectItem>
+                <SelectItem value="ReLife Medical Technologies">ReLife Medical Technologies</SelectItem>
+                <SelectItem value="ReLife Healthcare">ReLife Healthcare</SelectItem>
               </SelectContent>
             </Select>
           </div>
