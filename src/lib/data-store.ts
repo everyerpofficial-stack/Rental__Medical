@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   customers as initialCustomers,
   equipment as initialEquipment,
@@ -479,7 +480,25 @@ function getStorageItem<T>(key: string, initialData: T): T {
 
 function setStorageItem<T>(key: string, data: T): void {
   if (isBrowser) {
-    localStorage.setItem(key, JSON.stringify(data));
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      // QuotaExceededError — localStorage is full (5-10MB browser limit).
+      // This typically happens when base64 images/documents accumulate.
+      console.error(`[Storage] Failed to write key "${key}":`, e);
+      const isQuota = e instanceof DOMException && (
+        e.name === "QuotaExceededError" ||
+        e.code === 22 ||    // Legacy Chrome/Safari code
+        e.code === 1014     // Legacy Firefox code
+      );
+      if (isQuota) {
+        toast.error(
+          "Storage full! Unable to save. Please go to Settings → Export Data to back up, then clear old delivery photos/documents to free space.",
+          { duration: 10000 }
+        );
+      }
+      throw e; // Re-throw so callers know the write failed
+    }
     if (key !== "medirent-last-write-time" && key !== "medirent-gsheets-url") {
       localStorage.setItem("medirent-last-write-time", Date.now().toString());
       // BUG-1 FIX: Dispatch event so useDatabaseTrigger() on all pages
@@ -489,6 +508,7 @@ function setStorageItem<T>(key: string, data: T): void {
     }
   }
 }
+
 
 export function calculateCustomerStatus(customer: any, rentalsList: any[]) {
   const customerRentals = rentalsList.filter((r: any) => r.customerId === customer.id);

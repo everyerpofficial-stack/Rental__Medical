@@ -1226,6 +1226,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     if (isSubmitting) return;
     setIsSubmitting(true);
 
+    try {
     let customerId = selectedCustomerId;
     let customerName = selectedCustomer?.name || "";
 
@@ -1537,9 +1538,23 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     }
 
     toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
-    setIsSubmitting(false);
     setOpen(false);
     if (onSave) onSave();
+    } catch (error) {
+      console.error("[Save Agreement] Failed:", error);
+      // Only show generic error toast if it's not a quota error
+      // (setStorageItem already shows a specific toast for quota errors)
+      const isQuota = error instanceof DOMException && (
+        error.name === "QuotaExceededError" ||
+        error.code === 22 ||
+        error.code === 1014
+      );
+      if (!isQuota) {
+        toast.error("Failed to save the agreement. Please try again. If the problem persists, export your data from Settings and contact support.");
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
