@@ -1004,13 +1004,13 @@ function EquipmentPage() {
     const activeRental = rentalsList.find(r => (r.equipmentId === e.id || (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.equipmentId === e.id))) && r.status === "Active");
     const activeCustomer = activeRental ? customersList.find((c: any) => c.id === activeRental.customerId) : null;
 
-    const matchesSearch = !q || 
-      e.name.toLowerCase().includes(q) || 
-      String(e.serial || "").toLowerCase().includes(q) || 
+    const matchesSearch = !q ||
+      String(e.name || "").toLowerCase().includes(q) ||
+      String(e.serial || "").toLowerCase().includes(q) ||
       String(e.model || "").toLowerCase().includes(q) ||
       String(e.owner || "").toLowerCase().includes(q) ||
       (activeCustomer && (
-        activeCustomer.name.toLowerCase().includes(q) ||
+        String(activeCustomer.name || "").toLowerCase().includes(q) ||
         String(activeCustomer.phone || "").toLowerCase().includes(q) ||
         String(activeCustomer.altPhone || "").toLowerCase().includes(q) ||
         String(activeCustomer.contactNumber3 || "").toLowerCase().includes(q)

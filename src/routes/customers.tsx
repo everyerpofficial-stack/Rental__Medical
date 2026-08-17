@@ -110,7 +110,7 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
 
   const normalizedName = name.toLowerCase();
   const isDuplicate = getCustomers().some(
-    (c) => c.name.trim().toLowerCase() === normalizedName && c.phone.replace(/\D/g, "") === phoneDigits
+    (c) => (c.name || "").trim().toLowerCase() === normalizedName && (c.phone || "").replace(/\D/g, "") === phoneDigits
   );
   if (isDuplicate) return { ok: false, error: `${name}: Customer with this name and phone number already exists` };
 
@@ -264,8 +264,8 @@ function CustomerFormDialog({
     const isDuplicate = getCustomers().some(
       (c) =>
         c.id !== customer?.id &&
-        c.name.trim().toLowerCase() === normalizedName &&
-        c.phone.replace(/\D/g, "") === normalizedPhone
+        (c.name || "").trim().toLowerCase() === normalizedName &&
+        (c.phone || "").replace(/\D/g, "") === normalizedPhone
     );
     if (isDuplicate) {
       toast.error(`A customer named "${name.trim()}" with this phone number already exists.`);
@@ -1481,9 +1481,9 @@ function CustomersPage() {
       const tokens = q.split(/\s+/).filter(Boolean);
       const custRentals = rentalsList.filter(r => r.customerId === c.id);
 
-      const wordStartsWith = (text: string, token: string) => {
+      const wordStartsWith = (text: unknown, token: string) => {
         if (!text) return false;
-        const words = text.toLowerCase().split(/[\s,./\\()-]+/).filter(Boolean);
+        const words = String(text).toLowerCase().split(/[\s,./\\()-]+/).filter(Boolean);
         return words.some(w => w.startsWith(token));
       };
 
@@ -1492,7 +1492,7 @@ function CustomersPage() {
         if (wordStartsWith(c.name, token)) return true;
 
         // Customer ID (e.g. CUS-0061 or 0061)
-        if (c.id.toLowerCase().includes(token)) return true;
+        if (String(c.id || "").toLowerCase().includes(token)) return true;
 
         // Phone numbers
         const tokenDigits = token.replace(/\D/g, "");
@@ -1511,8 +1511,8 @@ function CustomersPage() {
         if (wordStartsWith(c.city || "", token)) return true;
 
         // Aadhaar & PAN
-        if (c.aadhaar && c.aadhaar.toLowerCase().includes(token)) return true;
-        if (c.pan && c.pan.toLowerCase().includes(token)) return true;
+        if (c.aadhaar && String(c.aadhaar).toLowerCase().includes(token)) return true;
+        if (c.pan && String(c.pan).toLowerCase().includes(token)) return true;
 
         // Active Rental Serials / Equipment names
         const hasRentalMatch = custRentals.some(r =>
@@ -1526,13 +1526,13 @@ function CustomersPage() {
       });
 
       const matchesCity =
-        cityFilter === "all" || c.city.toLowerCase() === cityFilter.toLowerCase();
+        cityFilter === "all" || String(c.city || "").toLowerCase() === cityFilter.toLowerCase();
       const matchesStatus =
         statusFilter === "all-status"
           ? true
           : statusFilter === "KYC Pending"
             ? kycPendingSet.has(c.id)
-            : c.status.toLowerCase() === statusFilter.toLowerCase();
+            : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesCity && matchesStatus;
     })
   );

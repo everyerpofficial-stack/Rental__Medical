@@ -1298,7 +1298,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       const normalizedName = custName.trim().toLowerCase();
       const normalizedPhone = custPhone.replace(/\D/g, "");
       const isDuplicateCustomer = getCustomers().some(
-        (c) => c.name.trim().toLowerCase() === normalizedName && c.phone.replace(/\D/g, "") === normalizedPhone
+        (c) => (c.name || "").trim().toLowerCase() === normalizedName && (c.phone || "").replace(/\D/g, "") === normalizedPhone
       );
       if (isDuplicateCustomer) {
         toast.error(`A customer named "${custName.trim()}" with this phone number already exists. Select them from the customer list instead of adding new.`);

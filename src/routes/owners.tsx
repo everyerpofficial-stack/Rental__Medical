@@ -938,12 +938,12 @@ function OwnersPage() {
     const q = search.toLowerCase();
     const matchesSearch =
       !q ||
-      o.name.toLowerCase().includes(q) ||
-      (o.ownerName || "").toLowerCase().includes(q) ||
-      o.phone.toLowerCase().includes(q);
+      String(o.name || "").toLowerCase().includes(q) ||
+      String(o.ownerName || "").toLowerCase().includes(q) ||
+      String(o.phone || "").toLowerCase().includes(q);
 
     const matchesStatus =
-      statusTab === "all" || o.status.toLowerCase() === statusTab.toLowerCase();
+      statusTab === "all" || String(o.status || "").toLowerCase() === statusTab.toLowerCase();
 
     return matchesSearch && matchesStatus;
   });
