@@ -4205,8 +4205,8 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // 3. Initial advance paid on agreement creation (only if no recorded payments exist in paymentsList for this agreement)
   const hasRecordedPayments = paymentsList.some((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"));
 
-  const initialPaid = (!excludeInitial && !hasRecordedPayments && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial")) 
-    ? (Number(rental.rentPaidAmount) || Number(rental.totalRent) || Number(rental.monthlyRent) || 0) 
+  const initialPaid = (!excludeInitial && !hasRecordedPayments && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial"))
+    ? Math.round((Number(rental.rentPaidAmount) || Number(rental.totalRent) || Number(rental.monthlyRent) || 0) * shareRatio)
     : (!excludeInitial && hasRecordedPayments && rental.rentalPaymentStatus === "Paid" && !paymentsList.some(p => p.agreement === rental.id && p.equipmentId === equipmentId) && sharedPaymentsPaid === 0 ? Math.round((Number(rental.rentPaidAmount) || Number(rental.monthlyRent) || 0) * shareRatio) : 0);
 
   const totalShared = sharedPaymentsPaid;
