@@ -304,13 +304,17 @@ function ReportsPage() {
     setSelectedCategoryFilter("all-categories");
   }, [activeStatement]);
 
-  const customersList = getCustomers();
-  const rentalsList = getRentals();
-  const paymentsList = getPayments();
-  const equipmentList = getEquipment();
-  const returnsList = getReturns();
-  const exchangesList = getExchanges();
-  const ownersList = getOwners();
+  // PERF FIX: these were bare getX() calls in the render body, so every
+  // re-render (every keystroke in search/date filters, every db-updated
+  // event) re-ran getRentals()/getCustomers()'s repair + Sheets-sync passes
+  // for all 7 datasets. Memoize on dbVersion like the other list pages do.
+  const customersList = useMemo(() => getCustomers(), [dbVersion]);
+  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const paymentsList = useMemo(() => getPayments(), [dbVersion]);
+  const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
+  const returnsList = useMemo(() => getReturns(), [dbVersion]);
+  const exchangesList = useMemo(() => getExchanges(), [dbVersion]);
+  const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
   // Dynamic Top Customers calculation from actual database records
   const dynamicTopCustomers = customersList

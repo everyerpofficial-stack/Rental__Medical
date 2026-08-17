@@ -621,7 +621,7 @@ function PaymentsPage() {
   }, [dbVersion]);
 
   // Group payments by Agreement ID
-  const rentalsList = getRentals();
+  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
   const agreementMap = new Map<string, {
     agreementId: string;
     customerName: string;

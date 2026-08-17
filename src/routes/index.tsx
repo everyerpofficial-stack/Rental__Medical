@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,15 +85,21 @@ const getCurrentFY = (): string => {
 };
 
 function Dashboard() {
-  useDatabaseTrigger();
+  const dbVersion = useDatabaseTrigger();
   const [activeActivity, setActiveActivity] = useState<string>("All");
-  const kpis = getDynamicKPIs();
-  
-  const paymentsList = getPayments();
-  const rentalsList = getRentals();
-  const equipmentList = getEquipment();
-  const returnsList = getReturns();
-  const ownersList = getOwners();
+  // PERF FIX: these all fan out into getRentals()/getCustomers(), which carry
+  // self-healing repair passes and (when corrections are found) live Google
+  // Sheets sync calls. Calling them bare in the render body re-ran that full
+  // chain on every re-render — including every 15s auto-sync tick and every
+  // db write anywhere in the app — which is what made the Dashboard (the
+  // landing page) feel slow to open. Memoize on dbVersion so it only
+  // recomputes when the underlying data actually changed.
+  const kpis = useMemo(() => getDynamicKPIs(), [dbVersion]);
+  const paymentsList = useMemo(() => getPayments(), [dbVersion]);
+  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
+  const returnsList = useMemo(() => getReturns(), [dbVersion]);
+  const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
   // Calculate equipment counts per owner
   const equipmentByOwner = ownersList.map((owner) => {
