@@ -1,76 +1,45 @@
 /**
  * useRealtimeSync.ts
- * Lightweight polling hook that keeps both Finance and Mobile stores
- * in sync with Google Sheets by periodically pulling fresh data.
+ * Lightweight polling hook that keeps data in sync with Google Sheets by periodically pulling fresh data.
  *
  * - `useRealtimeSync()` — call once in the root component; polls every 30 s
- *   while the tab is visible and sync is enabled in either store.
- * - `triggerManualSync(pull?)` — imperative helper pages can call to force
- *   an immediate pull (and optional push) outside the polling cycle.
+ *   while the tab is visible and sync is enabled.
+ * - `triggerManualSync(force?)` — imperative helper pages can call to force
+ *   an immediate pull outside the polling cycle.
  */
 
 import { useEffect, useRef } from "react";
-import { useStore } from "./store";
-import { useMobileStore } from "./mobileStore";
+import { syncFromSheetsToLocalStorage } from "./data-store";
+import { isGSheetsEnabled } from "./google-sheets";
 
 /** Default polling interval in milliseconds */
 const POLL_MS = 30_000;
 
 /**
- * Attempt to pull (and optionally push) data for both stores.
- * Returns `true` if at least one store synced successfully.
+ * Attempt to pull data from Google Sheets.
+ * Returns `true` if sync is enabled and executed.
  *
- * @param pullOnly  If `true`, only pull from sheets (skip push). Default `true`.
+ * @param force  If `true`, bypass rate limiting / cooldown. Default `false`.
  */
-export async function triggerManualSync(pullOnly = true): Promise<boolean> {
-  const financeState = useStore.getState();
-  const mobileState = useMobileStore.getState();
+export async function triggerManualSync(force = false): Promise<boolean> {
+  if (!isGSheetsEnabled()) return false;
 
-  const financeEnabled = financeState.sheetsConfig?.enabled && financeState.sheetsConfig?.url;
-  const mobileEnabled = mobileState.sheetsConfig?.enabled && mobileState.sheetsConfig?.url;
-
-  if (!financeEnabled && !mobileEnabled) return false;
-
-  const results: boolean[] = [];
-
-  // Finance store
-  if (financeEnabled) {
-    try {
-      if (!pullOnly) await financeState.syncToSheets();
-      const res = await financeState.loadFromSheets();
-      results.push(res.ok);
-    } catch {
-      results.push(false);
-    }
+  try {
+    await syncFromSheetsToLocalStorage(force);
+    return true;
+  } catch {
+    return false;
   }
-
-  // Mobile store
-  if (mobileEnabled) {
-    try {
-      if (!pullOnly) await mobileState.syncToSheets();
-      const res = await mobileState.loadFromSheets();
-      results.push(res.ok);
-    } catch {
-      results.push(false);
-    }
-  }
-
-  return results.some(Boolean);
 }
 
 /**
  * React hook — call once in `<RootComponent>`.
  * Polls Google Sheets every 30 s while the document is visible and
- * at least one store has sync enabled.
+ * sync is enabled.
  */
 export function useRealtimeSync() {
-  const financeConfig = useStore((s) => s.sheetsConfig);
-  const mobileConfig = useMobileStore((s) => s.sheetsConfig);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const enabled =
-    (financeConfig?.enabled && !!financeConfig?.url) ||
-    (mobileConfig?.enabled && !!mobileConfig?.url);
+  const enabled = isGSheetsEnabled();
 
   useEffect(() => {
     if (!enabled) {
@@ -80,12 +49,12 @@ export function useRealtimeSync() {
     }
 
     // Immediately pull on mount / when sync is first enabled
-    triggerManualSync(true).catch(() => {});
+    triggerManualSync(false).catch(() => {});
 
     const tick = () => {
       // Skip if tab is hidden — save bandwidth
       if (document.hidden) return;
-      triggerManualSync(true).catch(() => {});
+      triggerManualSync(false).catch(() => {});
     };
 
     timerRef.current = setInterval(tick, POLL_MS);
