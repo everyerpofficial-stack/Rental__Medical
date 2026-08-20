@@ -696,6 +696,7 @@ export function getCustomers() {
 }
 
 export function saveCustomer(customer: typeof initialCustomers[number]) {
+  _invalidateRentalsCache();
   const list = getCustomers();
   const index = list.findIndex((c) => c.id === customer.id);
   if (index > -1) {
@@ -704,6 +705,7 @@ export function saveCustomer(customer: typeof initialCustomers[number]) {
     list.unshift(customer);
   }
   setStorageItem("medirent-customers", list);
+  _invalidateRentalsCache();
   // Sync to Google Sheets (fire-and-forget)
   if (isGSheetsEnabled()) syncRowToSheet(SHEETS.CUSTOMERS, customer as Record<string, unknown>);
   return list;
@@ -793,6 +795,7 @@ export function getEquipment() {
 }
 
 export function saveEquipment(item: typeof initialEquipment[number]) {
+  _invalidateRentalsCache();
   // Use raw storage read (not getEquipment) to avoid the rental-derived status
   // override loop — getEquipment() re-derives statuses which would fight the
   // explicit status we are trying to save here.
@@ -807,13 +810,16 @@ export function saveEquipment(item: typeof initialEquipment[number]) {
     list.unshift(item);
   }
   setStorageItem("medirent-equipment", list);
+  _invalidateRentalsCache();
   if (isGSheetsEnabled()) syncRowToSheet(SHEETS.EQUIPMENT, item as Record<string, unknown>);
   return list;
 }
 
 export function deleteEquipment(id: string) {
+  _invalidateRentalsCache();
   const list = getStorageItem("medirent-equipment", initialEquipment).filter((e: any) => e.id !== id);
   setStorageItem("medirent-equipment", list);
+  _invalidateRentalsCache();
   if (isGSheetsEnabled()) deleteRowFromSheet(SHEETS.EQUIPMENT, id);
   return list;
 }

@@ -177,58 +177,60 @@ function OwnerFormDialog({
             <Handshake className="h-5 w-5 text-primary" /> {title}
           </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <Field
-            label="Organization Name *"
-            placeholder="e.g. Zenith Medtech Solutions"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Field
-            label="Owner Name *"
-            placeholder="e.g. Dr. Amit Vyas"
-            value={ownerName}
-            onChange={(e) => setOwnerName(e.target.value)}
-          />
-
-          <Field
-            label="Contact Phone"
-            placeholder="10-digit phone number"
-            value={phone}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "");
-              if (digits.length > 10) {
-                if (digits.startsWith("91")) setPhone(digits.slice(-10));
-                else if (digits.startsWith("0")) setPhone(digits.slice(-10));
-                else setPhone(digits.slice(0, 10));
-              } else {
-                setPhone(digits);
-              }
-            }}
-            maxLength={14}
-          />
-          <Field
-            label="Contact Email"
-            placeholder="e.g. partner@zenith.com"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="sm:col-span-2"
-          />
-          <div className="sm:col-span-2 space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Office / Billing Address</Label>
-            <Textarea
-              placeholder="Full business address..."
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="min-h-[70px] resize-none text-[13px]"
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <Field
+              label="Organization Name *"
+              placeholder="e.g. Zenith Medtech Solutions"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
+            <Field
+              label="Owner Name *"
+              placeholder="e.g. Dr. Amit Vyas"
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+            />
+
+            <Field
+              label="Contact Phone"
+              placeholder="10-digit phone number"
+              value={phone}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                if (digits.length > 10) {
+                  if (digits.startsWith("91")) setPhone(digits.slice(-10));
+                  else if (digits.startsWith("0")) setPhone(digits.slice(-10));
+                  else setPhone(digits.slice(0, 10));
+                } else {
+                  setPhone(digits);
+                }
+              }}
+              maxLength={14}
+            />
+            <Field
+              label="Contact Email"
+              placeholder="e.g. partner@zenith.com"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="sm:col-span-2"
+            />
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Office / Billing Address</Label>
+              <Textarea
+                placeholder="Full business address..."
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                className="min-h-[70px] resize-none text-[13px]"
+              />
+            </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="button" onClick={handleSave}>Save Owner</Button>
-        </DialogFooter>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit">Save Owner</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

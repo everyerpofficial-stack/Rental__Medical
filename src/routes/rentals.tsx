@@ -575,6 +575,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     const justOpened = open && !prevOpenRef.current;
     prevOpenRef.current = open;
     if (open && justOpened) {
+      setIsSubmitting(false);
       const savedDraft = localStorage.getItem("medirent_new_agreement_draft");
       if (savedDraft) {
         setHasDraft(true);

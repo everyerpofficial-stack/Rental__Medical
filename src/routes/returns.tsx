@@ -562,6 +562,7 @@ function PayReturnDueDialog({
 
   useEffect(() => {
     if (open) {
+      setIsSubmitting(false);
       const pending = ret.duePendingBalance !== undefined 
         ? ret.duePendingBalance 
         : Math.max(0, totalCollectible - (ret.duePaidAmount !== undefined ? ret.duePaidAmount : (ret.duePaymentStatus === "Paid" ? totalCollectible : 0)));

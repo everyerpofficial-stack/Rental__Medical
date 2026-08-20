@@ -187,6 +187,7 @@ function CustomerFormDialog({
       setNotes(customer?.notes || "");
       setSelectedFiles([]);
       setRemovedDocIds([]);
+      setIsSubmitting(false);
 
       if (customer?.id) {
         try {
@@ -417,180 +418,182 @@ function CustomerFormDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <Field label="Full Name" required placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(capitalizeWords(e.target.value))} />
-          
-          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Address Details</h4>
-          </div>
-          <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(capitalizeWords(e.target.value))} />
-          <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(capitalizeWords(e.target.value))} />
-          <Field label="City" value={city} onChange={(e) => setCity(capitalizeWords(e.target.value))} />
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
-            <Select value={state} onValueChange={setState}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select state" />
-              </SelectTrigger>
-              <SelectContent>
-                {["Karnataka"].map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Field label="Pincode" value={pincode} onChange={(e) => setPincode(e.target.value)} />
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <Field label="Full Name" required placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(capitalizeWords(e.target.value))} />
+            
+            <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Address Details</h4>
+            </div>
+            <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(capitalizeWords(e.target.value))} />
+            <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(capitalizeWords(e.target.value))} />
+            <Field label="City" value={city} onChange={(e) => setCity(capitalizeWords(e.target.value))} />
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
+              <Select value={state} onValueChange={setState}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select state" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Karnataka"].map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Field label="Pincode" value={pincode} onChange={(e) => setPincode(e.target.value)} />
 
-          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Contact Details</h4>
-          </div>
-          <Field 
-            label="Primary Number"
-            required      
-            placeholder="10-digit phone number"                   
-            value={phone} 
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "");
-              if (digits.length > 10) {
-                if (digits.startsWith("91")) setPhone(digits.slice(-10));
-                else if (digits.startsWith("0")) setPhone(digits.slice(-10));
-                else setPhone(digits.slice(0, 10));
-              } else {
-                setPhone(digits);
-              }
-            }} 
-            maxLength={14}
-          />
-          <Field 
-            label="Alternative Phone" 
-            placeholder="optional (10 digits)"                
-            value={altPhone} 
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "");
-              if (digits.length > 10) {
-                if (digits.startsWith("91")) setAltPhone(digits.slice(-10));
-                else if (digits.startsWith("0")) setAltPhone(digits.slice(-10));
-                else setAltPhone(digits.slice(0, 10));
-              } else {
-                setAltPhone(digits);
-              }
-            }} 
-            maxLength={14}
-          />
-          <Field 
-            label="Alternative Phone 1"  
-            placeholder="optional (10 digits)"                
-            value={contactNumber3} 
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, "");
-              if (digits.length > 10) {
-                if (digits.startsWith("91")) setContactNumber3(digits.slice(-10));
-                else if (digits.startsWith("0")) setContactNumber3(digits.slice(-10));
-                else setContactNumber3(digits.slice(0, 10));
-              } else {
-                setContactNumber3(digits);
-              }
-            }} 
-            maxLength={14}
-          />
-          <Field label="Email" placeholder="email@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          
-          <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Government Verification</h4>
-          </div>
-          <Field 
-            label="Aadhaar Number"    
-            placeholder="12-digit Aadhaar number"         
-            value={aadhaar} 
-            onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))} 
-            maxLength={12}
-          />
-          <Field label="PAN Number" placeholder="ABCDE1234F" value={pan} onChange={(e) => setPan(e.target.value)} />
-          
-          <div className="sm:col-span-2 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                ID Proof Uploads {selectedFiles.length > 0 && <span className="text-primary font-bold normal-case">({selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"})</span>}
-              </Label>
-              {selectedFiles.length > 0 && (
-                <label className="text-[11px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1">
-                  <Plus className="h-3 w-3" /> Add More Files
+            <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Contact Details</h4>
+            </div>
+            <Field 
+              label="Primary Number"
+              required      
+              placeholder="10-digit phone number"                   
+              value={phone} 
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                if (digits.length > 10) {
+                  if (digits.startsWith("91")) setPhone(digits.slice(-10));
+                  else if (digits.startsWith("0")) setPhone(digits.slice(-10));
+                  else setPhone(digits.slice(0, 10));
+                } else {
+                  setPhone(digits);
+                }
+              }} 
+              maxLength={14}
+            />
+            <Field 
+              label="Alternative Phone" 
+              placeholder="optional (10 digits)"                
+              value={altPhone} 
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                if (digits.length > 10) {
+                  if (digits.startsWith("91")) setAltPhone(digits.slice(-10));
+                  else if (digits.startsWith("0")) setAltPhone(digits.slice(-10));
+                  else setAltPhone(digits.slice(0, 10));
+                } else {
+                  setAltPhone(digits);
+                }
+              }} 
+              maxLength={14}
+            />
+            <Field 
+              label="Alternative Phone 1"  
+              placeholder="optional (10 digits)"                
+              value={contactNumber3} 
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, "");
+                if (digits.length > 10) {
+                  if (digits.startsWith("91")) setContactNumber3(digits.slice(-10));
+                  else if (digits.startsWith("0")) setContactNumber3(digits.slice(-10));
+                  else setContactNumber3(digits.slice(0, 10));
+                } else {
+                  setContactNumber3(digits);
+                }
+              }} 
+              maxLength={14}
+            />
+            <Field label="Email" placeholder="email@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            
+            <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
+              <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Government Verification</h4>
+            </div>
+            <Field 
+              label="Aadhaar Number"    
+              placeholder="12-digit Aadhaar number"         
+              value={aadhaar} 
+              onChange={(e) => setAadhaar(e.target.value.replace(/\D/g, "").slice(0, 12))} 
+              maxLength={12}
+            />
+            <Field label="PAN Number" placeholder="ABCDE1234F" value={pan} onChange={(e) => setPan(e.target.value)} />
+            
+            <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  ID Proof Uploads {selectedFiles.length > 0 && <span className="text-primary font-bold normal-case">({selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"})</span>}
+                </Label>
+                {selectedFiles.length > 0 && (
+                  <label className="text-[11px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1">
+                    <Plus className="h-3 w-3" /> Add More Files
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => handleFilesAdded(e.target.files)}
+                    />
+                  </label>
+                )}
+              </div>
+
+              {selectedFiles.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-border/40 rounded-xl bg-muted/10">
+                  {selectedFiles.map((file, idx) => {
+                    const isImage = file.fileData?.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
+                    return (
+                      <div key={idx} className="flex items-center justify-between gap-2 p-2 border border-border/60 rounded-lg bg-background shadow-xs hover:border-primary/40 transition-colors group">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {isImage && file.fileData ? (
+                            <img src={file.fileData} alt="Preview" className="h-8 w-8 rounded object-cover border border-border shrink-0" />
+                          ) : (
+                            <div className="h-8 w-8 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                              {file.name.toLowerCase().endsWith(".pdf") ? <FileText className="h-4 w-4" /> : <FileImage className="h-4 w-4" />}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[12px] font-medium truncate text-foreground leading-tight" title={file.name}>{file.name}</p>
+                            <p className="text-[10px] text-muted-foreground">{file.size} {file.isExisting && "· Saved"}</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full shrink-0"
+                          onClick={() => removeFile(idx)}
+                          title="Remove file"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <label
+                  htmlFor="customer-id-proof-upload"
+                  className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border/70 rounded-xl cursor-pointer bg-muted/20 hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group relative overflow-hidden"
+                >
+                  <div className="flex flex-col items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors">
+                    <FileImage className="h-6 w-6 mb-0.5" />
+                    <p className="text-[13px] font-medium">Click or Drag to upload ID Proofs</p>
+                    <p className="text-[11px]">Multiple Aadhaar, PAN, Photo — PDF or image files supported</p>
+                  </div>
                   <input
+                    id="customer-id-proof-upload"
                     type="file"
                     multiple
                     accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
-                    className="hidden"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                     onChange={(e) => handleFilesAdded(e.target.files)}
                   />
                 </label>
               )}
             </div>
-
-            {selectedFiles.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-border/40 rounded-xl bg-muted/10">
-                {selectedFiles.map((file, idx) => {
-                  const isImage = file.fileData?.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
-                  return (
-                    <div key={idx} className="flex items-center justify-between gap-2 p-2 border border-border/60 rounded-lg bg-background shadow-xs hover:border-primary/40 transition-colors group">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {isImage && file.fileData ? (
-                          <img src={file.fileData} alt="Preview" className="h-8 w-8 rounded object-cover border border-border shrink-0" />
-                        ) : (
-                          <div className="h-8 w-8 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                            {file.name.toLowerCase().endsWith(".pdf") ? <FileText className="h-4 w-4" /> : <FileImage className="h-4 w-4" />}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[12px] font-medium truncate text-foreground leading-tight" title={file.name}>{file.name}</p>
-                          <p className="text-[10px] text-muted-foreground">{file.size} {file.isExisting && "· Saved"}</p>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full shrink-0"
-                        onClick={() => removeFile(idx)}
-                        title="Remove file"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <label
-                htmlFor="customer-id-proof-upload"
-                className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border/70 rounded-xl cursor-pointer bg-muted/20 hover:bg-primary/5 hover:border-primary/40 transition-all duration-200 group relative overflow-hidden"
-              >
-                <div className="flex flex-col items-center gap-1 text-muted-foreground group-hover:text-primary transition-colors">
-                  <FileImage className="h-6 w-6 mb-0.5" />
-                  <p className="text-[13px] font-medium">Click or Drag to upload ID Proofs</p>
-                  <p className="text-[11px]">Multiple Aadhaar, PAN, Photo — PDF or image files supported</p>
-                </div>
-                <input
-                  id="customer-id-proof-upload"
-                  type="file"
-                  multiple
-                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  onChange={(e) => handleFilesAdded(e.target.files)}
-                />
-              </label>
-            )}
+            <div className="sm:col-span-2 space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
+              <Textarea placeholder="Any special notes about this customer…" className="resize-none min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
           </div>
-          <div className="sm:col-span-2 space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
-            <Textarea placeholder="Any special notes about this customer…" className="resize-none min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" type="button">Cancel</Button>
-          </DialogClose>
-          <Button type="button" onClick={handleSave} disabled={isSubmitting}>Save Customer</Button>
-        </DialogFooter>
+          <DialogFooter className="mt-4">
+            <DialogClose asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </DialogClose>
+            <Button type="submit" disabled={isSubmitting}>Save Customer</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -285,158 +285,155 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
           </div>
         )}
 
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="space-y-1.5 sm:col-span-2 flex flex-col justify-end">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Category</Label>
-            <Combobox
-              options={categoryOptions}
-              value={category}
-              onValueChange={(val) => {
-                setCategory(val);
-                if (val === "Custom") {
-                  setIsCustomCategory(true);
-                } else {
-                  setIsCustomCategory(false);
-                }
-              }}
-              placeholder="Select category..."
-              searchPlaceholder="Search categories..."
-              emptyText="No category found."
-            />
-          </div>
-          {isCustomCategory && (
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Custom Category Name</Label>
-              <Input 
-                placeholder="Enter custom category name" 
-                value={customCategory} 
-                onChange={(e) => setCustomCategory(capitalizeWords(e.target.value))} 
-                className="bg-background h-10" 
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+          <div className="grid gap-4 py-2 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2 flex flex-col justify-end">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Category</Label>
+              <Combobox
+                options={categoryOptions}
+                value={category}
+                onValueChange={(val) => {
+                  setCategory(val);
+                  if (val === "Custom") {
+                    setIsCustomCategory(true);
+                  } else {
+                    setIsCustomCategory(false);
+                  }
+                }}
+                placeholder="Select category..."
+                searchPlaceholder="Search categories..."
+                emptyText="No category found."
               />
             </div>
-          )}
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-              <span>Serial Number *</span>
-              {duplicateEq && <span className="text-rose-600 font-bold text-[10.5px]">DUPLICATE SERIAL</span>}
-            </Label>
-            <Input
-              placeholder="e.g. PHE-77821"
-              value={serial}
-              onChange={(e) => setSerial(e.target.value)}
-              className={cn("bg-background h-10 transition-colors", duplicateEq && "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20 text-rose-900 font-semibold")}
-            />
-            {duplicateEq && (
-              <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Duplicate serial number found in inventory!
-              </p>
+            {isCustomCategory && (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Custom Category Name</Label>
+                <Input 
+                  placeholder="Enter custom category name" 
+                  value={customCategory} 
+                  onChange={(e) => setCustomCategory(capitalizeWords(e.target.value))} 
+                  className="bg-background h-10" 
+                />
+              </div>
             )}
-          </div>
-          <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(capitalizeWords(e.target.value))} />
-          <Field label="Manufacturer"     placeholder="e.g. Philips"          value={manufacturer} onChange={(e) => setManufacturer(capitalizeWords(e.target.value))} />
-          <div className="space-y-1.5 flex flex-col justify-end">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Owner</Label>
-            <Combobox
-              options={ownerOptions}
-              value={isAddingNewOwner ? "Add New Owner" : owner}
-              onValueChange={(val) => {
-                if (val === "Add New Owner") {
-                  setIsAddingNewOwner(true);
-                } else {
-                  setIsAddingNewOwner(false);
-                  setOwner(val);
-                }
-              }}
-              placeholder="Select owner..."
-              searchPlaceholder="Search owners..."
-              emptyText="No owner found."
-            />
-          </div>
-          {isAddingNewOwner && (
-            <div className="sm:col-span-2 border border-dashed border-primary/40 bg-primary/5 rounded-xl p-4 space-y-3 mt-1 animate-[fade-in_0.2s_ease-out]">
-              <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
-                <span className="text-[11px] font-bold text-primary uppercase tracking-wider">New Owner Details</span>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6.5 text-[10px] text-muted-foreground hover:text-foreground px-1.5"
-                  onClick={() => {
-                    setIsAddingNewOwner(false);
-                    setOwner("");
-                  }}
-                >
-                  Cancel / Select Existing Owner
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 text-[13px]">
-                <Field 
-                  label="Organization Name *" 
-                  placeholder="e.g. Zenith Medtech Solutions" 
-                  value={newOwnerOrg} 
-                  onChange={(e) => setNewOwnerOrg(capitalizeWords(e.target.value))} 
-                />
-                <Field 
-                  label="Owner Name *" 
-                  placeholder="e.g. Dr. Amit Vyas" 
-                  value={newOwnerIndividual} 
-                  onChange={(e) => setNewOwnerIndividual(capitalizeWords(e.target.value))} 
-                />
-                <Field 
-                  label="Contact Phone" 
-                  placeholder="10-digit phone number" 
-                  value={newOwnerPhone} 
-                  onChange={(e) => setNewOwnerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} 
-                />
-                <Field 
-                  label="Contact Email" 
-                  placeholder="e.g. partner@zenith.com" 
-                  value={newOwnerEmail} 
-                  onChange={(e) => setNewOwnerEmail(e.target.value)} 
-                />
-                <Field 
-                  label="Office / Billing Address" 
-                  placeholder="Full business address..." 
-                  className="sm:col-span-2" 
-                  value={newOwnerAddress} 
-                  onChange={(e) => setNewOwnerAddress(capitalizeWords(e.target.value))} 
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                <span>Serial Number *</span>
+                {duplicateEq && <span className="text-rose-600 font-bold text-[10.5px]">DUPLICATE SERIAL</span>}
+              </Label>
+              <Input
+                placeholder="e.g. PHE-77821"
+                value={serial}
+                onChange={(e) => setSerial(e.target.value)}
+                className={cn("bg-background h-10 transition-colors", duplicateEq && "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20 text-rose-900 font-semibold")}
+              />
+              {duplicateEq && (
+                <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1 mt-0.5">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" /> Duplicate serial number found in inventory!
+                </p>
+              )}
             </div>
-          )}
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</Label>
-            <Select value={status} onValueChange={setStatus} disabled={eq?.status === "Rented"}>
-              <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Available">Available</SelectItem>
-                <SelectItem value="UnderMaintenance">Under Maintenance</SelectItem>
-                {!isOwnOwner(isAddingNewOwner ? newOwnerOrg : owner) && <SelectItem value="Returned to Owner">Returned to Owner</SelectItem>}
-                {eq?.status === "Rented" && <SelectItem value="Rented">Rented (Active Rental)</SelectItem>}
-              </SelectContent>
-            </Select>
-          </div>
-          {!isOwnOwner(isAddingNewOwner ? newOwnerOrg : owner) && (
-            <>
-              <Field label="Purchase Date"    type="date"   value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
-              <Field label="Daily Rate to Owner (₹)" placeholder="e.g. 50" value={ownerDailyRate} onChange={(e) => setOwnerDailyRate(e.target.value)} />
-            </>
-          )}
+            <Field label="Model Number"     placeholder="e.g. EverFlo Q"        value={model} onChange={(e) => setModel(capitalizeWords(e.target.value))} />
+            <Field label="Manufacturer"     placeholder="e.g. Philips"          value={manufacturer} onChange={(e) => setManufacturer(capitalizeWords(e.target.value))} />
+            <div className="space-y-1.5 flex flex-col justify-end">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Owner</Label>
+              <Combobox
+                options={ownerOptions}
+                value={isAddingNewOwner ? "Add New Owner" : owner}
+                onValueChange={(val) => {
+                  if (val === "Add New Owner") {
+                    setIsAddingNewOwner(true);
+                  } else {
+                    setIsAddingNewOwner(false);
+                    setOwner(val);
+                  }
+                }}
+                placeholder="Select owner..."
+                searchPlaceholder="Search owners..."
+                emptyText="No owner found."
+              />
+            </div>
+            {isAddingNewOwner && (
+              <div className="sm:col-span-2 border border-dashed border-primary/40 bg-primary/5 rounded-xl p-4 space-y-3 mt-1 animate-[fade-in_0.2s_ease-out]">
+                <div className="flex items-center justify-between border-b border-primary/20 pb-1.5 mb-1">
+                  <span className="text-[11px] font-bold text-primary uppercase tracking-wider">New Owner Details</span>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6.5 text-[10px] text-muted-foreground hover:text-foreground px-1.5"
+                    onClick={() => {
+                      setIsAddingNewOwner(false);
+                      setOwner("");
+                    }}
+                  >
+                    Cancel / Select Existing Owner
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 text-[13px]">
+                  <Field 
+                    label="Organization Name *" 
+                    placeholder="e.g. Zenith Medtech Solutions" 
+                    value={newOwnerOrg} 
+                    onChange={(e) => setNewOwnerOrg(capitalizeWords(e.target.value))} 
+                  />
+                  <Field 
+                    label="Owner Name *" 
+                    placeholder="e.g. Dr. Amit Vyas" 
+                    value={newOwnerIndividual} 
+                    onChange={(e) => setNewOwnerIndividual(capitalizeWords(e.target.value))} 
+                  />
+                  <Field 
+                    label="Contact Phone" 
+                    placeholder="10-digit phone number" 
+                    value={newOwnerPhone} 
+                    onChange={(e) => setNewOwnerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} 
+                  />
+                  <Field 
+                    label="Contact Email" 
+                    placeholder="e.g. partner@zenith.com" 
+                    value={newOwnerEmail} 
+                    onChange={(e) => setNewOwnerEmail(e.target.value)} 
+                  />
+                  <Field 
+                    label="Office / Billing Address" 
+                    placeholder="Full business address..." 
+                    className="sm:col-span-2" 
+                    value={newOwnerAddress} 
+                    onChange={(e) => setNewOwnerAddress(capitalizeWords(e.target.value))} 
+                  />
+                </div>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</Label>
+              <Select value={status} onValueChange={setStatus} disabled={eq?.status === "Rented"}>
+                <SelectTrigger className="h-10 text-[13px]"><SelectValue placeholder="Select status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Available">Available</SelectItem>
+                  <SelectItem value="UnderMaintenance">Under Maintenance</SelectItem>
+                  {!isOwnOwner(isAddingNewOwner ? newOwnerOrg : owner) && <SelectItem value="Returned to Owner">Returned to Owner</SelectItem>}
+                  {eq?.status === "Rented" && <SelectItem value="Rented">Rented (Active Rental)</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+            {!isOwnOwner(isAddingNewOwner ? newOwnerOrg : owner) && (
+              <>
+                <Field label="Purchase Date"    type="date"   value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
+                <Field label="Daily Rate to Owner (₹)" placeholder="e.g. 50" value={ownerDailyRate} onChange={(e) => setOwnerDailyRate(e.target.value)} />
+              </>
+            )}
 
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" type="button">Cancel</Button>
-          </DialogClose>
-          <Button
-            type="button"
-            onClick={() => {
-              handleSave();
-            }}
-          >
-            Save Equipment
-          </Button>
-        </DialogFooter>
+          </div>
+          <DialogFooter className="mt-4">
+            <DialogClose asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </DialogClose>
+            <Button type="submit">
+              Save Equipment
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

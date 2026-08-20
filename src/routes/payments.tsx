@@ -202,6 +202,7 @@ function CollectPaymentDialog({
   // Reset dialog state when opened.
   useEffect(() => {
     if (open) {
+      setIsSubmitting(false);
       setType((payment?.type as "Rent" | "Deposit" | "Refund" | "Additional Charges") ?? "Rent");
       setDate(payment?.date ?? getLocalYYYYMMDD());
       setCustomerId(payment?.customerId ?? "");
@@ -699,7 +700,7 @@ function CollectPaymentDialog({
           <DialogClose asChild>
             <Button variant="outline" type="button">Cancel</Button>
           </DialogClose>
-          <Button type="button" onClick={handleSave} disabled={isSubmitting}>
+          <Button type="submit" onClick={handleSave} disabled={isSubmitting}>
             {isSubmitting ? "Saving…" : "Save Payment"}
           </Button>
         </DialogFooter>
