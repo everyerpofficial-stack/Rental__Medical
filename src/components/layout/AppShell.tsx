@@ -254,7 +254,7 @@ export function AppShell({
         <div className="absolute inset-y-0 left-0 w-[2px] bg-gradient-to-b from-primary/60 via-primary/30 to-transparent pointer-events-none" />
 
         {/* Logo Header */}
-        <div className="relative flex h-[60px] items-center gap-3 border-b border-sidebar-border px-4 bg-white">
+        <div className="relative flex h-[60px] items-center gap-3 border-b border-sidebar-border px-4 bg-sidebar">
           <img src="/images/logo.png" alt="Relife Medical Technologies" className="h-11 w-auto max-w-[200px] object-contain" />
           {/* Mobile close */}
           <button
@@ -374,8 +374,6 @@ export function AppShell({
           />
           {/* Drawer panel */}
           <div className="fixed bottom-[env(safe-area-inset-bottom,0px)] left-0 right-0 z-50 md:hidden animate-[slide-up_0.35s_cubic-bezier(0.22,1,0.36,1)]">
-            {/* Safe area padding for bottom navigation */}
-            <div className="pb-[68px]" />
             <div className="bg-card border-t border-border rounded-t-2xl shadow-elevated overflow-hidden">
               {/* Handle */}
               <div className="flex justify-center pt-3 pb-2">
@@ -631,6 +629,8 @@ export function AppShell({
               title="Logout"
               onClick={() => {
                 localStorage.removeItem("medirent-authenticated");
+                localStorage.removeItem("medirent-session-token");
+                localStorage.removeItem("medirent-session-expiry");
                 localStorage.removeItem("medirent-user-email");
                 localStorage.removeItem("medirent-user-name");
                 localStorage.removeItem("medirent-user-role");
@@ -718,10 +718,6 @@ export function AppShell({
                 <span className={`text-[10px] font-semibold leading-none transition-all ${active ? "text-primary" : "text-muted-foreground/50"}`}>
                   {item.label}
                 </span>
-                {/* Active dot */}
-                {active && (
-                  <span className="absolute top-1.5 h-1 w-1 rounded-full bg-primary" />
-                )}
               </Link>
             );
           })}

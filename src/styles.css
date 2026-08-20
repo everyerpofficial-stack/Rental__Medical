@@ -305,9 +305,11 @@ input[type="number"] {
     min-height: 100%;
     min-height: -webkit-fill-available;
   }
-  /* Inputs on iOS must be at least 16px to prevent auto-zoom */
-  input, select, textarea {
-    font-size: max(16px, 1em);
+  /* Inputs on iOS must be at least 16px to prevent auto-zoom — mobile only */
+  @media (max-width: 767px) {
+    input, select, textarea {
+      font-size: max(16px, 1em);
+    }
   }
 }
 

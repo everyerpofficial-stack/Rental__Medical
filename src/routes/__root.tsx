@@ -175,7 +175,7 @@ function FirstRunSetup({ onComplete }: { onComplete: () => void }) {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] px-4 py-12 font-sans overflow-hidden">
+    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] px-4 py-12 font-sans overflow-hidden">
       <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-blue-100/30 blur-[130px] -z-10 animate-pulse duration-[8000ms]" />
       <div className="w-full max-w-[440px] bg-white border border-slate-100/80 rounded-[28px] p-8 shadow-[0_20px_50px_rgba(15,23,42,0.06)] text-slate-800 flex flex-col items-center">
         <div className="flex h-16 w-full items-center justify-center mb-6">
@@ -511,7 +511,7 @@ function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
 
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] px-4 py-12 font-sans overflow-hidden">
+    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] px-4 py-12 font-sans overflow-hidden">
       {/* Background decoration elements */}
       <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-blue-100/30 blur-[130px] -z-10 animate-pulse duration-[8000ms]" />
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] rounded-full bg-slate-200/40 blur-[130px] -z-10" />
