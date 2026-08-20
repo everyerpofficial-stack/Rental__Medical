@@ -1016,11 +1016,9 @@ function ReturnsPage() {
           : (r.equipment || "");
 
         const parts = [
-          r.id,
           r.customer,
           phone1,
           rentDateStr ? `Rent Date: ${rentDateStr}` : "",
-          equipmentSummary,
         ].filter(Boolean);
 
         return {
