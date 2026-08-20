@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,9 @@ export const Route = createFileRoute("/customers")({
 
 type Customer = typeof customers[number];
 
+/** Rows rendered per page in the customer list before "Load more". */
+const PAGE_SIZE = 50;
+
 // Derive avatar color from index — unified hues from design system
 const avatarHues = [
   "bg-primary/15 text-primary",
@@ -108,11 +112,13 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
   const contactNumber3Digits = (row.contactNumber3 || "").replace(/\D/g, "");
   if (contactNumber3Digits && contactNumber3Digits.length !== 10) return { ok: false, error: `${name}: Alternative Phone 1 must be exactly 10 digits` };
 
-  const normalizedName = name.toLowerCase();
-  const isDuplicate = getCustomers().some(
-    (c) => (c.name || "").trim().toLowerCase() === normalizedName && (c.phone || "").replace(/\D/g, "") === phoneDigits
+  // ITEM-4: names may repeat across customers - only the phone number is unique.
+  const phoneOwner = getCustomers().find(
+    (c) => (c.phone || "").replace(/\D/g, "") === phoneDigits
   );
-  if (isDuplicate) return { ok: false, error: `${name}: Customer with this name and phone number already exists` };
+  if (phoneOwner) {
+    return { ok: false, error: `${name}: phone number already registered to "${phoneOwner.name}" (${phoneOwner.id})` };
+  }
 
   saveCustomer({
     id: getNextCustomerNumber(),
@@ -199,7 +205,13 @@ function CustomerFormDialog({
         } catch (_e) { /* ignore */ }
       }
     }
-  }, [open, customer]);
+    // ITEM-3 FIX: depend on the customer's *id*, not the object identity.
+    // getCustomers() re-parses from localStorage on every call, so each parent
+    // render handed down a brand-new object; with `customer` in the dep array
+    // this effect re-fired mid-edit and reset every field (and re-fetched the
+    // ID proofs, discarding files the user had just attached).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, customer?.id]);
 
   const handleSave = () => {
     if (isSubmitting) return;
@@ -259,22 +271,39 @@ function CustomerFormDialog({
       return;
     }
 
+    // ITEM-4: a shared name is legitimate (families, common names) - customers
+    // are identified by their CUST-XXXX id and phone number, not their name.
+    // So a name clash is informational only; only an exact phone clash blocks.
     const normalizedName = name.trim().toLowerCase();
     const normalizedPhone = phone.replace(/\D/g, "");
-    const isDuplicate = getCustomers().some(
-      (c) =>
-        c.id !== customer?.id &&
-        (c.name || "").trim().toLowerCase() === normalizedName &&
-        (c.phone || "").replace(/\D/g, "") === normalizedPhone
+    const others = getCustomers().filter((c) => c.id !== customer?.id);
+
+    const phoneOwner = others.find(
+      (c) => (c.phone || "").replace(/\D/g, "") === normalizedPhone
     );
-    if (isDuplicate) {
-      toast.error(`A customer named "${name.trim()}" with this phone number already exists.`);
+    if (phoneOwner) {
+      toast.error(
+        `This phone number is already registered to "${phoneOwner.name}" (${phoneOwner.id}). Please use a different number.`
+      );
       setIsSubmitting(false);
       return;
     }
 
+    const nameTwin = others.find(
+      (c) => (c.name || "").trim().toLowerCase() === normalizedName
+    );
+    if (nameTwin) {
+      toast.info(
+        `Customer with this name already exists (${nameTwin.id}). Saving as a separate record.`
+      );
+    }
+
     const id = customer?.id || getNextCustomerNumber();
     const newCustomer = {
+      // ITEM-3 FIX: spread the existing record first so fields this form does
+      // not render (createdAt, sheet-sync metadata, future columns) survive an
+      // edit instead of being silently dropped on save.
+      ...(customer || {}),
       id,
       name: name.trim(),
       phone: phone.trim(),
@@ -292,28 +321,56 @@ function CustomerFormDialog({
       status: customer?.status || "Active",
       notes,
     };
-    saveCustomer(newCustomer);
+    // ITEM-3 FIX: setStorageItem re-throws on QuotaExceededError. Without this
+    // guard the throw escaped handleSave, so isSubmitting stayed true and the
+    // Save button stayed disabled forever - the "edit silently does nothing"
+    // symptom. Now the failure surfaces and the form stays usable.
+    try {
+      saveCustomer(newCustomer);
+    } catch (err) {
+      console.error("[Customers] Failed to save customer:", err);
+      toast.error("Could not save the customer. Storage may be full - export a backup from Settings and try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
     // Remove ID proofs the user deleted from this dialog
-    removedDocIds.forEach((docId) => deleteDocument(docId));
-
-    // Save newly uploaded ID proofs
-    selectedFiles.forEach((file) => {
-      if (!file.isExisting && file.fileData) {
-        const docId = getNextDocumentNumber();
-        saveDocument({
-          id: docId,
-          name: file.name,
-          type: "ID Proof",
-          size: file.size,
-          date: getLocalYYYYMMDD(),
-          customerId: id,
-          fileData: file.fileData,
-        });
+    removedDocIds.forEach((docId) => {
+      try {
+        deleteDocument(docId);
+      } catch (err) {
+        console.error("[Customers] Failed to remove ID proof", docId, err);
       }
     });
 
-    toast.success(customer ? `Customer details for "${name}" saved successfully.` : "New customer created successfully.");
+    // Save newly uploaded ID proofs. A failure here must not roll back the
+    // customer record that already saved - report it and keep the rest.
+    let failedUploads = 0;
+    selectedFiles.forEach((file) => {
+      if (!file.isExisting && file.fileData) {
+        try {
+          const docId = getNextDocumentNumber();
+          saveDocument({
+            id: docId,
+            name: file.name,
+            type: "ID Proof",
+            size: file.size,
+            date: getLocalYYYYMMDD(),
+            customerId: id,
+            fileData: file.fileData,
+          });
+        } catch (err) {
+          failedUploads++;
+          console.error("[Customers] Failed to save ID proof", file.name, err);
+        }
+      }
+    });
+
+    if (failedUploads > 0) {
+      toast.error(`Customer saved, but ${failedUploads} ID proof file(s) could not be stored. Storage may be full.`);
+    } else {
+      toast.success(customer ? `Customer details for "${name}" saved successfully.` : "New customer created successfully.");
+    }
     setIsSubmitting(false);
     setOpen(false);
     if (onSave) onSave();
@@ -1447,6 +1504,9 @@ function CustomersPage() {
   const [profileCustomer, setProfileCustomer] = useState<Customer | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // PERF: the input stays bound to `search` so typing is instant, while the
+  // expensive filter below runs off `debouncedSearch` (300ms idle).
+  const debouncedSearch = useDebounce(search, 300);
   const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all-status");
 
@@ -1475,11 +1535,23 @@ function CustomersPage() {
     return set;
   }, [customers, documentsList]);
 
-  const filteredCustomers = sortLatestFirst(
+  // PERF: index rentals by customerId once instead of scanning the whole
+  // rentals array for every customer on every keystroke (was O(customers x rentals)).
+  const rentalsByCustomer = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const r of rentalsList) {
+      const list = map.get(r.customerId);
+      if (list) list.push(r);
+      else map.set(r.customerId, [r]);
+    }
+    return map;
+  }, [rentalsList]);
+
+  const filteredCustomers = useMemo(() => sortLatestFirst(
     customers.filter((c) => {
-      const q = search.toLowerCase().trim();
+      const q = debouncedSearch.toLowerCase().trim();
       const tokens = q.split(/\s+/).filter(Boolean);
-      const custRentals = rentalsList.filter(r => r.customerId === c.id);
+      const custRentals = rentalsByCustomer.get(c.id) || [];
 
       const wordStartsWith = (text: unknown, token: string) => {
         if (!text) return false;
@@ -1535,13 +1607,28 @@ function CustomersPage() {
             : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesCity && matchesStatus;
     })
+  ), [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, rentalsByCustomer]);
+
+  // PERF: render the first page only; the rest load on demand. Large customer
+  // books used to mount every row at once, which froze the tab on each filter change.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [debouncedSearch, cityFilter, statusFilter]);
+  const visibleCustomers = useMemo(
+    () => filteredCustomers.slice(0, visibleCount),
+    [filteredCustomers, visibleCount]
   );
+  const hasMore = filteredCustomers.length > visibleCount;
 
   // Dynamic stats
-  const totalCount = customers.length;
-  const activeCount = customers.filter(c => c.status === "Active").length;
+  const stats = useMemo(() => ({
+    totalCount: customers.length,
+    activeCount: customers.filter(c => c.status === "Active").length,
+    overdueCount: customers.filter(c => c.status === "Overdue").length,
+  }), [customers]);
+  const { totalCount, activeCount, overdueCount } = stats;
   const pendingKycCount = kycPendingSet.size;
-  const overdueCount = customers.filter(c => c.status === "Overdue").length;
 
   return (
     <AppShell
@@ -1693,7 +1780,7 @@ function CustomersPage() {
                     </TableCell>
                   </TableRow>
                 )}
-                {filteredCustomers.map((c, idx) => (
+                {visibleCustomers.map((c, idx) => (
                   <TableRow key={c.id} className="group">
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -1826,7 +1913,7 @@ function CustomersPage() {
                 No customers match your search or filter.
               </div>
             ) : (
-              filteredCustomers.map((c, idx) => (
+              visibleCustomers.map((c, idx) => (
                 <div 
                   key={c.id} 
                   className="px-4 py-3.5 active:bg-muted/30 transition-colors cursor-pointer"
@@ -1898,6 +1985,22 @@ function CustomersPage() {
               ))
             )}
           </div>
+
+          {/* PERF: incremental rendering - only PAGE_SIZE rows mount at a time */}
+          {hasMore && (
+            <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
+              <span className="text-[12px] text-muted-foreground">
+                Showing {visibleCustomers.length} of {filteredCustomers.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+              >
+                Load more
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

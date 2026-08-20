@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import {
   MessageCircle, Mail, Phone, Bell, AlertTriangle, Clock,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
@@ -787,6 +788,11 @@ function DuesPage() {
   };
 
   const [eqInventory] = useState(() => getEquipment());
+  // PERF/ITEM-17: one map lookup per row instead of scanning the inventory.
+  const equipmentById = useMemo(
+    () => new Map<string, any>(eqInventory.map((e: any) => [e.id, e])),
+    [eqInventory]
+  );
   const getEquipmentName = (eqId: string) => {
     const eq = eqInventory.find((e) => e.id === eqId);
     return eq ? eq.name : eqId;
@@ -919,15 +925,57 @@ function DuesPage() {
         totalPaid += grandTotalPaid;
       });
 
+      // ITEM-17: the date this agreement's rent last fell due, and how long it
+      // has been outstanding. Rent bills on the agreement's start day each
+      // month, so the most recent billing anniversary on or before today is the
+      // due date; anything unpaid past that is overdue by this many days.
+      const startDate = parseLocalDate(r.start);
+      let dueDate: Date | null = null;
+      let daysOverdue = 0;
+      if (!isNaN(startDate.getTime())) {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const anniversary = new Date(now.getFullYear(), now.getMonth(), startDate.getDate());
+        // Guard the short months: a 31st start lands on the 1st of the next
+        // month when constructed this way, so step back to the previous cycle.
+        if (anniversary > now || anniversary.getDate() !== startDate.getDate()) {
+          anniversary.setMonth(anniversary.getMonth() - 1, startDate.getDate());
+        }
+        dueDate = anniversary < startDate ? startDate : anniversary;
+        if (totalOutstanding > 0) {
+          daysOverdue = Math.max(
+            0,
+            Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+          );
+        }
+      }
+
+      // Equipment still out, for the breakdown column.
+      const openItems = eqItems.filter((it: any) => !it.returned);
+
       return {
         rental: r,
         totalOutstanding,
         totalPaid,
         start: r.start,
-        id: r.id
+        id: r.id,
+        dueDate,
+        daysOverdue,
+        openItems,
       };
     });
-    return sortLatestFirst(mapped, "start");
+
+    // ITEM-17: order by how badly the money is overdue, not by how recently the
+    // agreement was created. Longest overdue first, then largest amount, so the
+    // rows that need chasing sit at the top; settled rows fall to the bottom.
+    return [...mapped].sort((a, b) => {
+      if (a.daysOverdue !== b.daysOverdue) return b.daysOverdue - a.daysOverdue;
+      if (a.totalOutstanding !== b.totalOutstanding) return b.totalOutstanding - a.totalOutstanding;
+      const aTime = a.dueDate ? a.dueDate.getTime() : 0;
+      const bTime = b.dueDate ? b.dueDate.getTime() : 0;
+      if (aTime !== bTime) return aTime - bTime;
+      return extractIdNumber(b.id) - extractIdNumber(a.id);
+    });
   }, [activeRentals, paymentsList]);
 
   // Group by start day-of-month ranges
@@ -936,7 +984,15 @@ function DuesPage() {
   const due21To31List = dueRentals.filter((item) => { const d = getStartDayOfMonth(item.start); return d >= 21 && d <= 31; });
 
   const [searchQuery, setSearchQuery] = useState("");
+  // PERF: the field stays bound to searchQuery so typing is instant; the filter
+  // below runs off the debounced copy.
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
+  // PERF: one lookup per row instead of a linear scan of every customer.
+  const customersById = useMemo(
+    () => new Map<string, any>(customersList.map((c: any) => [c.id, c])),
+    [customersList]
+  );
 
   // Returns every phone number on file for a customer (primary + alternates),
   // so the dues table can stack them instead of showing just one.
@@ -948,34 +1004,70 @@ function DuesPage() {
       .filter(Boolean);
   };
 
-  const filteredRentals = dueRentals.filter((item) => {
-    const r = item.rental;
-    const q = searchQuery.toLowerCase().trim();
-    const customer = customersList.find((c: any) => c.id === r.customerId);
+  const filteredRentals = useMemo(() => {
+    const q = debouncedSearch.toLowerCase().trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
 
-    const matchesSearch = !q ||
-      r.id.toLowerCase().includes(q) ||
-      r.customer.toLowerCase().includes(q) ||
-      String(r.equipment || "").toLowerCase().includes(q) ||
-      String(r.serial || "").toLowerCase().includes(q) ||
-      (r.equipmentItems && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(q))) ||
-      (customer && (
-        String(customer.phone || "").toLowerCase().includes(q) ||
-        String(customer.altPhone || "").toLowerCase().includes(q) ||
-        String(customer.contactNumber3 || "").toLowerCase().includes(q) ||
-        String(customer.area || "").toLowerCase().includes(q) ||
-        String(customer.address || "").toLowerCase().includes(q)
-      ));
+    /** True when any whole word in `text` starts with `token`. */
+    const wordStartsWith = (text: unknown, token: string) => {
+      if (!text) return false;
+      return String(text)
+        .toLowerCase()
+        .split(/[\s,./\()-]+/)
+        .filter(Boolean)
+        .some((w) => w.startsWith(token));
+    };
 
-    if (!matchesSearch) return false;
+    return dueRentals.filter((item) => {
+      const r = item.rental;
+      const customer = customersById.get(r.customerId);
 
-    if (activeTab === "all") return true;
-    const day = getStartDayOfMonth(item.start);
-    if (activeTab === "1-10")  return day >= 1  && day <= 10;
-    if (activeTab === "11-20") return day >= 11 && day <= 20;
-    if (activeTab === "21-31") return day >= 21 && day <= 31;
-    return true;
-  });
+      // ITEM-8 FIX: every field was matched with a bare `.includes()`, so
+      // searching a customer name also hit any address, area or equipment name
+      // that happened to contain those letters - typing "ram" returned rows for
+      // "Ramanagara" (an area) and "Ram Nagar" (an address) alongside the actual
+      // customer. Names and places now match on word prefix, ids on prefix, and
+      // phone numbers only against digits, so a name search returns customers.
+      const matchesSearch = !q || tokens.every((token) => {
+        const tokenDigits = token.replace(/\D/g, "");
+
+        // Customer name - word prefix ("srini" finds "Srinivas", not "Nagasrini")
+        if (wordStartsWith(r.customer, token)) return true;
+
+        // Agreement id, either whole or just the numeric part
+        const idLower = String(r.id || "").toLowerCase();
+        if (idLower.startsWith(token) || (tokenDigits.length >= 2 && idLower.includes(tokenDigits))) return true;
+
+        // Serial numbers identify a unit exactly - substring is right here
+        if (String(r.serial || "").toLowerCase().includes(token)) return true;
+        if (Array.isArray(r.equipmentItems) && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(token))) return true;
+
+        // Equipment name - word prefix, not substring
+        if (wordStartsWith(r.equipment, token)) return true;
+
+        if (customer) {
+          // Phones: compare digits to digits so "98" never matches a street name
+          if (tokenDigits.length >= 3) {
+            const phones = [customer.phone, customer.altPhone, customer.contactNumber3];
+            if (phones.some((ph: any) => String(ph || "").replace(/\D/g, "").includes(tokenDigits))) return true;
+          }
+          if (wordStartsWith(customer.area, token)) return true;
+          if (wordStartsWith(customer.address, token)) return true;
+        }
+
+        return false;
+      });
+
+      if (!matchesSearch) return false;
+
+      if (activeTab === "all") return true;
+      const day = getStartDayOfMonth(item.start);
+      if (activeTab === "1-10")  return day >= 1  && day <= 10;
+      if (activeTab === "11-20") return day >= 11 && day <= 20;
+      if (activeTab === "21-31") return day >= 21 && day <= 31;
+      return true;
+    });
+  }, [dueRentals, debouncedSearch, activeTab, customersById]);
 
   const severityBuckets = [
     {
@@ -1191,7 +1283,8 @@ function DuesPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Agreement</TableHead>
                   <TableHead>Equipment</TableHead>
-                  <TableHead>Billing Day</TableHead>
+                  {/* ITEM-17: what fell due and how long ago, not just the cycle day */}
+                  <TableHead>Due Date / Overdue</TableHead>
                   <TableHead>Start Date</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
                   <TableHead className="text-right">Unpaid Duration</TableHead>
@@ -1239,7 +1332,13 @@ function DuesPage() {
                             return (
                               <div key={eqItem.equipmentId} className="flex items-center gap-1.5 text-[12.5px]">
                                 <span className={isReturned ? "line-through text-muted-foreground/50" : "text-foreground/80 font-medium"}>
-                                  {getEquipmentName(eqItem.equipmentId)}
+                                  {/* ITEM-17/ITEM-7: name, model and serial, so the
+                                      row says which physical unit is on rent. */}
+                                  {formatEquipmentLabel({
+                                    name: eqItem.name || getEquipmentName(eqItem.equipmentId),
+                                    model: eqItem.model || equipmentById.get(eqItem.equipmentId)?.model,
+                                    serial: eqItem.serial || equipmentById.get(eqItem.equipmentId)?.serial,
+                                  })}
                                 </span>
                                 {isReturned && (() => {
                                   const retDateRaw = eqItem.returnedDate || eqItem.returnDate || r.end;
@@ -1256,9 +1355,25 @@ function DuesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-[12.5px] font-medium text-foreground">
-                          Every {getOrdinalSuffix(getStartDayOfMonth(r.start))}
-                        </span>
+                        {/* ITEM-17: the billing anniversary this rent fell due on,
+                            with its age, so the list can be worked worst-first. */}
+                        <div className="space-y-0.5">
+                          <span className="block text-[12.5px] font-semibold text-foreground">
+                            {item.dueDate ? formatDateDDMMYYYY(getLocalYYYYMMDD(item.dueDate)) : "—"}
+                          </span>
+                          {item.daysOverdue > 0 ? (
+                            <span className="inline-flex items-center rounded-md border border-destructive/20 bg-destructive/8 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                              {item.daysOverdue} day{item.daysOverdue === 1 ? "" : "s"} overdue
+                            </span>
+                          ) : (
+                            <span className="block text-[10px] font-medium text-muted-foreground">
+                              {item.totalOutstanding > 0 ? "Due now" : "Up to date"}
+                            </span>
+                          )}
+                          <span className="block text-[10px] text-muted-foreground/70">
+                            Bills every {getOrdinalSuffix(getStartDayOfMonth(r.start))}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <span className="text-[12px] font-mono text-muted-foreground">

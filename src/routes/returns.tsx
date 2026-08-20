@@ -65,7 +65,10 @@ import {
   getOwners,
   sortLatestFirst,
   extractIdNumber,
+  formatEquipmentLabel,
 } from "@/lib/data-store";
+import { useDebounce } from "@/hooks/use-debounce";
+import { numericInputGuard } from "@/lib/utils";
 
 function extractMapLink(locationAddress?: string, address?: string, latitude?: any, longitude?: any, rental?: any, customer?: any): string {
   const lat = Number(latitude || rental?.latitude || customer?.latitude) || 0;
@@ -174,6 +177,9 @@ function generateWhatsAppPickupMessage(params: {
   refundAmount?: number;
   rental?: any;
   customer?: any;
+  /** ITEM-5: the exact equipment being picked up. When supplied, the model is
+   *  resolved from these unit ids instead of guessing from a category name. */
+  equipmentIds?: string[];
 }) {
   const name = params.customerName ? String(params.customerName) : "Customer";
   
@@ -206,39 +212,73 @@ function generateWhatsAppPickupMessage(params: {
   const line2 = phoneList.join(" & ") || "N/A";
 
   // Line 3: Model Number ONLY (never display raw serial numbers)
-  let modelStr = params.model != null ? String(params.model).trim() : "";
+  //
+  // ITEM-5 FIX: this used to resolve the model by matching `params.equipment`
+  // (a category name, and on multi-item rentals a comma-joined list of them)
+  // against the equipment master. Every unit in a category shares that name, so
+  // `allEq.find(...)` returned whichever unit happened to be stored first and
+  // printed *its* model - the wrong model. It also compared the serial against
+  // `e.id`, which could match an unrelated record outright.
+  //
+  // Equipment ids are the only unambiguous handle on a physical unit, so the
+  // model is now resolved from the ids of the units actually being picked up,
+  // and name matching survives only as a last-resort fallback.
+  const modelStr = params.model != null ? String(params.model).trim() : "";
   const serialStr = params.serial != null ? String(params.serial).trim() : "";
   const eqStr = params.equipment != null ? String(params.equipment).trim() : "";
 
   const allEq = getEquipment();
-  let foundModel = "";
-  let foundName = "";
+  const eqById = new Map<string, any>(allEq.map((e: any) => [e.id, e]));
+  const isUsableModel = (m: unknown) => {
+    const v = String(m || "").trim();
+    return v !== "" && v.toLowerCase() !== "standard";
+  };
 
-  const match = allEq.find(e => 
-    (serialStr && String(e.serial || "").trim().toLowerCase() === serialStr.toLowerCase()) ||
-    (serialStr && e.id?.toLowerCase() === serialStr.toLowerCase()) ||
-    (eqStr && e.name?.trim().toLowerCase() === eqStr.toLowerCase()) ||
-    (eqStr && e.id?.toLowerCase() === eqStr.toLowerCase())
-  );
+  const rentalItems: any[] = Array.isArray(params.rental?.equipmentItems)
+    ? params.rental.equipmentItems
+    : [];
 
-  if (match) {
-    if (match.model && match.model.trim() && match.model.toLowerCase() !== "standard") {
-      foundModel = match.model.trim();
+  // Narrowest set of units we can justify: an explicit selection, else the ids
+  // recorded on the return, else the items still out on the rental.
+  let targetItems: any[] = [];
+  if (params.equipmentIds && params.equipmentIds.length > 0) {
+    const wanted = new Set(params.equipmentIds);
+    targetItems = rentalItems.filter((it: any) => wanted.has(it.equipmentId));
+    if (targetItems.length === 0) {
+      targetItems = params.equipmentIds.map((id) => ({ equipmentId: id }));
     }
-    if (match.name && match.name.trim()) {
-      foundName = match.name.trim();
-    }
+  } else if (rentalItems.length > 0) {
+    const unreturned = rentalItems.filter((it: any) => !it.returned);
+    targetItems = unreturned.length > 0 ? unreturned : rentalItems;
   }
 
-  if (!foundModel && params.rental?.equipmentItems && params.rental.equipmentItems.length > 0) {
-    const itemModels = params.rental.equipmentItems
-      .map((item: any) => {
-        const itemEq = allEq.find(e => e.id === item.equipmentId || (e.serial && item.serial && String(e.serial || "").trim().toLowerCase() === String(item.serial || "").trim().toLowerCase()));
-        return itemEq?.model?.trim() || item.model?.trim() || itemEq?.name?.trim() || item.name?.trim();
-      })
-      .filter((m: string) => m && m.toLowerCase() !== "standard");
-    if (itemModels.length > 0) {
-      foundModel = Array.from(new Set(itemModels)).join(", ");
+  const modelsFromItems = targetItems
+    .map((item: any) => {
+      const eq = eqById.get(item.equipmentId);
+      // The line item recorded at signing time wins over the mutable master.
+      if (isUsableModel(item.model)) return String(item.model).trim();
+      if (isUsableModel(eq?.model)) return String(eq.model).trim();
+      // No model on record for this unit - name it so the line is not empty.
+      return String(eq?.name || item.name || "").trim();
+    })
+    .filter(Boolean);
+
+  let foundModel = Array.from(new Set(modelsFromItems)).join(", ");
+  let foundName = "";
+
+  if (!foundModel) {
+    // Legacy single-equipment rentals carry no equipmentItems at all. Match on
+    // the serial only (unique per unit); a bare category name cannot identify
+    // a unit, so it is used for the name fallback, never for the model.
+    const bySerial = serialStr
+      ? allEq.find((e: any) => String(e.serial || "").trim().toLowerCase() === serialStr.toLowerCase())
+      : undefined;
+    if (bySerial) {
+      if (isUsableModel(bySerial.model)) foundModel = String(bySerial.model).trim();
+      if (bySerial.name) foundName = String(bySerial.name).trim();
+    } else if (eqStr) {
+      const byName = allEq.find((e: any) => String(e.name || "").trim().toLowerCase() === eqStr.toLowerCase());
+      if (byName?.name) foundName = String(byName.name).trim();
     }
   }
 
@@ -346,6 +386,8 @@ function WhatsAppReturnMessageModal({
       refundAmount: ret?.refund > 0 ? ret.refund : 0,
       rental,
       customer,
+      // ITEM-5: a processed return records exactly which units went back.
+      equipmentIds: ret?.returnedEquipmentIds,
     });
   }, [customerName, rentDate, phone, altPhone, equipment, serial, model, area, address, locationAddress, latitude, longitude, pending, ret, rental, customer]);
 
@@ -743,6 +785,9 @@ export const Route = createFileRoute("/returns")({
 });
 
 
+/** Rows rendered per page in the return history before "Load more". */
+const RETURNS_PAGE_SIZE = 50;
+
 function ReturnsPage() {
   const dbVersion = useDatabaseTrigger();
   const [rentals, setRentals] = useState(() => getRentals());
@@ -773,6 +818,10 @@ function ReturnsPage() {
   const lastSelectedAgreementRef = useRef("");
 
   const [historySearch, setHistorySearch] = useState("");
+  // PERF: the field stays bound to historySearch so typing is instant; the
+  // history filter (which joins each return against rentals and customers)
+  // runs off the debounced copy.
+  const debouncedHistorySearch = useDebounce(historySearch, 300);
 
   // Mobile-only: tracks which return row's WhatsApp / Pay Due dialog is open,
   // opened from the mobile card's kebab menu (dialogs are rendered once, outside the row loop).
@@ -857,18 +906,44 @@ function ReturnsPage() {
     return { owner: "Unknown", category: "Unknown" };
   };
 
-  const filteredReturns = sortLatestFirst(
-    mockReturns.filter((ret) => {
+  // ITEM-9: belt-and-braces - never render the same return record twice even if
+  // storage or a Google Sheets pull hands us a repeated id.
+  const uniqueReturns = useMemo(() => {
+    const seen = new Set<string>();
+    return mockReturns.filter((ret: any) => {
+      if (!ret?.id || seen.has(ret.id)) return false;
+      seen.add(ret.id);
+      return true;
+    });
+  }, [mockReturns]);
+
+  // PERF: index rentals/customers once instead of scanning both arrays for
+  // every return on every keystroke.
+  const rentalsById = useMemo(() => new Map<string, any>(rentals.map((r: any) => [r.id, r])), [rentals]);
+  const customersByName = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const c of customers) {
+      const key = String(c.name || "").toLowerCase();
+      if (key && !map.has(key)) map.set(key, c);
+    }
+    return map;
+  }, [customers]);
+  const customersById = useMemo(() => new Map<string, any>(customers.map((c: any) => [c.id, c])), [customers]);
+
+  const filteredReturns = useMemo(() => sortLatestFirst(
+    uniqueReturns.filter((ret) => {
       const info = getReturnOwnerAndCategory(ret);
       const matchesOwner = historyOwnerFilter === "all-owners" || info.owner === historyOwnerFilter;
       const matchesCategory = historyCategoryFilter === "all-categories" || info.category === historyCategoryFilter;
       
-      const rental = rentals.find(r => r.id === ret.agreement);
-      const customer = customers.find(c => c.name.toLowerCase() === ret.customer.toLowerCase() || (rental && c.id === rental.customerId));
+      const rental = rentalsById.get(ret.agreement);
+      const customer =
+        customersByName.get(String(ret.customer || "").toLowerCase()) ||
+        (rental ? customersById.get(rental.customerId) : undefined);
 
       // Search query filter
-      const searchLower = historySearch.toLowerCase().trim();
-      const matchesSearch = !historySearch || 
+      const searchLower = debouncedHistorySearch.toLowerCase().trim();
+      const matchesSearch = !searchLower || 
         ret.id.toLowerCase().includes(searchLower) ||
         ret.customer.toLowerCase().includes(searchLower) ||
         ret.equipment.toLowerCase().includes(searchLower) ||
@@ -883,22 +958,117 @@ function ReturnsPage() {
       return matchesOwner && matchesCategory && matchesSearch;
     }),
     "date"
+  ), [uniqueReturns, historyOwnerFilter, historyCategoryFilter, debouncedHistorySearch, rentalsById, customersByName, customersById, eqInventory, owners]);
+
+  // PERF: mount a page of history rows at a time.
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(RETURNS_PAGE_SIZE);
+  useEffect(() => {
+    setHistoryVisibleCount(RETURNS_PAGE_SIZE);
+  }, [debouncedHistorySearch, historyOwnerFilter, historyCategoryFilter]);
+  const visibleReturns = useMemo(
+    () => filteredReturns.slice(0, historyVisibleCount),
+    [filteredReturns, historyVisibleCount]
   );
+  const hasMoreReturns = filteredReturns.length > historyVisibleCount;
   
+  // ITEM-9 FIX: the picker labelled every option `Customer - Phone - Rent Date`,
+  // with no agreement id. A customer with more than one open agreement - which
+  // any partial return produces, since processing one splits the remainder onto
+  // a fresh agreement - therefore rendered two or more visually identical rows.
+  // Label each option with its own agreement id and equipment, and key the list
+  // by id so a repeated record can never contribute two entries.
+  const agreementOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return rentals
+      .filter((r) => r.status !== "Completed" && r.status !== "Cancelled")
+      .filter((r) => {
+        if (!r.id || seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      })
+      .map((r) => {
+        const cust = customers.find(
+          (c) => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase())
+        );
+        const phone1 = r.phone || cust?.phone || "";
+        const phone2 = r.altPhone || cust?.altPhone || "";
+        const phone3 = r.contactNumber3 || cust?.contactNumber3 || "";
+        const phones = [phone1, phone2, phone3].filter(Boolean).join(" ");
+        const rentDateStr = r.start ? formatDateDDMMYYYY(r.start) : "";
+
+        // Only the equipment still out on this agreement - that is what a
+        // return is actually about, and it is what tells two split agreements
+        // for the same customer apart at a glance.
+        const openItems = Array.isArray(r.equipmentItems)
+          ? r.equipmentItems.filter((it: any) => !it.returned)
+          : [];
+        const equipmentSummary = openItems.length > 0
+          ? openItems
+              .map((it: any) => {
+                const eq = eqInventory.find((e) => e.id === it.equipmentId);
+                return formatEquipmentLabel({
+                  name: it.name || eq?.name || eq?.category,
+                  model: it.model || eq?.model,
+                  serial: it.serial || eq?.serial,
+                });
+              })
+              .join(", ")
+          : (r.equipment || "");
+
+        const parts = [
+          r.id,
+          r.customer,
+          phone1,
+          rentDateStr ? `Rent Date: ${rentDateStr}` : "",
+          equipmentSummary,
+        ].filter(Boolean);
+
+        return {
+          value: r.id,
+          label: parts.join(" · "),
+          searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr} ${equipmentSummary}`,
+        };
+      });
+  }, [rentals, customers, eqInventory]);
+
   const getEquipmentName = (eqId: string) => {
     const eq = eqInventory.find((e) => e.id === eqId);
     return eq ? eq.name : "Unknown Equipment";
   };
 
-  const rentalEquipments = selectedRental ? (selectedRental.equipmentItems || [
-    {
-      equipmentId: selectedRental.equipmentId,
-      serial: selectedRental.serial,
-      monthlyRent: cleanNum(selectedRental.monthlyRent),
-      deposit: cleanNum(selectedRental.deposit),
-      returned: false
+  // ITEM-9 FIX: one card per physical unit. equipmentItems can carry the same
+  // equipmentId twice - a legacy `equipmentId` string like "EQ-1, EQ-1" expands
+  // to two entries during the getRentals() migration, and re-adding an item to
+  // an existing agreement appends rather than replaces. Both rendered duplicate
+  // checkboxes under the same React key. Collapse by equipmentId, preferring the
+  // entry that is still out over one already marked returned.
+  const rentalEquipments = useMemo(() => {
+    if (!selectedRental) return [];
+    const raw: any[] = selectedRental.equipmentItems && selectedRental.equipmentItems.length > 0
+      ? selectedRental.equipmentItems
+      : [
+          {
+            equipmentId: selectedRental.equipmentId,
+            serial: selectedRental.serial,
+            monthlyRent: cleanNum(selectedRental.monthlyRent),
+            deposit: cleanNum(selectedRental.deposit),
+            returned: false,
+          },
+        ];
+
+    const byId = new Map<string, any>();
+    for (const item of raw) {
+      const key = String(item?.equipmentId || "").trim();
+      if (!key) continue;
+      const existing = byId.get(key);
+      if (!existing) {
+        byId.set(key, item);
+      } else if (existing.returned && !item.returned) {
+        byId.set(key, item);
+      }
     }
-  ]) : [];
+    return Array.from(byId.values());
+  }, [selectedRental]);
 
   const agreementPayments = useMemo(() => {
     if (!selectedRental) return [];
@@ -956,14 +1126,29 @@ function ReturnsPage() {
         const returningItems = rentalEquipments.filter((item: any) => selectedEquipmentIds.includes(item.equipmentId) && !item.returned);
 
         const calculatedFinalRent = returningItems.reduce((sum: number, item: any) => {
-          const isMonthly = cleanNum(item.monthlyRent) > 0;
+          // ITEM-10 FIX: bill on the cycle the agreement was actually written on.
+          // This used to infer the cycle from `monthlyRent > 0`; agreements saved
+          // through the edit form carry BOTH a monthlyRent and a dailyRent, so a
+          // daily rental was silently billed at the monthly slab rate (and vice
+          // versa once rentCycle was lost). The explicit field wins, with the old
+          // inference kept only for line items written before it existed.
+          const monthlyRent = cleanNum(item.monthlyRent);
+          const dailyRate = cleanNum(item.dailyRent || item.rentRate);
+          const cycle = item.rentCycle || (selectedRental as any).rentCycle;
+          const isMonthly = cycle ? cycle === "Monthly" : (monthlyRent > 0 && dailyRate === 0);
+
+          // Per-item start date where one exists (an item swapped in mid-term by
+          // an exchange starts billing from the swap, not from the agreement).
+          const itemStart = item.startDate || item.start || selectedRental.start;
+          const itemStartDate = parseLocalDate(itemStart);
+          const itemDaysUsed = !isNaN(itemStartDate.getTime()) && itemStartDate <= actualEnd
+            ? Math.max(1, Math.ceil((actualEnd.getTime() - itemStartDate.getTime()) / (1000 * 60 * 60 * 24)))
+            : daysUsed;
+
           if (!isMonthly) {
-            const dailyRate = cleanNum(item.dailyRent || item.rentRate);
-            return sum + (daysUsed * dailyRate);
-          } else {
-            const itemMonthlyRent = cleanNum(item.monthlyRent);
-            return sum + getReturnCalculatedRentPerItem(itemMonthlyRent, daysUsed, selectedRental.start, returnDate);
+            return sum + (itemDaysUsed * dailyRate);
           }
+          return sum + getReturnCalculatedRentPerItem(monthlyRent, itemDaysUsed, itemStart, returnDate);
         }, 0);
 
         const rentPaidForReturningItems = returningItems.reduce((sum: number, item: any) => {
@@ -1017,12 +1202,29 @@ function ReturnsPage() {
   );
 
   const paidAmt = cleanNum(totalPaidAmount);
-  let netRefund = deposit - dmg - pend + disc - unpaidAccessoryTotal;
 
-  if (fRent < paidAmt) {
-    const rentRefund = paidAmt - fRent;
-    netRefund = deposit + rentRefund - dmg - pend + disc - unpaidAccessoryTotal;
-  }
+  // ITEM-10 FIX: the settlement is now derived once, here, in the same steps the
+  // Reconciliation Ledger displays. Previously the ledger computed
+  // `max(0, totalDue - discount)` while the recorded `netRefund` used a separate
+  // `deposit - dmg - pend + disc - accessories` expression, so the two disagreed:
+  //   * a discount larger than the amount owed turned into a cash refund the
+  //     ledger never showed (a discount can only reduce a due, never create a
+  //     refund), and
+  //   * the number printed on the receipt and saved to the return record was not
+  //     the number the operator had just read off the screen.
+  //
+  //   Rent still owed  = rent charged for the returning items - rent already paid
+  //   Rent overpaid    = the reverse, credited back against the deposit
+  //   Total due        = rent owed + damage + unpaid accessories
+  //   Discount         = applied to that due, capped at it
+  //   Settlement       = deposit held + rent overpaid - due remaining
+  //                      (positive = refund to customer, negative = collect)
+  const remainingRentDues = Math.max(0, fRent - paidAmt);
+  const rentOverpaid = Math.max(0, paidAmt - fRent);
+  const totalDueBeforeDiscount = remainingRentDues + dmg + unpaidAccessoryTotal;
+  const effectiveDiscount = Math.min(Math.max(0, disc), totalDueBeforeDiscount);
+  const afterDiscountTotalDue = totalDueBeforeDiscount - effectiveDiscount;
+  const netRefund = deposit + rentOverpaid - afterDiscountTotalDue;
 
   const isDateInvalid = selectedRental && returnDate ? parseLocalDate(returnDate) < parseLocalDate(selectedRental.start) : false;
 
@@ -1073,7 +1275,9 @@ function ReturnsPage() {
       condition: condition,
       deposit: deposit,
       damageCharges: dmg,
-      discount: disc,
+      // ITEM-10: record the discount that was actually applied, capped at the
+      // amount owed - not the raw figure typed in.
+      discount: effectiveDiscount,
       finalRent: fRent,
       pendingBalance: pend,
       refund: netRefund,
@@ -1230,10 +1434,14 @@ function ReturnsPage() {
       condition: condition || "Good",
       deposit: deposit,
       damageCharges: dmg,
+      // ITEM-10: the preview receipt omitted the discount entirely, so it
+      // printed a different settlement from the one on screen.
+      discount: effectiveDiscount,
       finalRent: fRent,
       pendingBalance: pend,
       refund: netRefund,
       status: "Pending Approval",
+      returnedEquipmentIds: selectedEquipmentIds,
       unpaidAccessoryTotal: unpaidAccessoryTotal,
       collectedBy: collectedBy,
     };
@@ -1271,21 +1479,7 @@ function ReturnsPage() {
                   placeholder="Type or select rental agreement..."
                   searchPlaceholder="Search agreement id, customer name, contact number..."
                   emptyText="No matching rentals found."
-                  options={rentals.filter(r => r.status !== "Completed" && r.status !== "Cancelled").map((r) => {
-                    const cust = customers.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
-                    const phone1 = r.phone || cust?.phone || "";
-                    const phone2 = r.altPhone || cust?.altPhone || "";
-                    const phone3 = r.contactNumber3 || cust?.contactNumber3 || "";
-                    const phones = [phone1, phone2, phone3].filter(Boolean).join(" ");
-                    const displayPhone = phone1 ? ` · ${phone1}` : "";
-                    const rentDateStr = r.start ? formatDateDDMMYYYY(r.start) : "";
-                    const displayRentDate = rentDateStr ? ` · Rent Date: ${rentDateStr}` : "";
-                    return {
-                      value: r.id,
-                      label: `${r.customer}${displayPhone}${displayRentDate}`,
-                      searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr}`,
-                    };
-                  })}
+                  options={agreementOptions}
                 />
               </div>
 
@@ -1702,14 +1896,14 @@ function ReturnsPage() {
             {/* Detailed Return & Reconciliation Summary Grid Panel */}
             {selectedRental ? (
               (() => {
-                const remainingRentDues = Math.max(0, fRent - paidAmt);
-                // Bug 12 fix: when overpaid, show excess as credit, not negative due
-                const rentOverpaid = Math.max(0, paidAmt - fRent);
-                const dmgCharges = cleanNum(damageCharges);
+                // ITEM-10: read the shared settlement values rather than
+                // recomputing them - the ledger and the saved record must never
+                // be able to drift apart again.
+                const dmgCharges = dmg;
                 const unpaidAccessoriesTotal = unpaidAccessoryTotal;
-                const totalDueVal = Math.max(0, remainingRentDues + dmgCharges + unpaidAccessoriesTotal);
-                const returnDiscountVal = cleanNum(discount);
-                const afterDiscountTotalDueVal = Math.max(0, totalDueVal - returnDiscountVal);
+                const totalDueVal = totalDueBeforeDiscount;
+                const returnDiscountVal = effectiveDiscount;
+                const afterDiscountTotalDueVal = afterDiscountTotalDue;
                 const totalDepositVal = deposit;
 
                 return (
@@ -2087,6 +2281,7 @@ function ReturnsPage() {
                           refundAmount: netRefund > 0 ? netRefund : 0,
                           rental: selectedRental,
                           customer: selectedCustomer,
+                          equipmentIds: selectedEquipmentIds,   // ITEM-5
                         });
                         navigator.clipboard.writeText(msg);
                         toast.success("WhatsApp pickup message copied to clipboard!");
@@ -2116,6 +2311,7 @@ function ReturnsPage() {
                           refundAmount: netRefund > 0 ? netRefund : 0,
                           rental: selectedRental,
                           customer: selectedCustomer,
+                          equipmentIds: selectedEquipmentIds,   // ITEM-5
                         });
                         const cleanPhone = (selectedCustomer?.phone || (selectedRental as any)?.phone || "").replace(/\D/g, "");
                         const text = encodeURIComponent(msg);
@@ -2151,6 +2347,7 @@ function ReturnsPage() {
                     refundAmount: netRefund > 0 ? netRefund : 0,
                     rental: selectedRental,
                     customer: selectedCustomer,
+                    equipmentIds: selectedEquipmentIds,   // ITEM-5
                   })}
                   className="font-mono text-[12.5px] bg-background border-emerald-300 dark:border-emerald-800 leading-relaxed font-semibold cursor-text text-foreground"
                 />
@@ -2230,12 +2427,15 @@ function ReturnsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/10">
+                    {/* ITEM-18: Return Date, Customer, Equipment & S/N, Condition,
+                        Rent Collected, Deposit Refunded, then Actions. */}
                     <TableHead className="w-[110px]">Return ID</TableHead>
-                    <TableHead className="w-[100px]">Date</TableHead>
+                    <TableHead className="w-[100px]">Return Date</TableHead>
                     <TableHead className="w-[180px]">Customer</TableHead>
-                    <TableHead>Equipment & Sourcing</TableHead>
+                    <TableHead>Equipment &amp; S/N</TableHead>
                     <TableHead className="w-[110px]">Condition</TableHead>
-                    <TableHead className="text-right w-[110px]">Deposit Offset</TableHead>
+                    <TableHead className="text-right w-[120px]">Rent Collected</TableHead>
+                    <TableHead className="text-right w-[120px]">Deposit Refunded</TableHead>
                     <TableHead className="text-right w-[110px]">Damages/Dues</TableHead>
                     <TableHead className="text-right w-[110px]">Final Settlement</TableHead>
                     <TableHead className="w-[120px] text-center">Status</TableHead>
@@ -2245,14 +2445,14 @@ function ReturnsPage() {
                 <TableBody>
                   {filteredReturns.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="py-14 text-center text-muted-foreground text-[13px]">
+                      <TableCell colSpan={11} className="py-14 text-center text-muted-foreground text-[13px]">
                         <RotateCcw className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
                         <p className="font-semibold text-foreground/75">No return records match filters</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">Try widening search criteria or selecting another tab.</p>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredReturns.map((ret) => {
+                    visibleReturns.map((ret) => {
                       const info = getReturnOwnerAndCategory(ret);
                       return (
                         <TableRow key={ret.id} className="group hover:bg-muted/15 transition-colors">
@@ -2265,7 +2465,29 @@ function ReturnsPage() {
                           </TableCell>
 
                           <TableCell className="text-[12.5px] text-foreground/80">
-                            <p className="font-semibold text-[13px]">{ret.equipment}</p>
+                            {/* ITEM-18/ITEM-7: identify the physical unit, not just
+                                the category - a return record names which serial
+                                actually came back. */}
+                            {(() => {
+                              const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                              const labels = ids
+                                .map((id) => {
+                                  const eq = eqInventory.find((e) => e.id === id);
+                                  if (!eq) return "";
+                                  return formatEquipmentLabel(eq);
+                                })
+                                .filter(Boolean);
+                              if (labels.length === 0) {
+                                return <p className="font-semibold text-[13px]">{ret.equipment}</p>;
+                              }
+                              return (
+                                <div className="space-y-0.5">
+                                  {labels.map((label, i) => (
+                                    <p key={i} className="font-semibold text-[13px] leading-tight">{label}</p>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <p className="text-[10.5px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1.5">
                               <span>Owner: <strong className="text-foreground/70 font-medium">{info.owner}</strong></span>
                               {info.category && info.category !== ret.equipment && (
@@ -2299,7 +2521,43 @@ function ReturnsPage() {
                             </span>
                           </TableCell>
 
-                          <TableCell className="text-right font-semibold text-[13px]">₹{(ret.deposit || 0).toLocaleString("en-IN")}</TableCell>
+                          {/* ITEM-18: rent actually recovered on this return, and
+                              what the customer got back from their deposit. */}
+                          <TableCell className="text-right text-[12.5px]">
+                            {(() => {
+                              const rentCharged = cleanNum(ret.finalRent);
+                              const stillOwed = cleanNum(ret.pendingBalance);
+                              const collected = Math.max(0, rentCharged - stillOwed);
+                              return (
+                                <div>
+                                  <p className="font-bold text-emerald-600">₹{collected.toLocaleString("en-IN")}</p>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    of ₹{rentCharged.toLocaleString("en-IN")} rent
+                                  </p>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+
+                          <TableCell className="text-right text-[12.5px]">
+                            {(() => {
+                              const depositHeld = cleanNum(ret.deposit);
+                              // A positive settlement is money handed back; a
+                              // negative one means the deposit was consumed by
+                              // dues and nothing was refunded.
+                              const refunded = cleanNum(ret.refund) > 0 ? Math.min(cleanNum(ret.refund), depositHeld) : 0;
+                              return (
+                                <div>
+                                  <p className={`font-bold ${refunded > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                    ₹{refunded.toLocaleString("en-IN")}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                                    of ₹{depositHeld.toLocaleString("en-IN")} held
+                                  </p>
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
                           
                           <TableCell className="text-right text-[12px] space-y-0.5">
                             {ret.damageCharges > 0 && (
@@ -2434,7 +2692,7 @@ function ReturnsPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-border/60">
-                  {filteredReturns.map((ret) => {
+                  {visibleReturns.map((ret) => {
                     const settlement = getReturnSettlementDisplay(ret);
                     return (
                       <div
@@ -2519,6 +2777,22 @@ function ReturnsPage() {
                 </div>
               )}
             </div>
+
+            {/* PERF: incremental rendering - only a page of history rows mounts */}
+            {hasMoreReturns && (
+              <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
+                <span className="text-[12px] text-muted-foreground">
+                  Showing {visibleReturns.length} of {filteredReturns.length}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHistoryVisibleCount((n) => n + RETURNS_PAGE_SIZE)}
+                >
+                  Load more
+                </Button>
+              </div>
+            )}
 
             {/* Controlled dialogs opened from the mobile card kebab menu above.
                 Rendered once, outside the row loop and outside the DropdownMenu tree, so they

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,11 +52,16 @@ import {
   sortLatestFirst,
   extractIdNumber,
   cleanNum,
+  formatEquipmentLabel,
+  getRentalEquipmentLabels,
+  getRentalOutstandingBalance,
+  getPaidForEquipment,
 } from "@/lib/data-store";
+import { useDebounce } from "@/hooks/use-debounce";
 import { EquipmentFormDialog } from "@/components/EquipmentFormDialog";
 import { isOwnOwner } from "@/components/EquipmentFormDialog";
 import { QrScannerModal } from "@/components/QrScannerModal";
-import { capitalizeWords } from "@/lib/utils";
+import { capitalizeWords, numericInputGuard } from "@/lib/utils";
 
 export const Route = createFileRoute("/rentals")({
   head: () => ({ meta: [{ title: "Rentals — Relife" }] }),
@@ -106,11 +111,19 @@ export function sendWhatsAppDocument(rental: any, customersList: any[] = []) {
   const rentDisplay = rental.rentRate || (rental.monthlyRent ? `₹${rental.monthlyRent.toLocaleString("en-IN")}/mo` : "—");
   const depositDisplay = `₹${(rental.deposit || 0).toLocaleString("en-IN")}`;
 
+  // ITEM-5 FIX: this template printed only `rental.equipment` (the category
+  // name) plus the legacy top-level serial, so the model never appeared and a
+  // multi-item agreement showed only one serial. Build the lines from the
+  // rental's real equipment items, each as `Name - Model (S/N: Serial)`.
+  const equipmentLabels = getRentalEquipmentLabels(rental);
+  const equipmentBlock = equipmentLabels.length > 0
+    ? equipmentLabels.map((label) => `📦 *Equipment:* ${label}\n`).join("")
+    : `📦 *Equipment:* Medical Equipment\n`;
+
   const message = `*Rental Agreement Document - MediRent*\n\n` +
     `📄 *Agreement ID:* ${rental.id}\n` +
     `👤 *Customer:* ${rental.customer}\n` +
-    `📦 *Equipment:* ${rental.equipment || "Medical Equipment"}\n` +
-    `🔢 *Serial:* ${rental.serial || "N/A"}\n` +
+    equipmentBlock +
     `🗓️ *Start Date:* ${startDateFormatted}\n` +
     `🗓️ *End Date:* ${endDateFormatted}\n` +
     `💰 *Rent Rate:* ${rentDisplay}\n` +
@@ -243,6 +256,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [endDate, setEndDate] = useState(rental?.end ? getLocalYYYYMMDD(rental.end) : "");
 
   const [isNewCustomer, setIsNewCustomer] = useState(false);
+  // ITEM-15: see phoneMatches below - real-time duplicate-contact detection.
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(rental?.customerId);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(rental?.signatureUrl || null);
   const [thumbprintUrl, setThumbprintUrl] = useState<string | null>(rental?.thumbprintUrl || null);
@@ -277,6 +291,29 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [custPhone, setCustPhone] = useState("");
   const [custAltPhone, setCustAltPhone] = useState("");
   const [custContactNumber3, setCustContactNumber3] = useState("");
+
+  // ITEM-15: warn the moment a typed number is already on file, so the operator
+  // picks the existing customer instead of creating a second record for them.
+  // Matching is on the normalised 10 digits and covers all three stored numbers,
+  // because a person's "alternate" number is often someone else's primary.
+  const findPhoneOwner = useCallback(
+    (value: string) => {
+      const digits = String(value || "").replace(/\D/g, "");
+      if (digits.length !== 10) return null;
+      return (
+        customersList.find((c: any) =>
+          [c.phone, c.altPhone, c.contactNumber3].some(
+            (p: any) => String(p || "").replace(/\D/g, "") === digits
+          )
+        ) || null
+      );
+    },
+    [customersList]
+  );
+
+  const custPhoneOwner = useMemo(() => findPhoneOwner(custPhone), [findPhoneOwner, custPhone]);
+  const custAltPhoneOwner = useMemo(() => findPhoneOwner(custAltPhone), [findPhoneOwner, custAltPhone]);
+  const custContact3Owner = useMemo(() => findPhoneOwner(custContactNumber3), [findPhoneOwner, custContactNumber3]);
   const [custEmail, setCustEmail] = useState("");
   const [custAadhaar, setCustAadhaar] = useState("");
   const [custPan, setCustPan] = useState("");
@@ -323,6 +360,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [removalCharges, setRemovalCharges] = useState(rental?.removalCharges?.toString() || "0");
   const [installationCharges, setInstallationCharges] = useState(rental?.installationCharges?.toString() || "0");
   const [additionalCharges, setAdditionalCharges] = useState(rental?.additionalCharges?.toString() || "0");
+  // ITEM-14: a negotiated reduction on the rent, recorded on the agreement so
+  // it flows into the printed agreement, the receipt and every later balance
+  // rather than being hidden by hand-editing the monthly rate.
+  const [rentalDiscount, setRentalDiscount] = useState(rental?.rentalDiscount?.toString() || "0");
+  const [rentalDiscountMode, setRentalDiscountMode] = useState<"amount" | "percent">(
+    (rental?.rentalDiscountMode as "amount" | "percent") || "amount"
+  );
   const [remarks, setRemarks] = useState((rental?.remarks as string) || "");
   const [consultingHospital, setConsultingHospital] = useState((rental?.consultingHospital as string) || "");
   const [referredBy, setReferredBy] = useState((rental?.referredBy as string) || "");
@@ -428,6 +472,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       removalCharges,
       installationCharges,
       additionalCharges,
+      rentalDiscount,
+      rentalDiscountMode,
       remarks,
       rentalPaymentStatus,
       depositPaymentStatus,
@@ -481,6 +527,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         setRemovalCharges(draft.removalCharges || "0");
         setInstallationCharges(draft.installationCharges || "0");
         setAdditionalCharges(draft.additionalCharges || "0");
+        setRentalDiscount(draft.rentalDiscount || "0");
+        setRentalDiscountMode(draft.rentalDiscountMode || "amount");
         setRemarks(draft.remarks || "");
         setRentalPaymentStatus(draft.rentalPaymentStatus || "Not Paid");
         setDepositPaymentStatus(draft.depositPaymentStatus || "Not Paid");
@@ -621,6 +669,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setRemovalCharges(rental?.removalCharges?.toString() || "0");
       setInstallationCharges(rental?.installationCharges?.toString() || "0");
       setAdditionalCharges(rental?.additionalCharges?.toString() || "0");
+      setRentalDiscount(rental?.rentalDiscount?.toString() || "0");
+      setRentalDiscountMode((rental?.rentalDiscountMode as "amount" | "percent") || "amount");
       setRemarks((rental?.remarks as string) || "");
       setConsultingHospital((rental?.consultingHospital as string) || "");
       setReferredBy((rental?.referredBy as string) || "");
@@ -909,6 +959,26 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
   const durationDetails = getDurationDetails();
 
+  // ITEM-12: show both contact numbers on every row. Namesakes are common here
+  // (and now explicitly allowed - see ITEM-4), so the name alone is not enough
+  // to tell two customers apart at selection time; the phone numbers are.
+  const customerOptions = useMemo(
+    () =>
+      customersList.map((c: any) => {
+        const primary = String(c.phone || "").trim();
+        const alt = String(c.altPhone || "").trim();
+        const parts = [`${c.name} — ${c.id}`];
+        if (primary) parts.push(`Ph: ${primary}`);
+        if (alt) parts.push(`Alt: ${alt}`);
+        return {
+          value: c.id,
+          label: parts.join(" | "),
+          searchTerms: `${c.phone || ""} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
+        };
+      }),
+    [customersList]
+  );
+
   const selectedCustomer = customersList.find(c => c.id === selectedCustomerId);
 
   const getAutoSelectItems = (eqName: string, eqCategory: string, eqModel?: string): string[] => {
@@ -1043,7 +1113,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       if (isAvailable) {
         row.equipmentId = eq.id;
         row.serial = eq.serial;
-        toast.success(`Equipment scanned: ${eq.name} (${eq.serial})`);
+        row.model = eq.model || "";            // ITEM-7
+        row.equipment = eq.name || eq.category || "";
+        toast.success(`Equipment scanned: ${formatEquipmentLabel(eq)}`);
       } else {
         row.serial = scannedText;
         toast.warning(`Equipment "${eq.name}" is currently "${eq.status}" — serial filled but equipment not selected.`);
@@ -1094,6 +1166,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       const newItem = {
         equipmentId: eq.id,
         serial: eq.serial || "",
+        model: eq.model || "",                 // ITEM-7
+        equipment: eq.name || eq.category || "",
         rentCycle: "Monthly",
         rentRate: (eq.monthlyRent || eq.rentRate || 0).toString(),
         monthlyRent: (eq.monthlyRent || eq.rentRate || 0).toString(),
@@ -1106,7 +1180,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       } else {
         updated.push(newItem);
       }
-      toast.success(`Added: ${eq.name} (${eq.serial})`);
+      toast.success(`Added: ${formatEquipmentLabel(eq)}`);
       setTimeout(() => {
         syncAdditionalItemsWithEquipments(updated);
       }, 0);
@@ -1213,7 +1287,21 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const additionalItemsTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Free of Cost" ? 0 : i.amount), 0);
   const additionalItemsCollectedTotal = selectedAdditionalItems.reduce((sum, i) => sum + (i.status === "Paid" ? i.amount : 0), 0);
 
-  const totalCharges = totalRentVal + totalDepositVal + additionalItemsTotal;
+  // ITEM-14: the discount applies to the rent line only (a deposit is refundable
+  // and accessories are billed at cost), and can never exceed the rent itself.
+  const rentalDiscountInput = Number(rentalDiscount) || 0;
+  const rentalDiscountVal = Math.min(
+    totalRentVal,
+    Math.max(
+      0,
+      rentalDiscountMode === "percent"
+        ? Math.round((totalRentVal * Math.min(100, rentalDiscountInput)) / 100)
+        : rentalDiscountInput
+    )
+  );
+  const netRentVal = Math.max(0, totalRentVal - rentalDiscountVal);
+
+  const totalCharges = netRentVal + totalDepositVal + additionalItemsTotal;
   const totalUpfrontPaid = rentToAdd + depositToAdd + additionalItemsCollectedTotal;
 
   // Payment split display
@@ -1295,15 +1383,25 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         return;
       }
 
+      // ITEM-4 / ITEM-15: a repeated name is fine - customers are identified by
+      // their CUST-XXXX id and phone number. Only a phone number already on file
+      // blocks, since that is a genuine second record for the same person.
       const normalizedName = custName.trim().toLowerCase();
-      const normalizedPhone = custPhone.replace(/\D/g, "");
-      const isDuplicateCustomer = getCustomers().some(
-        (c) => (c.name || "").trim().toLowerCase() === normalizedName && (c.phone || "").replace(/\D/g, "") === normalizedPhone
-      );
-      if (isDuplicateCustomer) {
-        toast.error(`A customer named "${custName.trim()}" with this phone number already exists. Select them from the customer list instead of adding new.`);
+      const existingCustomers = getCustomers();
+      const phoneOwner = findPhoneOwner(custPhone);
+      if (phoneOwner) {
+        toast.error(
+          `This phone number is already registered to "${phoneOwner.name}" (${phoneOwner.id}). Select them from the customer list instead of adding new.`
+        );
         setIsSubmitting(false);
         return;
+      }
+
+      const nameTwin = existingCustomers.find(
+        (c) => (c.name || "").trim().toLowerCase() === normalizedName
+      );
+      if (nameTwin) {
+        toast.info(`Customer with this name already exists (${nameTwin.id}). Saving as a separate record.`);
       }
 
       // Create new customer
@@ -1442,6 +1540,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       paymentCollectedBy,
       additionalItems,
       rentalDuration: durationDetails.text,
+      // ITEM-14: persist the discount and how it was expressed, so an
+      // edit reopens with the same terms and the agreement/receipt can
+      // print "was X, now Y".
+      rentalDiscount: rentalDiscountVal,
+      rentalDiscountMode,
+      netRent: netRentVal,
       totalRent: 0,
       latitude: capturedLocation?.latitude || null,
       longitude: capturedLocation?.longitude || null,
@@ -1455,6 +1559,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         return {
           equipmentId: item.equipmentId,
           name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown",
+          // ITEM-7: carry the model onto the saved line item so agreements,
+          // receipts and return records can print Name - Model (S/N: Serial).
+          model: item.model || equipmentList.find(e => e.id === item.equipmentId)?.model || "",
           serial: item.serial || "XXXX",
           rentCycle: item.rentCycle || "Monthly",
           monthlyRent: isMonthly ? rate : 0,
@@ -1678,6 +1785,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
+                      {custPhoneOwner && (
+                        <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                          <span>Phone number already registered to {custPhoneOwner.name} ({custPhoneOwner.id})</span>
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone</Label>
@@ -1696,6 +1809,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
+                      {custAltPhoneOwner && (
+                        <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                          <span>Phone number already registered to {custAltPhoneOwner.name} ({custAltPhoneOwner.id})</span>
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Alternative Phone 1</Label>
@@ -1714,6 +1833,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
+                      {custContact3Owner && (
+                        <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
+                          <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                          <span>Phone number already registered to {custContact3Owner.name} ({custContact3Owner.id})</span>
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Email</Label>
@@ -1771,13 +1896,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       value={selectedCustomerId}
                       onValueChange={setSelectedCustomerId}
                       placeholder="Select existing customer"
-                      searchPlaceholder="Search customer by name or ID..."
+                      searchPlaceholder="Search customer by name, ID or phone number..."
                       emptyText="No customer found."
-                      options={customersList.map((c) => ({
-                        value: c.id,
-                        label: `${c.name} — ${c.id}`,
-                        searchTerms: `${c.phone} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
-                      }))}
+                      options={customerOptions}
                     />
                     {selectedCustomer && (
                       <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3">
@@ -1914,6 +2035,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             newEquipments[idx].equipmentId = val;
                             if (!val) {
                               newEquipments[idx].serial = "";
+                              newEquipments[idx].model = "";
+                              newEquipments[idx].equipment = "";
                               newEquipments[idx].monthlyRent = "";
                               newEquipments[idx].dailyRent = "";
                               newEquipments[idx].deposit = "";
@@ -1922,6 +2045,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                               const eq = equipmentList.find(e => e.id === val);
                               if (eq) {
                                 newEquipments[idx].serial = eq.serial || "";
+                                // ITEM-7: persist the model on the line item so the
+                                // agreement/receipt can print it without re-joining
+                                // against the equipment master later.
+                                newEquipments[idx].model = eq.model || "";
+                                newEquipments[idx].equipment = eq.name || eq.category || "";
                                 const cycle = newEquipments[idx].rentCycle || "Monthly";
                                 const defaultMonthly = (eq.monthlyRent || eq.rentRate || 0).toString();
                                 const defaultDaily = (eq.dailyRent || (eq.monthlyRent ? Math.round(eq.monthlyRent / 30) : 0)).toString();
@@ -1943,14 +2071,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           placeholder="Select equipment"
                           searchPlaceholder="Search equipment by name, serial, owner..."
                           emptyText="No equipment found."
-                          options={itemsForSelect.map((e) => {
-                            const displayName = e.name || e.category || "Equipment";
-                            const serialNum = e.serial || "No Serial";
-                            return {
-                              value: e.id,
-                              label: serialNum !== "No Serial" ? `${displayName} — ${serialNum}` : displayName,
-                            };
-                          })}
+                          options={itemsForSelect.map((e) => ({
+                            value: e.id,
+                            // ITEM-7: `Name - Model (S/N: Serial)` everywhere equipment is named.
+                            label: formatEquipmentLabel(e),
+                          }))}
                           className="h-9"
                         />
                       </div>
@@ -1980,6 +2105,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                     if (isAvailable) {
                                       updated.equipmentId = eq.id;
                                       updated.serial = eq.serial;
+                                      updated.model = eq.model || "";
+                                      updated.equipment = eq.name || eq.category || "";
                                     } else {
                                       toast.warning(`Equipment with serial "${val}" is currently "${eq.status}"`);
                                     }
@@ -2550,6 +2677,47 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 </Select>
               </div>
 
+              {/* ITEM-14: in-between discount on the rental amount. Sits with the
+                  other commercial terms so it is agreed at the same moment as
+                  the rent and deposit, and feeds the itemised breakdown below. */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rental Discount</Label>
+                  <div className="flex overflow-hidden rounded-md border border-border/60">
+                    {(["amount", "percent"] as const).map((dm) => (
+                      <button
+                        key={dm}
+                        type="button"
+                        onClick={() => setRentalDiscountMode(dm)}
+                        aria-pressed={rentalDiscountMode === dm}
+                        className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                          rentalDiscountMode === dm
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {dm === "amount" ? "₹" : "%"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  type="number"
+                  placeholder={rentalDiscountMode === "percent" ? "e.g. 10" : "e.g. 500"}
+                  value={rentalDiscount}
+                  onChange={(e) => setRentalDiscount(e.target.value)}
+                  className="bg-background h-10"
+                />
+                {rentalDiscountVal > 0 && (
+                  <p className="text-[11px] font-semibold text-emerald-700">
+                    Rent after discount: ₹{netRentVal.toLocaleString("en-IN")}
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      (was ₹{totalRentVal.toLocaleString("en-IN")})
+                    </span>
+                  </p>
+                )}
+              </div>
+
               {/* Show rent paid amount only if status is Partial */}
               {rentalPaymentStatus === "Partial" && (
                 <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
@@ -2620,8 +2788,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
           {/* Right Column: Sticky Summary & Actions */}
           <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-h-0">
-            {/* Itemized Breakdown Table */}
-            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden">
+            {/* ITEM-11: pin the breakdown to the top of the summary column. The
+                column scrolls independently (lg:overflow-y-auto), so once the
+                agreement had a few accessories the Total Collected row slid out
+                of view exactly when the operator needed to check it. */}
+            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden lg:sticky lg:top-0 lg:z-10 lg:bg-card">
               <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Upfront Charges — Itemized Breakdown</span>
               </div>
@@ -2631,6 +2802,23 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     <td className="px-4 py-2 text-muted-foreground">Rent ({rentalPaymentStatus})</td>
                     <td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalRentVal.toLocaleString("en-IN")}</td>
                   </tr>
+                  {/* ITEM-14: the negotiated reduction, shown on its own line so
+                      the customer can see what the rent was before the discount. */}
+                  {rentalDiscountVal > 0 && (
+                    <tr>
+                      <td className="px-4 py-2 text-emerald-700">
+                        Rental Discount
+                        {rentalDiscountMode === "percent" && (
+                          <span className="ml-1 text-[10px] font-semibold text-muted-foreground">
+                            ({Math.min(100, rentalDiscountInput)}%)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-emerald-700">
+                        − ₹{rentalDiscountVal.toLocaleString("en-IN")}
+                      </td>
+                    </tr>
+                  )}
                   <tr>
                     <td className="px-4 py-2 text-muted-foreground">Security Deposit ({depositPaymentStatus})</td>
                     <td className="px-4 py-2 text-right font-semibold text-foreground">₹{totalDepositVal.toLocaleString("en-IN")}</td>
@@ -2689,6 +2877,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
                   additionalItems,
                   rentalDuration: durationDetails.text,
+                  rentalDiscount: rentalDiscountVal,
+                  rentalDiscountMode,
+                  netRent: netRentVal,
                   totalRent: durationDetails.totalRent,
                   totalInitialCharges: totalUpfrontPaid,
                   removalCharges: Number(removalCharges) || 0,
@@ -2697,7 +2888,15 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     return {
                       equipmentId: item.equipmentId,
                       name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown",
+                      // ITEM-7: carry the model onto the saved line item so agreements,
+                      // receipts and return records can print Name - Model (S/N: Serial).
+                      model: item.model || equipmentList.find(e => e.id === item.equipmentId)?.model || "",
                       serial: item.serial || "XXXX",
+                      // ITEM-10 FIX: the cycle has to be saved on the line item. Without it,
+                      // editing an agreement erased how it bills, and the downstream
+                      // `monthlyRent > 0 && dailyRent === 0` guess then read a monthly
+                      // rental (which carries both figures) as a daily one.
+                      rentCycle: item.rentCycle || "Monthly",
                       monthlyRent: Number(item.monthlyRent) || 0,
                       dailyRent: Number(item.dailyRent) || 0,
                       deposit: Number(item.deposit) || 0,
@@ -2732,12 +2931,23 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   bankUpiPaidAmount: paymentMode === "Bank" ? totalUpfrontPaid : (paymentMode === "Cash" ? 0 : (Number(bankUpiPaidAmount) || 0)),
                   additionalItems,
                   rentalDuration: durationDetails.text,
+                  rentalDiscount: rentalDiscountVal,
+                  rentalDiscountMode,
+                  netRent: netRentVal,
                   totalRent: durationDetails.totalRent,
                   totalInitialCharges: totalUpfrontPaid,
                   equipmentItems: selectedEquipments.map(item => ({
                     equipmentId: item.equipmentId,
                     name: equipmentList.find(e => e.id === item.equipmentId)?.name || "Unknown",
+                    // ITEM-7: carry the model onto the saved line item so agreements,
+                    // receipts and return records can print Name - Model (S/N: Serial).
+                    model: item.model || equipmentList.find(e => e.id === item.equipmentId)?.model || "",
                     serial: item.serial || "XXXX",
+                    // ITEM-10 FIX: the cycle has to be saved on the line item. Without it,
+                    // editing an agreement erased how it bills, and the downstream
+                    // `monthlyRent > 0 && dailyRent === 0` guess then read a monthly
+                    // rental (which carries both figures) as a daily one.
+                    rentCycle: item.rentCycle || "Monthly",
                     monthlyRent: Number(item.monthlyRent) || 0,
                     dailyRent: Number(item.dailyRent) || 0,
                     deposit: Number(item.deposit) || 0,
@@ -3775,8 +3985,10 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
     const eqList = getEquipment();
     finalEquipRows = rental.equipmentItems.map((item: any, idx: number) => {
       const eqObj = eqList.find(e => e.id === item.equipmentId);
-      const name = eqObj?.name || item.name || "Equipment";
-      const model = eqObj?.model || "Standard";
+      // ITEM-5/7: prefer the agreement's own line item over the (mutable)
+      // equipment master, matching getAgreementHtmlContent().
+      const name = item.name || eqObj?.name || eqObj?.category || "Equipment";
+      const model = item.model || eqObj?.model || "Standard";
       const serial = item.serial || eqObj?.serial || "XXXX";
       return (
         <tr key={idx} className="border-b border-slate-800 text-[11.5px]">
@@ -3885,7 +4097,11 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
     .reduce((sum, p) => sum + p.amount, 0);
   
   if (totalRentPaidWithoutDeposit === 0 && (rental?.rentalPaymentStatus === "Paid" || rental?.rentalPaymentStatus === "Partial")) {
-    totalRentPaidWithoutDeposit = rental?.rentPaidAmount || rental?.totalRent || rental?.monthlyRent || 0;
+    // ITEM-10: `totalRent` is the rent charged over the term, not money
+    // received - including it here reported unpaid agreements as paid.
+    totalRentPaidWithoutDeposit = rental?.rentalPaymentStatus === "Partial"
+      ? (Number(rental?.rentPaidAmount) || 0)
+      : (Number(rental?.rentPaidAmount) || Number(rental?.monthlyRent) || 0);
   }
 
   let depositPaid = paymentsList
@@ -3964,6 +4180,48 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
                 <X className="mr-1.5 h-3.5 w-3.5" /> Close
               </Button>
             </DialogClose>
+          </div>
+        </div>
+
+        {/*
+          ITEM-11 FIX: the money totals sit near the end of a multi-page
+          document inside a 90vh scroll container, so the operator had to scroll
+          the whole agreement to find out what had been collected - the "total
+          collected amount is hiding" report. This bar pins the three figures
+          that actually get checked to the top of the dialog, so they stay on
+          screen no matter how far down the document is scrolled. The full
+          itemised breakdown remains in the document body below.
+        */}
+        <div className="sticky top-0 z-20 -mx-1 mb-4 rounded-xl border border-border/70 bg-card/95 px-3 py-2.5 shadow-soft backdrop-blur-sm supports-[backdrop-filter]:bg-card/80">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="min-w-0 rounded-lg border border-emerald-200 bg-emerald-50/70 px-2.5 py-1.5 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Total Amount Collected</p>
+              <p className="font-display text-[15px] font-black tabular-nums text-emerald-800 dark:text-emerald-300">
+                ₹{totalPaid.toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className="min-w-0 rounded-lg border border-blue-200 bg-blue-50/70 px-2.5 py-1.5 dark:border-blue-900/50 dark:bg-blue-950/30">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Security Deposit Paid</p>
+              <p className="font-display text-[15px] font-black tabular-nums text-blue-800 dark:text-blue-300">
+                ₹{depositPaidAmount.toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className={`min-w-0 rounded-lg border px-2.5 py-1.5 ${
+              balanceDue > 0
+                ? "border-rose-200 bg-rose-50/70 dark:border-rose-900/50 dark:bg-rose-950/30"
+                : "border-border bg-muted/40"
+            }`}>
+              <p className={`truncate text-[10px] font-bold uppercase tracking-wider ${
+                balanceDue > 0 ? "text-rose-700 dark:text-rose-400" : "text-muted-foreground"
+              }`}>
+                Pending Balance
+              </p>
+              <p className={`font-display text-[15px] font-black tabular-nums ${
+                balanceDue > 0 ? "text-rose-800 dark:text-rose-300" : "text-muted-foreground"
+              }`}>
+                {balanceDue > 0 ? `₹${balanceDue.toLocaleString("en-IN")}` : "Fully Paid"}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -4192,10 +4450,22 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
   );
 }
 
+/** Rows rendered per page in the rentals history before "Load more". */
+const RENTALS_PAGE_SIZE = 50;
+
 function RentalsPage() {
   const dbVersion = useDatabaseTrigger();
   const [search, setSearch] = useState("");
+  // PERF: field stays bound to `search`; the filter below runs off the debounced copy.
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState("all");
+  // ITEM-16: quick filters over the history - "All / Active / Completed /
+  // Pending Dues". These cut across the raw status label (Pending Dues spans
+  // Active and Overdue agreements that carry a real unpaid balance), so they
+  // are a separate control from the status dropdown rather than more options in it.
+  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues">("all");
+  // PERF: render the first page only; the rest load on demand.
+  const [visibleCount, setVisibleCount] = useState(RENTALS_PAGE_SIZE);
   const [rentalsList, setRentalsList] = useState(() => getRentals());
 
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
@@ -4219,31 +4489,108 @@ function RentalsPage() {
 
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
 
-  const filteredRentals = sortLatestFirst(
-    rentalsList.filter((r) => {
-      const q = search.toLowerCase().trim();
-      const customer = customersList.find((c: any) => c.id === r.customerId);
-      const matchesSearch =
-        !q ||
-        r.id.toLowerCase().includes(q) ||
-        r.customer.toLowerCase().includes(q) ||
-        String(r.equipment || "").toLowerCase().includes(q) ||
-        String(r.serial || "").toLowerCase().includes(q) ||
-        (r.equipmentItems && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(q))) ||
-        (customer && (
-          String(customer.phone || "").toLowerCase().includes(q) ||
-          String(customer.altPhone || "").toLowerCase().includes(q) ||
-          String(customer.contactNumber3 || "").toLowerCase().includes(q) ||
-          String(customer.area || "").toLowerCase().includes(q) ||
-          String(customer.address || "").toLowerCase().includes(q)
-        ));
+  // PERF: one map lookup per row instead of scanning every customer per row.
+  const customersById = useMemo(
+    () => new Map<string, any>(customersList.map((c: any) => [c.id, c])),
+    [customersList]
+  );
+  const paymentsForDues = useMemo(() => getPayments(), [dbVersion]);
+
+  /** ITEM-16: real unpaid balance, used by the "Pending Dues" quick filter and
+   *  by the Overdue badge - the stored status label alone can be stale. */
+  const outstandingByRental = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rentalsList) {
+      map.set(r.id, getRentalOutstandingBalance(r, paymentsForDues));
+    }
+    return map;
+  }, [rentalsList, paymentsForDues]);
+
+  const filteredRentals = useMemo(() => {
+    const q = debouncedSearch.toLowerCase().trim();
+    const tokens = q.split(/\s+/).filter(Boolean);
+
+    /** True when any whole word in `text` starts with `token`. */
+    const wordStartsWith = (text: unknown, token: string) => {
+      if (!text) return false;
+      return String(text)
+        .toLowerCase()
+        .split(/[\s,./\()-]+/)
+        .filter(Boolean)
+        .some((w) => w.startsWith(token));
+    };
+
+    const rows = rentalsList.filter((r) => {
+      const customer = customersById.get(r.customerId);
+
+      // Same precision fix as the Rent Dues search (ITEM-8): names and places
+      // match on word prefix so a name query stops hitting unrelated addresses,
+      // while serials and phone digits keep their exact/substring matching.
+      const matchesSearch = !q || tokens.every((token) => {
+        const tokenDigits = token.replace(/\D/g, "");
+
+        if (wordStartsWith(r.customer, token)) return true;
+
+        const idLower = String(r.id || "").toLowerCase();
+        if (idLower.startsWith(token) || (tokenDigits.length >= 2 && idLower.includes(tokenDigits))) return true;
+
+        if (String(r.serial || "").toLowerCase().includes(token)) return true;
+        if (Array.isArray(r.equipmentItems) && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(token))) return true;
+        if (wordStartsWith(r.equipment, token)) return true;
+
+        if (customer) {
+          if (tokenDigits.length >= 3) {
+            const phones = [customer.phone, customer.altPhone, customer.contactNumber3];
+            if (phones.some((ph: any) => String(ph || "").replace(/\D/g, "").includes(tokenDigits))) return true;
+          }
+          if (wordStartsWith(customer.area, token)) return true;
+          if (wordStartsWith(customer.address, token)) return true;
+        }
+        return false;
+      });
+      if (!matchesSearch) return false;
+
       const matchesStatus =
         statusFilter === "all" ||
-        r.status.toLowerCase() === statusFilter.toLowerCase();
-      return matchesSearch && matchesStatus;
-    }),
-    "start"
+        String(r.status || "").toLowerCase() === statusFilter.toLowerCase();
+      if (!matchesStatus) return false;
+
+      // ITEM-16 quick filters
+      if (quickFilter === "active") {
+        return r.status === "Active" || r.status === "Overdue";
+      }
+      if (quickFilter === "completed") {
+        return r.status === "Completed";
+      }
+      if (quickFilter === "dues") {
+        return (outstandingByRental.get(r.id) || 0) > 0;
+      }
+      return true;
+    });
+
+    // ITEM-16: newest start date first by default. sortLatestFirst() leads on
+    // the numeric agreement id and only tie-breaks on the date, which put a
+    // back-dated agreement created today above one that actually started later.
+    return [...rows].sort((a, b) => {
+      const aTime = parseLocalDate(a.start).getTime();
+      const bTime = parseLocalDate(b.start).getTime();
+      const aValid = !isNaN(aTime);
+      const bValid = !isNaN(bTime);
+      if (aValid && bValid && aTime !== bTime) return bTime - aTime;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      return extractIdNumber(b.id) - extractIdNumber(a.id);
+    });
+  }, [rentalsList, debouncedSearch, statusFilter, quickFilter, customersById, outstandingByRental]);
+
+  useEffect(() => {
+    setVisibleCount(RENTALS_PAGE_SIZE);
+  }, [debouncedSearch, statusFilter, quickFilter]);
+
+  const visibleRentals = useMemo(
+    () => filteredRentals.slice(0, visibleCount),
+    [filteredRentals, visibleCount]
   );
+  const hasMoreRentals = filteredRentals.length > visibleCount;
 
   return (
     <AppShell
@@ -4332,6 +4679,34 @@ function RentalsPage() {
             </Select>
           </div>
 
+          {/* ITEM-16: quick filters across the history. Counts are live so the
+              operator can see at a glance how much is still open or owing. */}
+          <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
+            {([
+              { key: "all",       label: "All",           count: rentalsList.length },
+              { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
+              { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed").length },
+              { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
+            ] as const).map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setQuickFilter(f.key)}
+                aria-pressed={quickFilter === f.key}
+                className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                  quickFilter === f.key
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                {f.label}
+                <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
+                  {f.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
           {/* Desktop Table — hidden on mobile */}
           <div className="hidden sm:block overflow-x-auto">
             <Table>
@@ -4355,7 +4730,7 @@ function RentalsPage() {
                     </TableCell>
                   </TableRow>
                 )}
-                {filteredRentals.map((r) => (
+                {visibleRentals.map((r) => (
                   <TableRow key={r.id} className="group">
                     <TableCell>
                       <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-2 py-0.5 font-mono text-[11px] font-bold text-primary">
@@ -4519,7 +4894,7 @@ function RentalsPage() {
               </div>
             ) : (
               <div className="divide-y divide-border/60">
-                {filteredRentals.map((r) => (
+                {visibleRentals.map((r) => (
                   <div key={r.id} className="px-4 py-3.5 active:bg-muted/30 transition-colors">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
@@ -4594,6 +4969,22 @@ function RentalsPage() {
               </div>
             )}
           </div>
+
+          {/* PERF: incremental rendering - only a page of rows mounts at a time */}
+          {hasMoreRentals && (
+            <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
+              <span className="text-[12px] text-muted-foreground">
+                Showing {visibleRentals.length} of {filteredRentals.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setVisibleCount((n) => n + RENTALS_PAGE_SIZE)}
+              >
+                Load more
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

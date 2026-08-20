@@ -13,7 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { Mail, Lock, ShieldCheck, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, Lock, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendOtpEmail, isGSheetsEnabled, syncRowToSheet, SHEETS } from "@/lib/google-sheets";
 
@@ -151,6 +151,7 @@ function FirstRunSetup({ onComplete }: { onComplete: () => void }) {
   const [adminEmail, setAdminEmail] = useState("");
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showSetupPass, setShowSetupPass] = useState(false);   // ITEM-6
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSetup = async (e: React.FormEvent) => {
@@ -196,11 +197,35 @@ function FirstRunSetup({ onComplete }: { onComplete: () => void }) {
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Password</label>
-            <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} required placeholder="Min 8 chars, uppercase, number, symbol" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
+            <div className="relative">
+              <input type={showSetupPass ? "text" : "password"} value={pass} onChange={(e) => setPass(e.target.value)} required placeholder="Min 8 chars, uppercase, number, symbol" className="w-full pl-4 pr-11 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
+              <button
+                type="button"
+                onClick={() => setShowSetupPass((v) => !v)}
+                aria-label={showSetupPass ? "Hide password" : "Show password"}
+                aria-pressed={showSetupPass}
+                title={showSetupPass ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+              >
+                {showSetupPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Confirm Password</label>
-            <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required placeholder="Re-enter password" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
+            <div className="relative">
+              <input type={showSetupPass ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} required placeholder="Re-enter password" className="w-full pl-4 pr-11 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
+              <button
+                type="button"
+                onClick={() => setShowSetupPass((v) => !v)}
+                aria-label={showSetupPass ? "Hide password" : "Show password"}
+                aria-pressed={showSetupPass}
+                title={showSetupPass ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+              >
+                {showSetupPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
           <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-[12px] text-blue-700 space-y-1">
             <p className="font-semibold">Password requirements:</p>
@@ -225,6 +250,7 @@ function FirstRunSetup({ onComplete }: { onComplete: () => void }) {
 function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);   // ITEM-6
   const [otp, setOtp] = useState("");
   const [generatedOtp, setGeneratedOtp] = useState("");
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
@@ -524,13 +550,26 @@ function LoginInterface({ onLoginSuccess }: { onLoginSuccess: () => void }) {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400/80" />
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all duration-200"
+                    className="w-full pl-10 pr-11 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all duration-200"
                   />
+                  {/* ITEM-6: reveal toggle. type="button" so it never submits the
+                      form, and it is labelled for screen readers since the icon
+                      alone carries the meaning. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    title={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
               </div>
 
@@ -690,6 +729,49 @@ function RootComponent() {
   useEffect(() => {
     checkSetupAndAuth();
   }, []);
+
+  /**
+   * ITEM-1: automated daily backup. Once an admin is signed in on a new
+   * calendar day, take an in-browser snapshot and, if no backup has been
+   * downloaded today, prompt for one with a one-click action.
+   *
+   * Runs only for signed-in admins: Staff cannot reach Settings, and prompting
+   * on the login screen would nag before anyone can act on it. The toast has a
+   * long duration and an explicit action rather than auto-downloading, because
+   * a file save is the user's decision to make.
+   */
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === "undefined") return;
+    if (localStorage.getItem("medirent-user-role") === "Staff") return;
+
+    let cancelled = false;
+    // Defer past first paint so the daily check never delays the dashboard.
+    const timer = setTimeout(() => {
+      import("@/lib/backup")
+        .then(({ runDailyBackupCheck, downloadStoredSnapshot }) => {
+          if (cancelled) return;
+          const status = runDailyBackupCheck();
+          if (!status.downloadPending) return;
+
+          toast.info("Daily Backup Ready", {
+            description: status.lastBackupDate
+              ? `Your last backup was on ${status.lastBackupDate}. Download today's snapshot to keep it safe.`
+              : "No backup has been downloaded from this device yet. Download today's snapshot to keep your data safe.",
+            duration: 15000,
+            action: {
+              label: "Download",
+              onClick: () => downloadStoredSnapshot(),
+            },
+          });
+        })
+        .catch((err) => console.warn("[Backup] Daily check failed:", err));
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (

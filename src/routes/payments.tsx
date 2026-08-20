@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle,
 } from "lucide-react";
 import {
   getPayments,
@@ -27,7 +28,6 @@ import {
   downloadFile,
   downloadExcel,
   printReceipt,
-  getOwners,
   getEquipment,
   useDatabaseTrigger,
   getNextPaymentNumber,
@@ -36,7 +36,13 @@ import {
   extractIdNumber,
   sortLatestFirst,
   formatDateDDMMYYYY,
+  getAgreementBalance,
+  formatEquipmentLabel,
+  cleanNum,
 } from "@/lib/data-store";
+import { Combobox } from "@/components/ui/combobox";
+import { useDebounce } from "@/hooks/use-debounce";
+import { cn } from "@/lib/utils";
 
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
@@ -92,6 +98,66 @@ const tooltipStyle = {
   color: "var(--color-foreground)",
 };
 
+/** ITEM-19: fast payment modes, shown as buttons rather than buried in a select. */
+const PAYMENT_MODES = [
+  { value: "UPI", label: "UPI", icon: Smartphone },
+  { value: "Cash", label: "Cash", icon: Wallet },
+  { value: "Bank", label: "Bank Transfer", icon: Building2 },
+  { value: "Cheque", label: "Cheque", icon: FileCheck2 },
+] as const;
+
+/** Reference-field label per mode — a cheque number is not a UPI ref. */
+const REF_LABEL: Record<string, string> = {
+  UPI: "UPI Transaction ID",
+  Cash: "Receipt / Voucher No.",
+  Bank: "NEFT / IMPS Reference",
+  Cheque: "Cheque Number",
+};
+
+function MoneyRow({
+  label,
+  value,
+  tone = "default",
+  strong = false,
+}: {
+  label: string;
+  value: number;
+  tone?: "default" | "due" | "paid";
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-[12px]">
+      <span className={cn("text-muted-foreground", strong && "font-bold text-foreground")}>{label}</span>
+      <span
+        className={cn(
+          "font-mono tabular-nums font-semibold",
+          tone === "due" && "text-destructive",
+          tone === "paid" && "text-emerald-600",
+          strong && "text-[13.5px] font-black",
+        )}
+      >
+        {value < 0 ? "-" : ""}₹{Math.abs(Math.round(value)).toLocaleString("en-IN")}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * ITEM-19: the Collect Payment module, rebuilt as a single-screen flow — pick
+ * who and which agreement, see exactly what they owe, tap a payment mode, and
+ * watch the remaining balance update before saving.
+ *
+ * ITEM-14 adds a discount field here so a negotiated reduction is recorded on
+ * the payment rather than hidden inside a hand-adjusted amount.
+ *
+ * Two long-standing defects are fixed along the way:
+ *   - getCustomers()/getRentals() ran in the render body, so every keystroke
+ *     re-read and re-healed the whole database (getRentals() carries a repair
+ *     pass and a Sheets status sync). That was the lag on this screen.
+ *   - The auto-fill effect listed `rentals` — a fresh array on every render —
+ *     among its dependencies, so it re-ran constantly and overwrote the amount
+ *     the operator had just typed with the agreement's monthly rent.
+ */
 function CollectPaymentDialog({
   title = "Collect Payment",
   payment,
@@ -103,25 +169,37 @@ function CollectPaymentDialog({
   trigger?: React.ReactNode;
   onSave?: () => void;
 }) {
+  const dbVersion = useDatabaseTrigger();
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"Rent" | "Deposit" | "Refund" | "Additional Charges">(
-    (payment?.type as "Rent" | "Deposit" | "Refund" | "Additional Charges") ?? "Rent"
+    (payment?.type as "Rent" | "Deposit" | "Refund" | "Additional Charges") ?? "Rent",
   );
   const [date, setDate] = useState(payment?.date ?? getLocalYYYYMMDD());
   const [customerId, setCustomerId] = useState(payment?.customerId ?? "");
   const [agreement, setAgreement] = useState(payment?.agreement ?? "");
   const [amount, setAmount] = useState(payment?.amount?.toString() ?? "");
-  const [mode, setMode] = useState((payment?.mode as string) ?? "Bank");
+  const [mode, setMode] = useState((payment?.mode as string) ?? "UPI");
   const [txRef, setTxRef] = useState((payment?.txRef as string) ?? "");
   const [notes, setNotes] = useState((payment?.notes as string) ?? "");
   const [collectedBy, setCollectedBy] = useState((payment?.collectedBy as string) || "Admin");
   const [owner, setOwner] = useState((payment?.owner as string) || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const customers = getCustomers();
-  const rentals = getRentals();
+  // ITEM-14: rental discount, entered either as a flat amount or a percentage.
+  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+  const [discount, setDiscount] = useState((payment?.discount as number | undefined)?.toString() ?? "");
 
-  // Reset dialog state when opened
+  // Tracks whether the operator has edited the amount, so the auto-fill never
+  // clobbers a figure they typed themselves.
+  const [amountTouched, setAmountTouched] = useState(false);
+
+  // PERF: read the database once per open / remote update, never in render.
+  const customers = useMemo(() => (open ? getCustomers() : []), [open, dbVersion]);
+  const rentals = useMemo(() => (open ? getRentals() : []), [open, dbVersion]);
+  const paymentsList = useMemo(() => (open ? getPayments() : []), [open, dbVersion]);
+  const equipmentList = useMemo(() => (open ? getEquipment() : []), [open, dbVersion]);
+
+  // Reset dialog state when opened.
   useEffect(() => {
     if (open) {
       setType((payment?.type as "Rent" | "Deposit" | "Refund" | "Additional Charges") ?? "Rent");
@@ -129,87 +207,223 @@ function CollectPaymentDialog({
       setCustomerId(payment?.customerId ?? "");
       setAgreement(payment?.agreement ?? "");
       setAmount(payment?.amount?.toString() ?? "");
-      setMode((payment?.mode as string) ?? "Bank");
+      setMode((payment?.mode as string) ?? "UPI");
       setTxRef((payment?.txRef as string) ?? "");
       setNotes((payment?.notes as string) ?? "");
-      setCollectedBy((payment?.collectedBy as string) ?? "Dr. Rao");
+      setCollectedBy((payment?.collectedBy as string) || "Admin");
       setOwner((payment?.owner as string) ?? "");
+      setDiscount((payment?.discount as number | undefined)?.toString() ?? "");
+      setDiscountMode("amount");
+      // An existing payment already carries the amount the user chose; a new
+      // one should accept the auto-filled suggestion.
+      setAmountTouched(Boolean(payment));
     }
-  }, [open, payment]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, payment?.id]);
 
-  // Auto-detect customer and owner when agreement changes
+  const selectedRental = useMemo(
+    () => rentals.find((r) => r.id === agreement) || null,
+    [rentals, agreement],
+  );
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c.id === customerId) || null,
+    [customers, customerId],
+  );
+
+  /** What this agreement still owes, split into rent / deposit / charges. */
+  const balance = useMemo(
+    () => getAgreementBalance(selectedRental, paymentsList),
+    [selectedRental, paymentsList],
+  );
+
+  // Follow the agreement: adopt its customer and equipment owner. Keyed on the
+  // agreement id alone — not on the `rentals` array — so it fires once per
+  // selection instead of on every render.
   useEffect(() => {
-    if (agreement) {
-      const selectedRental = rentals.find((r) => r.id === agreement);
-      if (selectedRental) {
-        if (selectedRental.customerId) {
-          setCustomerId(selectedRental.customerId);
-        }
-        
-        // Auto-fill amount based on rental
-        if (type === "Rent") {
-          setAmount(selectedRental.monthlyRent.toString());
-        } else if (type === "Deposit") {
-          setAmount(selectedRental.deposit.toString());
-        }
+    if (!agreement || !selectedRental) return;
+    if (selectedRental.customerId) setCustomerId(selectedRental.customerId);
 
-        // CALC-2 FIX: Handle multi-equipment rentals (comma-separated IDs)
-        const allEquipIds = (selectedRental.equipmentId || "")
-          .split(",")
-          .map((s: string) => s.trim())
-          .filter(Boolean);
-        const allEquipment = getEquipment();
-        const ownerFound = allEquipIds
-          .map((id: string) => allEquipment.find((e) => e.id === id))
-          .find((eq: any) => eq?.owner);
-        if (ownerFound?.owner) {
-          setOwner(ownerFound.owner);
-        }
-      }
-    }
-  }, [agreement, rentals, type]);
+    const equipIds = String(selectedRental.equipmentId || "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+    const ownerFound = equipIds
+      .map((id: string) => equipmentList.find((e) => e.id === id))
+      .find((eq: any) => eq?.owner);
+    if (ownerFound?.owner) setOwner(ownerFound.owner);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agreement, selectedRental?.id]);
 
-  // If customerId changes, clear selected agreement if it does not belong to the selected customer
+  // Suggest the outstanding amount for the chosen payment type, but only while
+  // the operator has not typed their own figure.
   useEffect(() => {
-    if (customerId) {
-      const selectedRental = rentals.find((r) => r.id === agreement);
-      if (selectedRental && selectedRental.customerId !== customerId) {
-        setAgreement("");
-      }
+    if (!selectedRental || amountTouched) return;
+    const suggested =
+      type === "Rent" ? balance.rentDue
+      : type === "Deposit" ? balance.depositDue
+      : type === "Additional Charges" ? balance.additionalDue
+      : 0;
+    setAmount(suggested > 0 ? String(suggested) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, selectedRental?.id, balance.rentDue, balance.depositDue, balance.additionalDue, amountTouched]);
+
+  // Drop an agreement that does not belong to the newly chosen customer.
+  useEffect(() => {
+    if (!customerId || !selectedRental) return;
+    if (selectedRental.customerId && selectedRental.customerId !== customerId) {
+      setAgreement("");
     }
-  }, [customerId, rentals, agreement]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, selectedRental?.id]);
+
+  const customerOptions = useMemo(
+    () =>
+      customers.map((c: any) => {
+        const parts = [`${c.name} — ${c.id}`];
+        if (c.phone) parts.push(`Ph: ${String(c.phone).trim()}`);
+        if (c.altPhone) parts.push(`Alt: ${String(c.altPhone).trim()}`);
+        return {
+          value: c.id,
+          label: parts.join(" | "),
+          searchTerms: `${c.phone || ""} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
+        };
+      }),
+    [customers],
+  );
+
+  const agreementOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return rentals
+      .filter((r) => !customerId || r.customerId === customerId)
+      .filter((r) => r.status !== "Cancelled")
+      .filter((r) => {
+        if (!r.id || seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      })
+      .map((r) => {
+        const openItems = Array.isArray(r.equipmentItems)
+          ? r.equipmentItems.filter((it: any) => !it.returned)
+          : [];
+        const equipmentSummary = openItems.length > 0
+          ? openItems
+              .map((it: any) => {
+                const eq = equipmentList.find((e) => e.id === it.equipmentId);
+                return formatEquipmentLabel({
+                  name: it.name || eq?.name || eq?.category,
+                  model: it.model || eq?.model,
+                  serial: it.serial || eq?.serial,
+                });
+              })
+              .join(", ")
+          : String(r.equipment || "");
+        const due = getAgreementBalance(r, paymentsList).totalDue;
+        const parts = [r.id, r.customer, equipmentSummary].filter(Boolean);
+        if (due > 0) parts.push(`Due ₹${due.toLocaleString("en-IN")}`);
+        return {
+          value: r.id,
+          label: parts.join(" · "),
+          searchTerms: `${r.id} ${r.customer || ""} ${r.serial || ""} ${equipmentSummary}`,
+        };
+      });
+  }, [rentals, customerId, equipmentList, paymentsList]);
+
+  // ITEM-14: resolve the discount to rupees so amount and percent behave alike,
+  // and never let it exceed what is being collected.
+  const grossAmount = cleanNum(amount);
+  const discountValue = cleanNum(discount);
+  const discountAmount = Math.min(
+    grossAmount,
+    Math.max(
+      0,
+      discountMode === "percent"
+        ? Math.round((grossAmount * Math.min(100, discountValue)) / 100)
+        : discountValue,
+    ),
+  );
+  const netAmount = Math.max(0, grossAmount - discountAmount);
+
+  /** ITEM-19: what will still be owed once this payment is saved. */
+  const dueForType =
+    type === "Rent" ? balance.rentDue
+    : type === "Deposit" ? balance.depositDue
+    : type === "Additional Charges" ? balance.additionalDue
+    : 0;
+  const remainingAfter = Math.max(0, dueForType - netAmount - discountAmount);
+  const overpayment = Math.max(0, netAmount + discountAmount - dueForType);
+
+  const buildPaymentRecord = (id: string): Payment => ({
+    id,
+    date,
+    customer: selectedCustomer?.name || "Unknown Customer",
+    customerId,
+    agreement,
+    // The recorded amount is what actually changed hands; the discount is kept
+    // beside it so a receipt can show both.
+    amount: netAmount,
+    grossAmount,
+    discount: discountAmount,
+    mode,
+    type,
+    txRef,
+    notes,
+    collectedBy,
+    owner,
+    status: "Paid" as const,
+  });
 
   const handlePrintForm = () => {
-    const selectedCustomer = customers.find((c) => c.id === customerId);
-    const tempPayment = {
-      id: payment?.id || `PAY-TEMP`,
-      date,
-      customer: selectedCustomer?.name || "Unknown Customer",
-      customerId,
-      agreement,
-      amount: parseFloat(amount) || 0,
-      mode,
-      type,
-      txRef,
-      collectedBy,
-      owner,
-      status: "Paid",
-    };
+    if (!agreement) {
+      toast.error("Select an agreement before printing a receipt.");
+      return;
+    }
+    const tempPayment = buildPaymentRecord(payment?.id || "PAY-TEMP");
     printReceipt(tempPayment, tempPayment.customer);
     toast.success("Receipt print preview opened.");
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!agreement) {
+      toast.error("Select an agreement before sharing a receipt.");
+      return;
+    }
+    const rupee = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+    const lines = [
+      `*Payment Receipt — ${type}*`,
+      `Customer: ${selectedCustomer?.name || "Customer"}`,
+      `Agreement: ${agreement}`,
+      `Date: ${formatDateDDMMYYYY(date)}`,
+      discountAmount > 0 ? `Amount: ${rupee(grossAmount)}` : "",
+      discountAmount > 0 ? `Discount: -${rupee(discountAmount)}` : "",
+      `Paid: ${rupee(netAmount)} (${mode})`,
+      txRef ? `Ref: ${txRef}` : "",
+      remainingAfter > 0 ? `Balance remaining: ${rupee(remainingAfter)}` : "Balance cleared. Thank you!",
+    ].filter(Boolean);
+
+    const text = encodeURIComponent(lines.join("\n"));
+    const phone = String(selectedCustomer?.phone || "").replace(/\D/g, "");
+    const target = phone
+      ? `https://wa.me/${phone.length === 10 ? `91${phone}` : phone}?text=${text}`
+      : `https://wa.me/?text=${text}`;
+    window.open(target, "_blank");
   };
 
   const handleSave = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!agreement) {
+      toast.error("Please select a related agreement.");
+      setIsSubmitting(false);
+      return;
+    }
+    if (grossAmount <= 0) {
       toast.error("Please enter a valid amount.");
       setIsSubmitting(false);
       return;
     }
-    if (!agreement) {
-      toast.error("Please select a related agreement.");
+    if (netAmount <= 0 && discountAmount <= 0) {
+      toast.error("The amount after discount must be greater than zero.");
       setIsSubmitting(false);
       return;
     }
@@ -220,32 +434,24 @@ function CollectPaymentDialog({
     }
 
     const id = payment?.id || getNextPaymentNumber();
-    const selectedCustomer = customers.find((c) => c.id === customerId);
+    try {
+      savePayment(buildPaymentRecord(id) as any);
+    } catch (err) {
+      console.error("[Payments] Failed to save payment:", err);
+      toast.error("Could not save the payment. Storage may be full — export a backup from Settings and try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
-    const newPayment: Payment = {
-      id,
-      date,
-      customer: selectedCustomer?.name || "Unknown Customer",
-      customerId,
-      agreement,
-      amount: parseFloat(amount) || 0,
-      mode,
-      type,
-      txRef,
-      notes,
-      collectedBy,
-      owner,
-      status: "Paid" as const,
-    };
-
-    savePayment(newPayment as any);
-    toast.success(payment ? "Payment details updated successfully." : "Payment collection recorded successfully.");
+    toast.success(
+      payment
+        ? "Payment details updated successfully."
+        : `Collected ₹${netAmount.toLocaleString("en-IN")}${remainingAfter > 0 ? ` · ₹${remainingAfter.toLocaleString("en-IN")} still due` : " · balance cleared"}`,
+    );
     setIsSubmitting(false);
     setOpen(false);
     if (onSave) onSave();
   };
-
-  const owners = getOwners();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -258,85 +464,244 @@ function CollectPaymentDialog({
         )}
       </DialogTrigger>
       <DialogContent
-        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        className="max-w-3xl max-h-[92vh] overflow-y-auto"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <IndianRupee className="h-4 w-4 text-primary" />
+            {title}
+          </DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Type</Label>
-            <Select value={type} onValueChange={(val) => setType(val as "Rent" | "Deposit" | "Refund" | "Additional Charges")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Rent">Rent Payment</SelectItem>
-                <SelectItem value="Deposit">Deposit Payment</SelectItem>
-                <SelectItem value="Additional Charges">Additional Charges</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Field label="Payment Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
 
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement Number</Label>
-            <Select value={agreement} onValueChange={setAgreement}>
-              <SelectTrigger><SelectValue placeholder="Select agreement" /></SelectTrigger>
-              <SelectContent>
-                {rentals
-                  .filter((r) => !customerId || r.customerId === customerId)
-                  .map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.id} — {r.customer}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+        <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+          {/* ----------------------- Left: the form ------------------------ */}
+          <div className="space-y-4">
+            {/* Who, and which agreement */}
+            <div className="space-y-3 rounded-xl border border-border/60 bg-muted/10 p-3.5">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Customer</Label>
+                <Combobox
+                  value={customerId}
+                  onValueChange={setCustomerId}
+                  options={customerOptions}
+                  placeholder="Select customer"
+                  searchPlaceholder="Search by name, ID or phone…"
+                  emptyText="No customer found."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement</Label>
+                <Combobox
+                  value={agreement}
+                  onValueChange={setAgreement}
+                  options={agreementOptions}
+                  placeholder="Select agreement"
+                  searchPlaceholder="Search by agreement ID, customer or serial…"
+                  emptyText="No agreement found."
+                />
+              </div>
+            </div>
+
+            {/* What is being collected */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Type</Label>
+                <Select value={type} onValueChange={(val) => { setType(val as typeof type); setAmountTouched(false); }}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Rent">Rent Payment</SelectItem>
+                    <SelectItem value="Deposit">Deposit Payment</SelectItem>
+                    <SelectItem value="Additional Charges">Additional Charges</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Field label="Payment Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+
+            {/* ITEM-19: fast mode buttons instead of a dropdown */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {PAYMENT_MODES.map((m) => {
+                  const Icon = m.icon;
+                  const active = mode === m.value;
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setMode(m.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2.5 text-[11.5px] font-semibold transition-all",
+                        active
+                          ? "border-primary bg-primary/10 text-primary shadow-soft ring-1 ring-primary/15"
+                          : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="e.g. 4500"
+                  value={amount}
+                  onChange={(e) => { setAmount(e.target.value); setAmountTouched(true); }}
+                />
+              </div>
+              {/* ITEM-14: discount, as a flat amount or a percentage */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rental Discount</Label>
+                  <div className="flex overflow-hidden rounded-md border border-border">
+                    {(["amount", "percent"] as const).map((dm) => (
+                      <button
+                        key={dm}
+                        type="button"
+                        onClick={() => setDiscountMode(dm)}
+                        className={cn(
+                          "px-2 py-0.5 text-[10px] font-bold transition-colors",
+                          discountMode === dm
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {dm === "amount" ? "₹" : "%"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  placeholder={discountMode === "percent" ? "e.g. 10" : "e.g. 500"}
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field
+                label={REF_LABEL[mode] || "Transaction Reference"}
+                placeholder={mode === "Cheque" ? "Cheque no." : "Reference no."}
+                value={txRef}
+                onChange={(e) => setTxRef(e.target.value)}
+              />
+              <Field
+                label="Collected By *"
+                placeholder="e.g. Dr. Rao"
+                value={collectedBy}
+                onChange={(e) => setCollectedBy(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
+              <Textarea
+                placeholder="Additional notes…"
+                className="resize-none min-h-[60px]"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
           </div>
 
-          <Field label="Amount (₹)" placeholder="e.g. 4500" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          {/* ------------- Right: balance breakdown & live preview ---------- */}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-border/60 bg-card p-4 shadow-soft">
+              <div className="mb-3 flex items-center gap-2 border-b border-border/50 pb-2.5">
+                <Receipt className="h-4 w-4 text-primary" />
+                <span className="text-[12px] font-bold uppercase tracking-wider text-foreground">Outstanding Balance</span>
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Cash">Cash</SelectItem>
-                <SelectItem value="Bank">Bank</SelectItem>
-                <SelectItem value="Cash+Bank">Cash+Bank</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <Field
-            label="Collected By *"
-            placeholder="e.g. Dr. Rao"
-            value={collectedBy}
-            onChange={(e) => setCollectedBy(e.target.value)}
-          />
-          <Field label="Transaction Reference" placeholder="UPI / NEFT ref no." value={txRef} onChange={(e) => setTxRef(e.target.value)} className="sm:col-span-2" />
-          <div className="sm:col-span-2 space-y-1.5">
-            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</Label>
-            <Textarea placeholder="Additional notes…" className="resize-none min-h-[70px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              {!selectedRental ? (
+                <p className="flex items-center gap-2 py-6 text-[12px] text-muted-foreground">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  Select an agreement to see what is owed.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="space-y-1.5">
+                    <MoneyRow label="Rent charged to date" value={balance.rentCharged} />
+                    <MoneyRow label="Rent received" value={balance.rentPaid} tone="paid" />
+                    <MoneyRow label="Rent outstanding" value={balance.rentDue} tone={balance.rentDue > 0 ? "due" : "default"} />
+                  </div>
+                  <div className="space-y-1.5 border-t border-border/40 pt-2.5">
+                    <MoneyRow label="Deposit agreed" value={balance.depositCharged} />
+                    <MoneyRow label="Deposit received" value={balance.depositPaid} tone="paid" />
+                    <MoneyRow label="Deposit outstanding" value={balance.depositDue} tone={balance.depositDue > 0 ? "due" : "default"} />
+                  </div>
+                  {balance.additionalDue > 0 && (
+                    <div className="border-t border-border/40 pt-2.5">
+                      <MoneyRow label="Unpaid charges" value={balance.additionalDue} tone="due" />
+                    </div>
+                  )}
+                  <div className="border-t border-border/60 pt-2.5">
+                    <MoneyRow label="Total outstanding" value={balance.totalDue} tone={balance.totalDue > 0 ? "due" : "paid"} strong />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ITEM-19: live preview of where this payment leaves the balance */}
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+              <div className="mb-2.5 flex items-center gap-2 border-b border-primary/15 pb-2">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <span className="text-[12px] font-bold uppercase tracking-wider text-primary">This Payment</span>
+              </div>
+              <div className="space-y-1.5">
+                <MoneyRow label="Amount" value={grossAmount} />
+                {discountAmount > 0 && (
+                  <MoneyRow
+                    label={`Discount${discountMode === "percent" ? ` (${Math.min(100, discountValue)}%)` : ""}`}
+                    value={-discountAmount}
+                    tone="paid"
+                  />
+                )}
+                <div className="border-t border-primary/15 pt-1.5">
+                  <MoneyRow label="Collecting now" value={netAmount} strong />
+                </div>
+                <div className="border-t border-primary/15 pt-1.5">
+                  {overpayment > 0 ? (
+                    <MoneyRow label="Advance credit" value={overpayment} tone="paid" strong />
+                  ) : (
+                    <MoneyRow
+                      label={`${type} balance after`}
+                      value={remainingAfter}
+                      tone={remainingAfter > 0 ? "due" : "paid"}
+                      strong
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+
         <DialogFooter className="flex-wrap gap-2">
-          <Button variant="outline" type="button" onClick={handlePrintForm}><Receipt className="mr-1.5 h-3.5 w-3.5" />Print Receipt</Button>
+          <Button variant="outline" type="button" onClick={handlePrintForm}>
+            <Printer className="mr-1.5 h-3.5 w-3.5" />Print Receipt
+          </Button>
+          <Button variant="outline" type="button" onClick={handleShareWhatsApp}>
+            <MessageCircle className="mr-1.5 h-3.5 w-3.5" />Share
+          </Button>
           <DialogClose asChild>
             <Button variant="outline" type="button">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button type="button" onClick={handleSave}>Save Payment</Button>
-          </DialogClose>
+          <Button type="button" onClick={handleSave} disabled={isSubmitting}>
+            {isSubmitting ? "Saving…" : "Save Payment"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -606,6 +971,10 @@ function PaymentsPage() {
   const dbVersion = useDatabaseTrigger();
   const [payments, setPayments] = useState(() => getPayments());
   const [search, setSearch] = useState("");
+  // PERF: the field stays bound to `search` so typing is instant; the filter
+  // below (which joins every payment against rentals and customers) runs off
+  // the debounced copy.
+  const debouncedSearch = useDebounce(search, 300);
   const [dateFilter, setDateFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -750,10 +1119,15 @@ function PaymentsPage() {
   });
 
   // Flat individual receipt filtering (for "all-receipts" view)
-  const filteredPayments = sortLatestFirst(payments.filter((p) => {
-    const q = search.toLowerCase().trim();
-    const rental = rentals.find((r: any) => r.id === p.agreement);
-    const customer = customers.find((c: any) => c.id === p.customerId || (rental && c.id === rental.customerId));
+  // PERF: index rentals and customers by id once, rather than scanning both
+  // arrays for every payment on every keystroke.
+  const rentalsById = useMemo(() => new Map(rentals.map((r: any) => [r.id, r])), [rentals]);
+  const customersById = useMemo(() => new Map(customers.map((c: any) => [c.id, c])), [customers]);
+
+  const filteredPayments = useMemo(() => sortLatestFirst(payments.filter((p) => {
+    const q = debouncedSearch.toLowerCase().trim();
+    const rental = rentalsById.get(p.agreement);
+    const customer = customersById.get(p.customerId) || (rental ? customersById.get(rental.customerId) : undefined);
 
     const matchesSearch = !q ||
       p.id.toLowerCase().includes(q) ||
@@ -797,7 +1171,7 @@ function PaymentsPage() {
       return true;
     }
     return true;
-  }), "date");
+  }), "date"), [payments, debouncedSearch, dateFilter, startDate, endDate, rentalsById, customersById]);
 
   // Calculate dynamic stats
   const todayStr = getLocalYYYYMMDD();

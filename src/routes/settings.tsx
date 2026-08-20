@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import {
   Building2, CreditCard, Shield, Bell, Check, Users, Wallet, MessageSquare, Mail, Phone, BarChart3,
   Database, Link2, CheckCircle2, XCircle, RefreshCw, AlertTriangle, Copy, ExternalLink, CloudUpload, CloudDownload,
-  Lock, Trash2, UserPlus,
+  Lock, Trash2, UserPlus, Download, Upload, FileSpreadsheet, HardDriveDownload, HardDriveUpload,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
@@ -31,7 +31,26 @@ import {
   getAllDataForSync,
   syncFromSheetsToLocalStorage,
   syncMissingFileChunks,
+  formatDateDDMMYYYY,
+  getLocalYYYYMMDD,
+  parseLocalDate,
 } from "@/lib/data-store";
+import {
+  createBackupSnapshot,
+  downloadBackupJSON,
+  downloadBackupCSV,
+  getLastBackupDate,
+  getStoredSnapshot,
+  getSnapshotHistory,
+  parseBackupFile,
+  restoreFromBackup,
+  snapshotRowCount,
+  type BackupSnapshot,
+} from "@/lib/backup";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   getGSheetsUrl,
   setGSheetsUrl,
@@ -1222,9 +1241,346 @@ function UserLoginCredentials() {
 
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 
+/**
+ * ITEM-1: Backup & Restore.
+ *
+ * All ERP data lives in this browser's localStorage, so a cleared profile or a
+ * "clear site data" wipes it with no warning and no recovery. This pane makes
+ * taking a real, off-device copy a one-click habit, shows how stale the last
+ * one is, and provides a guarded path back in.
+ */
+function BackupSettingsTab() {
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(null);
+  const [snapshot, setSnapshot] = useState<BackupSnapshot | null>(null);
+  const [history, setHistory] = useState<Array<{ createdAt: string; createdDate: string; rows: number }>>([]);
+  const [isWorking, setIsWorking] = useState(false);
+
+  // Restore flow: the file is parsed and summarised first, and only written
+  // once the user has confirmed against that summary.
+  const [pendingRestore, setPendingRestore] = useState<BackupSnapshot | null>(null);
+  const [pendingFileName, setPendingFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshStatus = () => {
+    setLastBackupDate(getLastBackupDate());
+    setSnapshot(getStoredSnapshot());
+    setHistory(getSnapshotHistory());
+  };
+
+  useEffect(() => {
+    refreshStatus();
+  }, []);
+
+  const today = getLocalYYYYMMDD();
+  const isBackedUpToday = lastBackupDate === today;
+  const daysSinceBackup = (() => {
+    if (!lastBackupDate) return null;
+    const then = parseLocalDate(lastBackupDate);
+    if (isNaN(then.getTime())) return null;
+    const now = parseLocalDate(today);
+    return Math.max(0, Math.round((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24)));
+  })();
+
+  const liveCounts = useMemo(() => createBackupSnapshot().counts, []);
+  const totalRows = Object.values(liveCounts).reduce((sum, n) => sum + n, 0);
+
+  const handleDownload = (format: "json" | "csv") => {
+    setIsWorking(true);
+    try {
+      const result = format === "json" ? downloadBackupJSON() : downloadBackupCSV();
+      toast.success(
+        `Backup downloaded — ${snapshotRowCount(result).toLocaleString("en-IN")} records saved as ${format.toUpperCase()}.`,
+      );
+      refreshStatus();
+    } catch (err) {
+      console.error("[Backup] Download failed:", err);
+      toast.error("Could not create the backup file. Please try again.");
+    } finally {
+      setIsWorking(false);
+    }
+  };
+
+  const handleFilePicked = async (file: File | undefined) => {
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      toast.error("Could not read that file.");
+      return;
+    }
+    const parsed = parseBackupFile(text);
+    if (!parsed.ok) {
+      toast.error(parsed.error);
+      return;
+    }
+    // Stage it — the confirmation dialog does the writing.
+    setPendingRestore(parsed.snapshot);
+    setPendingFileName(file.name);
+  };
+
+  const handleConfirmRestore = () => {
+    if (!pendingRestore) return;
+    setIsWorking(true);
+    const result = restoreFromBackup(pendingRestore);
+    setIsWorking(false);
+
+    if (!result.ok) {
+      toast.error(result.error || "The restore failed.");
+      return;
+    }
+    setPendingRestore(null);
+    setPendingFileName("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    refreshStatus();
+    toast.success(
+      `Restored ${(result.restoredKeys?.length ?? 0)} data sets from the backup. Reloading…`,
+      { duration: 2500 },
+    );
+    // A full reload is the honest way to re-seed every page's state from the
+    // restored storage; the in-app db-updated event only refreshes mounted views.
+    setTimeout(() => window.location.reload(), 1200);
+  };
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="metric-icon h-9 w-9 bg-primary/10 border-primary/20">
+              <HardDriveDownload className="h-4.5 w-4.5 text-primary" />
+            </div>
+            <div>
+              <CardTitle>Data Backup</CardTitle>
+              <p className="text-[12px] text-muted-foreground mt-0.5">
+                Download a complete copy of your database
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-6 space-y-5">
+          {/* Daily backup status */}
+          <div
+            className={`rounded-xl border p-4 ${
+              isBackedUpToday
+                ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/25"
+                : "border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/25"
+            }`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                {isBackedUpToday ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+                )}
+                <div>
+                  <p
+                    className={`text-[13px] font-bold ${
+                      isBackedUpToday
+                        ? "text-emerald-800 dark:text-emerald-300"
+                        : "text-amber-800 dark:text-amber-300"
+                    }`}
+                  >
+                    {isBackedUpToday ? "Today's backup is downloaded" : "Daily Backup Ready"}
+                  </p>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">
+                    {lastBackupDate
+                      ? `Last downloaded on ${formatDateDDMMYYYY(lastBackupDate)}${
+                          daysSinceBackup && daysSinceBackup > 0
+                            ? ` — ${daysSinceBackup} day${daysSinceBackup === 1 ? "" : "s"} ago`
+                            : ""
+                        }`
+                      : "No backup has ever been downloaded from this device."}
+                  </p>
+                  {snapshot && (
+                    <p className="text-[11px] text-muted-foreground/80 mt-1">
+                      An in-browser snapshot from {formatDateDDMMYYYY(snapshot.createdDate)} is held on this
+                      device ({snapshotRowCount(snapshot).toLocaleString("en-IN")} records). It protects against
+                      accidental edits — not against the browser being cleared, which is what the download is for.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {!isBackedUpToday && (
+                <Button size="sm" onClick={() => handleDownload("json")} disabled={isWorking}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  Download Today's Backup
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* What is in a backup */}
+          <div className="rounded-xl border border-border/60 bg-muted/10 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
+              Included in a backup — {totalRows.toLocaleString("en-IN")} records
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {Object.entries(liveCounts).map(([label, count]) => (
+                <div
+                  key={label}
+                  className="rounded-lg border border-border/50 bg-background px-3 py-2"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
+                    {label.replace(/-/g, " ")}
+                  </p>
+                  <p className="text-[15px] font-black tabular-nums text-foreground">
+                    {count.toLocaleString("en-IN")}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3">
+              Uploaded KYC and document <em>files</em> are not included — they are stored separately and are
+              far too large to fit in a single backup file. Their records (name, type, customer) are backed up.
+            </p>
+          </div>
+
+          {/* Manual download */}
+          <div className="flex flex-wrap gap-2.5">
+            <Button onClick={() => handleDownload("json")} disabled={isWorking}>
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Download Full Data Backup (.JSON)
+            </Button>
+            <Button variant="outline" onClick={() => handleDownload("csv")} disabled={isWorking}>
+              <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+              Download as .CSV
+            </Button>
+          </div>
+          <p className="text-[11.5px] text-muted-foreground">
+            The <strong>.JSON</strong> file is the one to keep — it is the only format that can be restored below.
+            The <strong>.CSV</strong> is for reading in Excel and cannot be restored from.
+          </p>
+
+          {history.length > 0 && (
+            <div className="border-t border-border/50 pt-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                Recent automatic snapshots
+              </p>
+              <div className="space-y-1.5">
+                {history.map((h) => (
+                  <div
+                    key={h.createdDate}
+                    className="flex items-center justify-between rounded-lg border border-border/50 bg-background px-3 py-2 text-[12px]"
+                  >
+                    <span className="font-medium text-foreground">{formatDateDDMMYYYY(h.createdDate)}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {h.rows.toLocaleString("en-IN")} records
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Restore */}
+      <Card className="mt-6 border-amber-300/50">
+        <CardHeader className="border-b border-amber-200/40 bg-amber-50/40 px-6 py-4 dark:bg-amber-950/20">
+          <div className="flex items-center gap-3">
+            <div className="metric-icon h-9 w-9 bg-amber-100 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
+              <HardDriveUpload className="h-4.5 w-4.5 text-amber-700 dark:text-amber-400" />
+            </div>
+            <div>
+              <CardTitle>Restore From Backup</CardTitle>
+              <p className="text-[12px] text-muted-foreground mt-0.5">
+                Replace the current data with a previously downloaded .JSON backup
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6 space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/25">
+            <p className="flex items-start gap-2 text-[12px] text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                Restoring <strong>overwrites</strong> customers, agreements, payments, returns and settings on
+                this device with whatever the backup file contains. A safety copy of the current data is kept
+                automatically, but the safest order is to download a fresh backup first.
+              </span>
+            </p>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => handleFilePicked(e.target.files?.[0])}
+          />
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isWorking}
+          >
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            Choose Backup File…
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Confirmation — shows exactly what is about to be written */}
+      <AlertDialog
+        open={!!pendingRestore}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRestore(null);
+            setPendingFileName("");
+            if (fileInputRef.current) fileInputRef.current.value = "";
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore this backup?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p className="text-[13px]">
+                  This will replace the data on this device with the contents of{" "}
+                  <strong className="font-mono">{pendingFileName}</strong>.
+                </p>
+                {pendingRestore && (
+                  <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                      Backup taken {formatDateDDMMYYYY(pendingRestore.createdDate)}
+                    </p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      {Object.entries(pendingRestore.counts || {}).map(([label, count]) => (
+                        <div key={label} className="flex justify-between text-[12px]">
+                          <span className="text-muted-foreground capitalize">{label.replace(/-/g, " ")}</span>
+                          <span className="font-semibold tabular-nums text-foreground">
+                            {Number(count).toLocaleString("en-IN")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <p className="text-[12px] text-amber-700 dark:text-amber-400">
+                  The current data will be kept as a safety copy, and the page will reload once the restore
+                  finishes.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isWorking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmRestore} disabled={isWorking}>
+              {isWorking ? "Restoring…" : "Restore & Overwrite"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function SettingsPage() {
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
-  const [activeSection, setActiveSection] = useState<"company" | "credentials" | "database">("company");
+  const [activeSection, setActiveSection] = useState<"company" | "credentials" | "database" | "backup">("company");
 
   if (isStaff) {
     return (
@@ -1239,7 +1595,7 @@ function SettingsPage() {
   }
 
   return (
-    <AppShell title="Settings" subtitle="Manage your company details, user login credentials, and database sync settings">
+    <AppShell title="Settings" subtitle="Manage your company details, user login credentials, database sync and data backups">
       <div className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-6 pb-10">
         {/* Settings Navigation Sidebar */}
         <div className="w-full lg:w-[260px] shrink-0 space-y-1.5">
@@ -1261,6 +1617,15 @@ function SettingsPage() {
               label: "Database Sync",
               desc: "Google Sheets connection",
               icon: Database,
+            },
+            {
+              // ITEM-1: backup lives alongside sync but is a separate concern -
+              // Sheets sync is for sharing between devices, this is for surviving
+              // a cleared browser.
+              id: "backup",
+              label: "Backup & Restore",
+              desc: "Download and restore your data",
+              icon: HardDriveDownload,
             },
           ].map((item) => {
             const Icon = item.icon;
@@ -1298,6 +1663,9 @@ function SettingsPage() {
           </div>
           <div className={activeSection === "database" ? "block animate-[fade-in_0.3s_ease-out]" : "hidden"}>
             <DatabaseSettingsTab />
+          </div>
+          <div className={activeSection === "backup" ? "block animate-[fade-in_0.3s_ease-out]" : "hidden"}>
+            <BackupSettingsTab />
           </div>
         </div>
       </div>

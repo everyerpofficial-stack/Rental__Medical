@@ -177,6 +177,85 @@ export function parseLocalDate(dateStr: string | undefined | null): Date {
   return new Date(cleaned); // fallback
 }
 
+// ─── Equipment Display Labels ─────────────────────────────────
+/**
+ * ITEM-5 / ITEM-7: the single source of truth for how a piece of equipment is
+ * named anywhere a human reads it - dropdowns, line items, agreements, receipts
+ * and WhatsApp/SMS copy templates.
+ *
+ * Renders as `Name - Model (S/N: Serial)`, dropping any part that is missing so
+ * a record without a model never produces `Name - undefined`.
+ */
+export function formatEquipmentLabel(src: {
+  name?: string;
+  category?: string;
+  model?: string;
+  serial?: string;
+} | null | undefined): string {
+  if (!src) return "Equipment";
+  const name = String(src.name || src.category || "").trim();
+  const model = String(src.model || "").trim();
+  const serial = String(src.serial || "").trim();
+
+  let label = name || "Equipment";
+  // Skip a model that merely repeats the name (some legacy rows duplicate it).
+  if (model && model.toLowerCase() !== name.toLowerCase()) {
+    label += ` - ${model}`;
+  }
+  if (serial) {
+    label += ` (S/N: ${serial})`;
+  }
+  return label;
+}
+
+/**
+ * Resolves the equipment rows behind a rental (new `equipmentItems` array or the
+ * legacy comma-separated `equipmentId`) and returns one display label each,
+ * enriched with the model from the equipment master where the rental line item
+ * does not carry one.
+ */
+export function getRentalEquipmentLabels(rental: any, equipmentList?: any[]): string[] {
+  if (!rental) return [];
+  const master = equipmentList || (isBrowser ? getEquipment() : []);
+  const byId = new Map<string, any>(master.map((e: any) => [e.id, e]));
+
+  const items: any[] =
+    Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
+      ? rental.equipmentItems
+      : String(rental.equipmentId || "")
+          .split(",")
+          .map((id: string) => id.trim())
+          .filter(Boolean)
+          .map((id: string) => ({ equipmentId: id, serial: rental.serial }));
+
+  if (items.length === 0) {
+    // Nothing structured to go on - fall back to whatever the rental stored.
+    const label = formatEquipmentLabel({
+      name: rental.equipment,
+      model: rental.model,
+      serial: rental.serial,
+    });
+    return label === "Equipment" && !rental.equipment ? [] : [label];
+  }
+
+  return items.map((item: any) => {
+    const eq = byId.get(item.equipmentId);
+    return formatEquipmentLabel({
+      // The line item wins where it has a value; the master fills the gaps
+      // (older line items were saved before `model` was captured on them).
+      name: item.equipment || item.name || eq?.name || eq?.category || rental.equipment,
+      model: item.model || eq?.model,
+      serial: item.serial || eq?.serial,
+    });
+  });
+}
+
+/** Convenience: all of a rental's equipment on one line, comma separated. */
+export function getRentalEquipmentSummary(rental: any, equipmentList?: any[]): string {
+  const labels = getRentalEquipmentLabels(rental, equipmentList);
+  return labels.length > 0 ? labels.join(", ") : "Medical Equipment";
+}
+
 // ─── Equipment Categories ─────────────────────────────────────────────────────
 export const EQUIPMENT_CATEGORIES = [
   "Oxygen Concentrator 5LP",
@@ -500,12 +579,65 @@ function setStorageItem<T>(key: string, data: T): void {
       throw e; // Re-throw so callers know the write failed
     }
     if (key !== "medirent-last-write-time" && key !== "medirent-gsheets-url") {
+      // BUG-1 FIX: notify so useDatabaseTrigger() on all pages reactively
+      // refreshes without a reload. This also enables cross-tab sync via the
+      // storage event listener.
+      //
+      // The timestamp is written synchronously and deliberately so:
+      // syncFromSheetsToLocalStorage() reads it to decide whether a local write
+      // beat an in-flight pull, and deferring it would open a window where a
+      // sync could overwrite data that had just been saved.
       localStorage.setItem("medirent-last-write-time", Date.now().toString());
-      // BUG-1 FIX: Dispatch event so useDatabaseTrigger() on all pages
-      // reactively refreshes data without requiring a page reload.
-      // This also enables cross-tab sync via the storage event listener.
-      window.dispatchEvent(new Event("medirent-db-updated"));
+
+      // PERF: only the *notification* is coalesced (see below). A single user
+      // action performs many writes, and firing the event on each one made
+      // every subscribed page re-run getRentals() - which carries a self-healing
+      // repair pass and a status-correction sweep - once per write. Batching
+      // collapses that into one notification per action.
+      scheduleDbUpdateNotification();
     }
+  }
+}
+
+/**
+ * PERF: coalesces `medirent-db-updated` notifications.
+ *
+ * saveReturn(), for instance, writes returns, rentals, equipment, payments and
+ * customers in one go. Un-batched that is five full re-render cascades across
+ * every open page for what the user experiences as one action, and each cascade
+ * re-parses the whole database out of localStorage.
+ */
+let dbUpdateScheduled = false;
+function scheduleDbUpdateNotification(): void {
+  if (!isBrowser || dbUpdateScheduled) return;
+  dbUpdateScheduled = true;
+
+  const flush = () => {
+    dbUpdateScheduled = false;
+    window.dispatchEvent(new Event("medirent-db-updated"));
+  };
+
+  // A microtask keeps this within the same task as the save, so anything that
+  // saves and then immediately reads still sees a notification promptly -
+  // while still collapsing every write made during that one action.
+  Promise.resolve().then(flush);
+}
+
+/**
+ * Runs `fn` and emits at most one `medirent-db-updated` for everything it
+ * writes. Use it around a multi-step operation whose intermediate states should
+ * never reach the UI.
+ */
+export function batchDatabaseWrites<T>(fn: () => T): T {
+  if (!isBrowser) return fn();
+  const wasScheduled = dbUpdateScheduled;
+  // Suppress scheduling for the duration, then notify once at the end.
+  dbUpdateScheduled = true;
+  try {
+    return fn();
+  } finally {
+    dbUpdateScheduled = wasScheduled;
+    scheduleDbUpdateNotification();
   }
 }
 
@@ -2172,8 +2304,11 @@ export function getAgreementHtmlContent(rental: any, isPrintMode: boolean = fals
     const eqList = getEquipment();
     finalEquipRows = rental.equipmentItems.map((item: any) => {
       const eqObj = eqList.find(e => e.id === item.equipmentId);
-      const name = eqObj?.name || item.name || "Equipment";
-      const model = eqObj?.model || "Standard";
+      // ITEM-5/7: the line item is the record of what was actually hired on this
+      // agreement, so it wins over the (mutable) equipment master; the master is
+      // only the fallback for older line items saved before `model` was captured.
+      const name = item.name || eqObj?.name || eqObj?.category || "Equipment";
+      const model = item.model || eqObj?.model || "Standard";
       const serial = item.serial || eqObj?.serial || "XXXX";
       return `
          <tr>
@@ -2931,6 +3066,15 @@ export function printReceipt(payment: any, customerName?: string) {
         <span class="info-label">Reference Number (Tx Ref)</span>
         <span class="info-value font-mono">${payment.txRef || "N/A"}</span>
       </div>
+      ${cleanNum((payment as any).discount) > 0 ? `
+      <div class="receipt-row">
+        <span class="info-label">Gross Amount</span>
+        <span class="info-value">Rs. ${cleanNum((payment as any).grossAmount || cleanNum(payment.amount) + cleanNum((payment as any).discount)).toLocaleString("en-IN")}</span>
+      </div>
+      <div class="receipt-row">
+        <span class="info-label">Rental Discount</span>
+        <span class="info-value" style="color: #16a34a;">- Rs. ${cleanNum((payment as any).discount).toLocaleString("en-IN")}</span>
+      </div>` : ""}
       <div class="receipt-row">
         <span class="info-label">Transaction Status</span>
         <span class="info-value"><span class="status-badge">SUCCESSFUL</span></span>
@@ -4202,12 +4346,38 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     })
     .reduce((sum, p) => sum + cleanNum(p.amount), 0);
   
-  // 3. Initial advance paid on agreement creation (only if no recorded payments exist in paymentsList for this agreement)
+  // 3. Initial advance collected when the agreement was created. It lives on the
+  //    rental record rather than as a Payment row, so it has to be added in
+  //    separately - but only where no Payment row already accounts for it.
   const hasRecordedPayments = paymentsList.some((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"));
 
-  const initialPaid = (!excludeInitial && !hasRecordedPayments && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial"))
-    ? Math.round((Number(rental.rentPaidAmount) || Number(rental.totalRent) || Number(rental.monthlyRent) || 0) * shareRatio)
-    : (!excludeInitial && hasRecordedPayments && rental.rentalPaymentStatus === "Paid" && !paymentsList.some(p => p.agreement === rental.id && p.equipmentId === equipmentId) && sharedPaymentsPaid === 0 ? Math.round((Number(rental.rentPaidAmount) || Number(rental.monthlyRent) || 0) * shareRatio) : 0);
+  // ITEM-10 FIX: how much upfront rent this agreement can actually evidence.
+  //
+  //  - `rental.totalRent` used to sit in this fallback chain. It is the rent
+  //    *charged* over the term, not money received, so any agreement with a
+  //    blank rentPaidAmount reported its entire term's rent as already paid and
+  //    the return settlement showed nothing owing.
+  //  - A "Partial" agreement with no rentPaidAmount recorded evidences nothing
+  //    collected; it previously fell through to a full `monthlyRent`, again
+  //    erasing a genuine due. Only a "Paid" agreement implies the first cycle.
+  const initialTotal = (() => {
+    if (excludeInitial) return 0;
+    const status = rental.rentalPaymentStatus;
+    if (status !== "Paid" && status !== "Partial") return 0;
+    const recorded = cleanNum(rental.rentPaidAmount);
+    if (recorded > 0) return recorded;
+    return status === "Paid" ? cleanNum(rental.monthlyRent) : 0;
+  })();
+
+  // A Payment row tagged to this item, or an untagged agreement-level payment,
+  // already represents that money - adding the upfront amount too would count
+  // the same rupees twice.
+  const isInitialAlreadyBooked =
+    hasRecordedPayments &&
+    (sharedPaymentsPaid > 0 ||
+      paymentsList.some((p) => p.agreement === rental.id && p.equipmentId === equipmentId));
+
+  const initialPaid = isInitialAlreadyBooked ? 0 : Math.round(initialTotal * shareRatio);
 
   const totalShared = sharedPaymentsPaid;
 
@@ -4250,6 +4420,111 @@ export function getRentalOutstandingBalance(rental: any, paymentsList: any[]): n
     const paid = getPaidForEquipment(rental, item.equipmentId, paymentsList, true);
     return total + Math.max(0, totalDue - paid);
   }, 0);
+}
+
+export interface AgreementBalance {
+  /** Rent that has fallen due from elapsed billing cycles, across unreturned items. */
+  rentCharged: number;
+  /** Rent actually recorded as received against this agreement. */
+  rentPaid: number;
+  /** Rent still owed (never negative). */
+  rentDue: number;
+  /** Security deposit agreed across unreturned items. */
+  depositCharged: number;
+  depositPaid: number;
+  depositDue: number;
+  /** Charges added to the agreement and still marked unpaid. */
+  additionalDue: number;
+  /** Everything still owed on this agreement. */
+  totalDue: number;
+}
+
+/**
+ * ITEM-19: one breakdown of what an agreement still owes, so the Collect
+ * Payment screen can show the operator what they are collecting against instead
+ * of asking them to work it out. Uses the same elapsed-cycle methodology as
+ * getRentalOutstandingBalance so the figures agree with the Rent Dues page.
+ */
+export function getAgreementBalance(rental: any, paymentsList?: any[]): AgreementBalance {
+  const empty: AgreementBalance = {
+    rentCharged: 0, rentPaid: 0, rentDue: 0,
+    depositCharged: 0, depositPaid: 0, depositDue: 0,
+    additionalDue: 0, totalDue: 0,
+  };
+  if (!rental) return empty;
+
+  const payments = paymentsList || (isBrowser ? getPayments() : []);
+  const start = parseLocalDate(rental.start);
+
+  const items = Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
+    ? rental.equipmentItems
+    : [{
+        equipmentId: rental.equipmentId,
+        serial: rental.serial,
+        monthlyRent: cleanNum(rental.monthlyRent),
+        dailyRent: cleanNum(rental.dailyRent),
+        deposit: cleanNum(rental.deposit),
+        returned: false,
+      }];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysElapsed = isNaN(start.getTime())
+    ? 0
+    : Math.ceil(Math.max(0, today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+  let rentCharged = 0;
+  let rentPaid = 0;
+  let depositCharged = 0;
+
+  for (const item of items) {
+    if (item.returned) continue;
+    const monthlyRent = cleanNum(item.monthlyRent || item.rentRate);
+    const dailyRate = cleanNum(item.dailyRent) || cleanNum(rental.dailyRent);
+    // Honour the recorded cycle; fall back to the old inference only for line
+    // items written before rentCycle was persisted on them.
+    const cycle = item.rentCycle || rental.rentCycle;
+    const isMonthly = cycle ? cycle === "Monthly" : (monthlyRent > 0 && dailyRate === 0);
+
+    rentCharged += isMonthly
+      ? Math.floor(daysElapsed / 30) * monthlyRent
+      : daysElapsed * dailyRate;
+    rentPaid += getPaidForEquipment(rental, item.equipmentId, payments, true);
+    depositCharged += cleanNum(item.deposit);
+  }
+
+  // The upfront rent taken at signing is stored on the rental, not as a Payment
+  // row, so add it in where no Payment row already represents it.
+  const hasRentPayments = payments.some(
+    (p: any) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment")
+  );
+  if (!hasRentPayments) {
+    rentPaid += cleanNum(rental.rentPaidAmount);
+  }
+
+  const depositPaid = payments
+    .filter((p: any) => p.agreement === rental.id && p.status === "Paid" && p.type === "Deposit")
+    .reduce((sum: number, p: any) => sum + cleanNum(p.amount), 0) + cleanNum(rental.depositPaidAmount);
+
+  const additionalDue = Array.isArray(rental.additionalItems)
+    ? rental.additionalItems
+        .filter((it: any) => it.selected && it.status === "Not Paid")
+        .reduce((sum: number, it: any) => sum + cleanNum(it.amount), 0)
+    : 0;
+
+  const rentDue = Math.max(0, Math.round(rentCharged - rentPaid));
+  const depositDue = Math.max(0, Math.round(depositCharged - depositPaid));
+
+  return {
+    rentCharged: Math.round(rentCharged),
+    rentPaid: Math.round(rentPaid),
+    rentDue,
+    depositCharged: Math.round(depositCharged),
+    depositPaid: Math.round(depositPaid),
+    depositDue,
+    additionalDue: Math.round(additionalDue),
+    totalDue: rentDue + depositDue + Math.round(additionalDue),
+  };
 }
 
 // ─── Exchanges Data Store ───────────────────────────────────────────────────
