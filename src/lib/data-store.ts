@@ -656,6 +656,14 @@ export function calculateCustomerStatus(customer: any, rentalsList: any[]) {
 }
 
 export function getCustomers() {
+  // Fast path: return cached result when nothing has been written since last call.
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_customersCache && _customersCacheStamp === stamp) {
+      return _customersCache;
+    }
+  }
+
   const list = getStorageItem("medirent-customers", initialCustomers);
   if (typeof window === "undefined") return sortLatestFirst(list);
   const rentalsList = getRentals();
@@ -679,7 +687,12 @@ export function getCustomers() {
     // getCustomers() normalizes → dispatches event → re-render calls getCustomers() → loop.
     localStorage.setItem("medirent-customers", JSON.stringify(updatedList));
   }
-  return sortLatestFirst(updatedList);
+  const result = sortLatestFirst(updatedList);
+  if (isBrowser) {
+    _customersCache = result;
+    _customersCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 export function saveCustomer(customer: typeof initialCustomers[number]) {
@@ -719,6 +732,14 @@ const normalizeEquipmentStatus = (status: string): "Rented" | "Available" | "Und
 };
 
 export function getEquipment() {
+  // Fast path: return cached result when nothing has been written since last call.
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_equipmentCache && _equipmentCacheStamp === stamp) {
+      return _equipmentCache;
+    }
+  }
+
   const list = getStorageItem("medirent-equipment", initialEquipment);
   if (typeof window === "undefined") return sortLatestFirst(list, "purchaseDate");
   
@@ -763,7 +784,12 @@ export function getEquipment() {
   if (changed) {
     localStorage.setItem("medirent-equipment", JSON.stringify(normalizedList));
   }
-  return sortLatestFirst(normalizedList, "purchaseDate");
+  const result = sortLatestFirst(normalizedList, "purchaseDate");
+  if (isBrowser) {
+    _equipmentCache = result;
+    _equipmentCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 export function saveEquipment(item: typeof initialEquipment[number]) {
@@ -1168,8 +1194,42 @@ export function deleteDocument(id: string) {
   return list;
 }
 
+// ─── Read-result caches ──────────────────────────────────────────────────────
+// getRentals / getCustomers / getEquipment all run expensive repair+sort passes
+// on every call. Between writes nothing changes, so we cache the last result and
+// re-use it as long as `medirent-last-write-time` hasn't moved.
+let _rentalsCache: any[] | null = null;
+let _rentalsCacheStamp = "";
+function _rentalsStamp() {
+  return typeof window !== "undefined"
+    ? (localStorage.getItem("medirent-last-write-time") ?? "")
+    : "";
+}
+function _invalidateRentalsCache() {
+  _rentalsCache = null;
+  _rentalsCacheStamp = "";
+  _customersCache = null;
+  _customersCacheStamp = "";
+  _equipmentCache = null;
+  _equipmentCacheStamp = "";
+}
+
+let _customersCache: any[] | null = null;
+let _customersCacheStamp = "";
+
+let _equipmentCache: any[] | null = null;
+let _equipmentCacheStamp = "";
+
 // Rentals Data Store
 export function getRentals() {
+  // Fast path: return cached result when nothing has been written since last call.
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_rentalsCache && _rentalsCacheStamp === stamp) {
+      return _rentalsCache;
+    }
+  }
+
   const list = getStorageItem("medirent-rentals", initialRentals);
   if (typeof window === "undefined") return sortLatestFirst(list, "start");
 
@@ -1302,12 +1362,21 @@ export function getRentals() {
     statusCorrections.forEach((r) => syncRowToSheet(SHEETS.RENTALS, r as unknown as Record<string, unknown>));
   }
 
+  const result = sortLatestFirst(changed ? statusCorrectedList : list, "start");
+
   if (changed) {
     localStorage.setItem("medirent-rentals", JSON.stringify(statusCorrectedList));
-    return sortLatestFirst(statusCorrectedList, "start");
+    // Stamp is now stale — update it so the next getRentals() call within this
+    // same tick still gets the repaired list instead of re-running the pass.
+    _rentalsCache = result;
+    _rentalsCacheStamp = _rentalsStamp();
+    return result;
   }
 
-  return sortLatestFirst(list, "start");
+  // No changes — cache the sorted list for instant re-reads within this tick.
+  _rentalsCache = result;
+  _rentalsCacheStamp = _rentalsStamp();
+  return result;
 }
 
 export function saveRental(rental: typeof initialRentals[number] & { equipmentItems?: any[] }) {
@@ -4161,6 +4230,11 @@ export async function syncFromSheetsToLocalStorage(force = false) {
   }
 
   if (updatedAny && typeof window !== "undefined") {
+    // The sync wrote directly to localStorage without going through setStorageItem,
+    // so the last-write-time stamp wasn't bumped and the read caches are now stale.
+    // Explicitly bust them before firing the update event so any handler that
+    // immediately calls getRentals/getCustomers/getEquipment gets fresh data.
+    _invalidateRentalsCache();
     window.dispatchEvent(new Event("medirent-db-updated"));
   }
 }
