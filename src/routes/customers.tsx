@@ -418,7 +418,7 @@ function CustomerFormDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-2 sm:grid-cols-2">
-          <Field label="Full Name" placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(capitalizeWords(e.target.value))} />
+          <Field label="Full Name" required placeholder="Patient or guardian name" className="sm:col-span-2" value={name} onChange={(e) => setName(capitalizeWords(e.target.value))} />
           
           <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Address Details</h4>
@@ -445,7 +445,8 @@ function CustomerFormDialog({
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Contact Details</h4>
           </div>
           <Field 
-            label="Primary Number"      
+            label="Primary Number"
+            required      
             placeholder="10-digit phone number"                   
             value={phone} 
             onChange={(e) => {
@@ -2022,6 +2023,7 @@ function Field({
   value,
   onChange,
   maxLength,
+  required,
 }: {
   label: string;
   placeholder?: string;
@@ -2030,11 +2032,12 @@ function Field({
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   maxLength?: number;
+  required?: boolean;
 }) {
   return (
     <div className={`space-y-1.5 ${className ?? ""}`}>
       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
+        {label} {required && <span className="text-destructive font-bold">*</span>}
       </Label>
       <Input type={type} placeholder={placeholder} value={value} onChange={onChange} maxLength={maxLength} />
     </div>
