@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 import {
-  MessageCircle, Mail, Phone, Bell, AlertTriangle, Clock,
+  MessageCircle, Mail, Phone, Bell,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download,
 } from "lucide-react";
 import { getRentals, getCustomers, getPayments, savePayment, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel } from "@/lib/data-store";
@@ -417,324 +417,326 @@ function PayDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto p-4 sm:p-5">
-          <DialogHeader className="pb-1.5 border-b border-border/40">
-            <DialogTitle className="flex items-center gap-2 text-[15px]">
-              <CreditCard className="h-4 w-4 text-primary" /> Record Rent Payment
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-2.5 py-1.5">
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <Label className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Select Equipment</Label>
-                {activeEqItems.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const activeIds = activeEqItems.map((it: any) => it.equipmentId);
-                      if (selectedEqIds.length === activeIds.length) {
-                        setSelectedEqIds([activeIds[0]]);
-                      } else {
-                        setSelectedEqIds(activeIds);
-                      }
-                    }}
-                    className="text-[10px] text-primary font-bold hover:underline"
-                  >
-                    {selectedEqIds.length === activeEqItems.length ? "Select Single" : "Select All"}
-                  </button>
-                )}
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 border-border/60 shadow-2xl">
+          {/* Header Bar */}
+          <div className="p-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
+                <CreditCard className="h-5 w-5" />
               </div>
-              <div className={`space-y-1 border rounded-lg p-1.5 bg-background/50 ${isMultiItem ? "max-h-44 overflow-y-auto pr-1" : "max-h-none"}`}>
-                {eqItems.map((item: any) => {
-                  const details = calcUnpaidDetailsForEquipment(rental, item.equipmentId);
-                  const isReturned = !!item.returned;
-                  const isChecked = !isReturned && selectedEqIds.includes(item.equipmentId);
-                  return (
-                    <div
-                      key={item.equipmentId}
-                      className={`flex items-start gap-2 p-1.5 rounded-md border transition-all ${
-                        isReturned
-                          ? "opacity-60 bg-muted/20 border-transparent cursor-not-allowed"
-                          : isChecked
-                          ? "border-primary/20 bg-primary/5 cursor-pointer hover:bg-muted/30"
-                          : "border-transparent cursor-pointer hover:bg-muted/30"
-                      }`}
-                      onClick={() => {
-                        if (isReturned) return;
-                        setSelectedEqIds(prev => 
-                          prev.includes(item.equipmentId)
-                            ? (prev.length > 1 ? prev.filter(id => id !== item.equipmentId) : prev)
-                            : [...prev, item.equipmentId]
-                        );
-                      }}
-                    >
-                      {!isReturned ? (
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}}
-                          className="mt-0.5 rounded border-muted text-primary focus:ring-primary h-3.5 w-3.5 pointer-events-none"
-                        />
-                      ) : (
-                        <div className="w-3.5 h-3.5 shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between font-medium text-[12px] leading-tight">
-                          <span className="flex items-center gap-1.5 min-w-0">
-                            <span className={`truncate ${item.returned ? "line-through text-muted-foreground/50" : ""}`}>
-                              {getEquipmentName(item.equipmentId)}
-                            </span>
-                            {item.returned && (
-                              <span className="inline-flex items-center rounded-md bg-success/8 px-1.5 py-0.5 text-[9px] font-bold text-success border border-success/15 shrink-0">
-                                Returned
-                              </span>
-                            )}
-                          </span>
-                          <span className={`font-mono font-bold shrink-0 ${details.outstanding > 0 ? "text-destructive" : "text-success"}`}>
-                            ₹{details.outstanding.toLocaleString("en-IN")}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                          <span>
-                            {item.serial ? `#${item.serial} • ` : ""}{details.rateText} • {item.returned ? "Returned" : details.unpaidText}
-                          </span>
-                          <span>Paid: ₹{details.grandTotalPaid.toLocaleString("en-IN")}</span>
-                        </div>
-
-                        {isMultiItem && isChecked && itemPayments[item.equipmentId] && (
-                          <div
-                            className="mt-2 space-y-1.5 border-t border-border/40 pt-2"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <div className="space-y-0.5">
-                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
-                                <Input
-                                  type="number"
-                                  value={itemPayments[item.equipmentId].amount}
-                                  onChange={(e) => handleItemAmountChange(item.equipmentId, e.target.value)}
-                                  className="h-7 text-[11px] bg-background font-semibold"
-                                />
-                              </div>
-                              <div className="space-y-0.5">
-                                <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Method</Label>
-                                <Select
-                                  value={itemPayments[item.equipmentId].mode}
-                                  onValueChange={(m) => handleItemModeChange(item.equipmentId, m)}
-                                >
-                                  <SelectTrigger className="h-7 text-[11px]"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    {["Cash", "Bank", "Cash+Bank"].map((m) => (
-                                      <SelectItem key={m} value={m}>{m}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-
-                            {itemPayments[item.equipmentId].mode === "Cash+Bank" && (
-                              <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-border bg-muted/20 p-1.5">
-                                <div className="space-y-0.5">
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash (₹)</Label>
-                                  <Input
-                                    type="number"
-                                    value={itemPayments[item.equipmentId].cashAmount}
-                                    onChange={(e) => handleItemCashChange(item.equipmentId, e.target.value)}
-                                    className="h-7 text-[11px] font-semibold bg-emerald-50/20"
-                                  />
-                                </div>
-                                <div className="space-y-0.5">
-                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank (₹)</Label>
-                                  <Input
-                                    type="number"
-                                    value={itemPayments[item.equipmentId].bankAmount}
-                                    onChange={(e) => handleItemBankChange(item.equipmentId, e.target.value)}
-                                    className="h-7 text-[11px] font-semibold bg-blue-50/20"
-                                  />
-                                </div>
-                              </div>
-                            )}
-
-                            {itemPayments[item.equipmentId].mode !== "Cash" && (
-                              <Input
-                                placeholder="Txn ref (optional)"
-                                value={itemPayments[item.equipmentId].txRef}
-                                onChange={(e) => updateItemPayment(item.equipmentId, { txRef: e.target.value })}
-                                className="h-7 text-[11px]"
-                              />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-muted/20 rounded-lg p-2 text-[11px] space-y-1 border border-border/40">
-              <div className="flex justify-between items-center">
-                <span className="font-bold text-foreground truncate">{rental.customer}</span>
-                <span className="font-mono text-primary font-bold text-[11px] shrink-0">{rental.id}</span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-border/40 pt-1 text-[10.5px]">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Items:</span>
-                  <span className="font-semibold">{selectedEqIds.length} of {activeEqItems.length || eqItems.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Unpaid:</span>
-                  <span className="font-bold text-destructive">{selectedItemsDetails.unpaidText}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Paid:</span>
-                  <span className="font-semibold text-success">₹{selectedItemsDetails.grandTotalPaid.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Remaining:</span>
-                  <span className={`font-bold ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-success"}`}>
-                    ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">{rental.customer}</h3>
+                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                    {rental.id}
                   </span>
                 </div>
+                <p className="text-[12px] text-muted-foreground mt-0.5">
+                  Record payment & update equipment rent balance
+                </p>
               </div>
             </div>
-
+            <div className="flex items-center gap-3 text-xs font-medium">
+              <div className="px-3 py-1.5 rounded-lg bg-muted/40 border border-border/40 text-right">
+                <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Total Due</span>
+                <span className={`font-mono font-bold text-sm ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                  ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-5">
             {hasPayableItems ? (
-              <>
-                {isMultiItem ? (
-                  <>
-                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-[11px] text-muted-foreground">
-                      Set the amount and payment method for each item above. Multiple items selected — enter them separately per item.
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
-                      <Input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        className="h-8.5 text-[12px] bg-background"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                {/* Left Column: Equipment Items List */}
+                <div className="md:col-span-7 space-y-3">
+                  <div className="flex justify-between items-center pb-1">
+                    <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      Select Equipment ({selectedEqIds.length} of {activeEqItems.length || eqItems.length})
+                    </Label>
+                    {activeEqItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const activeIds = activeEqItems.map((it: any) => it.equipmentId);
+                          if (selectedEqIds.length === activeIds.length) {
+                            setSelectedEqIds([activeIds[0]]);
+                          } else {
+                            setSelectedEqIds(activeIds);
+                          }
+                        }}
+                        className="text-[11px] text-primary font-bold hover:underline"
+                      >
+                        {selectedEqIds.length === activeEqItems.length ? "Select Single" : "Select All Items"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {eqItems.map((item: any) => {
+                      const details = calcUnpaidDetailsForEquipment(rental, item.equipmentId);
+                      const isReturned = !!item.returned;
+                      const isChecked = !isReturned && selectedEqIds.includes(item.equipmentId);
+                      return (
+                        <div
+                          key={item.equipmentId}
+                          className={`p-3.5 rounded-xl border transition-all ${
+                            isReturned
+                              ? "opacity-60 bg-muted/20 border-border/30 cursor-not-allowed"
+                              : isChecked
+                              ? "border-emerald-500/30 bg-emerald-500/5 shadow-xs"
+                              : "border-border/60 bg-card hover:border-border cursor-pointer"
+                          }`}
+                          onClick={() => {
+                            if (isReturned) return;
+                            setSelectedEqIds(prev => 
+                              prev.includes(item.equipmentId)
+                                ? (prev.length > 1 ? prev.filter(id => id !== item.equipmentId) : prev)
+                                : [...prev, item.equipmentId]
+                            );
+                          }}
+                        >
+                          <div className="flex items-start gap-3">
+                            {!isReturned ? (
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}}
+                                className="mt-1 rounded border-muted text-emerald-600 focus:ring-emerald-500 h-4 w-4 pointer-events-none shrink-0"
+                              />
+                            ) : (
+                              <div className="w-4 h-4 shrink-0 mt-1" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`font-bold text-[13px] truncate ${item.returned ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                  {getEquipmentName(item.equipmentId)}
+                                </span>
+                                <span className={`font-mono font-bold text-sm shrink-0 ${details.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                                  ₹{details.outstanding.toLocaleString("en-IN")}
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground mt-1">
+                                {item.serial && (
+                                  <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded text-[10px] text-foreground font-medium">
+                                    S/N: {item.serial}
+                                  </span>
+                                )}
+                                <span>{details.rateText}</span>
+                                <span>•</span>
+                                <span>{item.returned ? "Returned" : details.unpaidText}</span>
+                                <span>•</span>
+                                <span className="text-emerald-600 font-medium">Paid: ₹{details.grandTotalPaid.toLocaleString("en-IN")}</span>
+                              </div>
+
+                              {isMultiItem && isChecked && itemPayments[item.equipmentId] && (
+                                <div
+                                  className="mt-3 pt-3 border-t border-border/40 space-y-2"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
+                                      <Input
+                                        type="number"
+                                        value={itemPayments[item.equipmentId].amount}
+                                        onChange={(e) => handleItemAmountChange(item.equipmentId, e.target.value)}
+                                        className="h-8 text-[12px] bg-background font-semibold"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Method</Label>
+                                      <Select
+                                        value={itemPayments[item.equipmentId].mode}
+                                        onValueChange={(m) => handleItemModeChange(item.equipmentId, m)}
+                                      >
+                                        <SelectTrigger className="h-8 text-[12px]"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                          {["Cash", "Bank", "Cash+Bank"].map((m) => (
+                                            <SelectItem key={m} value={m}>{m}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+
+                                  {itemPayments[item.equipmentId].mode === "Cash+Bank" && (
+                                    <div className="grid grid-cols-2 gap-2 p-2 rounded-lg border border-border/50 bg-muted/20">
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash (₹)</Label>
+                                        <Input
+                                          type="number"
+                                          value={itemPayments[item.equipmentId].cashAmount}
+                                          onChange={(e) => handleItemCashChange(item.equipmentId, e.target.value)}
+                                          className="h-8 text-[12px] font-semibold bg-emerald-50/20"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank (₹)</Label>
+                                        <Input
+                                          type="number"
+                                          value={itemPayments[item.equipmentId].bankAmount}
+                                          onChange={(e) => handleItemBankChange(item.equipmentId, e.target.value)}
+                                          className="h-8 text-[12px] font-semibold bg-blue-50/20"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {itemPayments[item.equipmentId].mode !== "Cash" && (
+                                    <Input
+                                      placeholder="Txn ref (optional)"
+                                      value={itemPayments[item.equipmentId].txRef}
+                                      onChange={(e) => updateItemPayment(item.equipmentId, { txRef: e.target.value })}
+                                      className="h-8 text-[12px]"
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right Column: Payment Details & Summary Sidebar */}
+                <div className="md:col-span-5 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4 bg-muted/15 border border-border/50 p-4 rounded-xl">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Payment Details</h4>
+
+                    {!isMultiItem && (
+                      <div className="space-y-1.5">
                         <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
                         <Input
                           type="number"
                           placeholder="e.g. 500"
                           value={manualPayAmount}
                           onChange={(e) => handleAmountChange(e.target.value)}
-                          className="h-8.5 text-[12px] bg-background font-semibold text-foreground"
+                          className="h-9 text-[13px] font-bold bg-background text-foreground"
                         />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
-                        <Input
-                          type="date"
-                          value={paymentDate}
-                          onChange={(e) => setPaymentDate(e.target.value)}
-                          className="h-8.5 text-[12px] bg-background"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Method</Label>
-                      <Select
-                        value={paymentMode}
-                        onValueChange={(m) => {
-                          setPaymentMode(m);
-                          if (m === "Cash+Bank") {
-                            const cAmt = Math.round(payAmount / 2);
-                            setCashAmount(cAmt.toString());
-                            setBankAmount((payAmount - cAmt).toString());
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-8.5 text-[12px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["Cash", "Bank", "Cash+Bank"].map((m) => (
-                            <SelectItem key={m} value={m}>{m}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {paymentMode === "Cash+Bank" && (
-                      <div className="grid grid-cols-2 gap-2 p-2 bg-muted/20 rounded-lg border border-border">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash Amount (₹)</Label>
-                          <Input
-                            type="number"
-                            placeholder="Cash portion"
-                            className="h-8 text-[12px] font-semibold bg-emerald-50/20"
-                            value={cashAmount}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setCashAmount(val);
-                              const cNum = Math.max(0, Number(val) || 0);
-                              setBankAmount(Math.max(0, payAmount - cNum).toString());
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank Amount (₹)</Label>
-                          <Input
-                            type="number"
-                            placeholder="Bank portion"
-                            className="h-8 text-[12px] font-semibold bg-blue-50/20"
-                            value={bankAmount}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setBankAmount(val);
-                              const bNum = Math.max(0, Number(val) || 0);
-                              setCashAmount(Math.max(0, payAmount - bNum).toString());
-                            }}
-                          />
-                        </div>
                       </div>
                     )}
 
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Transaction Reference (Optional)</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
                       <Input
-                        placeholder="UPI txn ID, cheque no, etc."
-                        value={txRef}
-                        onChange={(e) => setTxRef(e.target.value)}
-                        className="h-8.5 text-[12px]"
+                        type="date"
+                        value={paymentDate}
+                        onChange={(e) => setPaymentDate(e.target.value)}
+                        className="h-9 text-[12px] bg-background"
                       />
                     </div>
-                  </>
-                )}
 
-                <div className="rounded-lg border border-success/20 bg-success/5 p-2 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-muted-foreground">Total Payable</span>
-                  <span className="font-display text-[18px] font-bold text-success">
-                    ₹{(isMultiItem ? multiItemTotal : payAmount).toLocaleString("en-IN")}
-                  </span>
+                    {!isMultiItem && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Method</Label>
+                          <Select
+                            value={paymentMode}
+                            onValueChange={(m) => {
+                              setPaymentMode(m);
+                              if (m === "Cash+Bank") {
+                                const cAmt = Math.round(payAmount / 2);
+                                setCashAmount(cAmt.toString());
+                                setBankAmount((payAmount - cAmt).toString());
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="h-9 text-[12px] bg-background"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {["Cash", "Bank", "Cash+Bank"].map((m) => (
+                                <SelectItem key={m} value={m}>{m}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {paymentMode === "Cash+Bank" && (
+                          <div className="grid grid-cols-2 gap-2 p-2.5 bg-background rounded-lg border border-border">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash Amount (₹)</Label>
+                              <Input
+                                type="number"
+                                placeholder="Cash portion"
+                                className="h-8 text-[12px] font-semibold bg-emerald-50/20"
+                                value={cashAmount}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCashAmount(val);
+                                  const cNum = Math.max(0, Number(val) || 0);
+                                  setBankAmount(Math.max(0, payAmount - cNum).toString());
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank Amount (₹)</Label>
+                              <Input
+                                type="number"
+                                placeholder="Bank portion"
+                                className="h-8 text-[12px] font-semibold bg-blue-50/20"
+                                value={bankAmount}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setBankAmount(val);
+                                  const bNum = Math.max(0, Number(val) || 0);
+                                  setCashAmount(Math.max(0, payAmount - bNum).toString());
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Txn Reference (Optional)</Label>
+                          <Input
+                            placeholder="UPI txn ID, cheque no, etc."
+                            value={txRef}
+                            onChange={(e) => setTxRef(e.target.value)}
+                            className="h-9 text-[12px] bg-background"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Total Payable Banner */}
+                    <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 flex items-center justify-between shadow-xs mt-2">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Payable</span>
+                      <span className="text-2xl font-bold font-mono text-emerald-600">
+                        ₹{(isMultiItem ? multiItemTotal : payAmount).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <DialogClose asChild className="flex-1">
+                      <Button variant="outline" type="button" className="h-10 text-xs font-semibold">Cancel</Button>
+                    </DialogClose>
+                    <Button
+                      type="button"
+                      onClick={handlePay}
+                      className="flex-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-sm"
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Confirm Payment
+                    </Button>
+                  </div>
                 </div>
-              </>
+              </div>
             ) : (
-              <div className="rounded-lg border border-success/20 bg-success/5 p-2 text-center text-success font-semibold text-[12px]">
-                All selected items have been returned and are fully paid!
+              <div className="py-12 text-center space-y-3">
+                <div className="h-12 w-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-bold text-foreground">All items have been returned & fully paid!</p>
+                <DialogClose asChild>
+                  <Button variant="outline" size="sm">Close</Button>
+                </DialogClose>
               </div>
             )}
           </div>
-          
-          <DialogFooter className="pt-2 border-t border-border/40 mt-1">
-            <DialogClose asChild>
-              <Button variant="outline" type="button" size="sm">Cancel</Button>
-            </DialogClose>
-            {hasPayableItems && (
-              <Button type="button" onClick={handlePay} size="sm" className="gap-1.5">
-                <CheckCircle2 className="h-4 w-4" /> Confirm Payment
-              </Button>
-            )}
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -764,15 +766,7 @@ function DuesPage() {
     return d.getDate();
   };
 
-  const getOrdinalSuffix = (day: number) => {
-    if (day > 3 && day < 21) return `${day}th`;
-    switch (day % 10) {
-      case 1:  return `${day}st`;
-      case 2:  return `${day}nd`;
-      case 3:  return `${day}rd`;
-      default: return `${day}th`;
-    }
-  };
+
 
   // Check if a rental has received a Rent payment in the current month
   const hasPaidThisMonth = (rentalId: string) => {
@@ -925,31 +919,6 @@ function DuesPage() {
         totalPaid += grandTotalPaid;
       });
 
-      // ITEM-17: the date this agreement's rent last fell due, and how long it
-      // has been outstanding. Rent bills on the agreement's start day each
-      // month, so the most recent billing anniversary on or before today is the
-      // due date; anything unpaid past that is overdue by this many days.
-      const startDate = parseLocalDate(r.start);
-      let dueDate: Date | null = null;
-      let daysOverdue = 0;
-      if (!isNaN(startDate.getTime())) {
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const anniversary = new Date(now.getFullYear(), now.getMonth(), startDate.getDate());
-        // Guard the short months: a 31st start lands on the 1st of the next
-        // month when constructed this way, so step back to the previous cycle.
-        if (anniversary > now || anniversary.getDate() !== startDate.getDate()) {
-          anniversary.setMonth(anniversary.getMonth() - 1, startDate.getDate());
-        }
-        dueDate = anniversary < startDate ? startDate : anniversary;
-        if (totalOutstanding > 0) {
-          daysOverdue = Math.max(
-            0,
-            Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-          );
-        }
-      }
-
       // Equipment still out, for the breakdown column.
       const openItems = eqItems.filter((it: any) => !it.returned);
 
@@ -959,21 +928,13 @@ function DuesPage() {
         totalPaid,
         start: r.start,
         id: r.id,
-        dueDate,
-        daysOverdue,
         openItems,
       };
     });
 
-    // ITEM-17: order by how badly the money is overdue, not by how recently the
-    // agreement was created. Longest overdue first, then largest amount, so the
-    // rows that need chasing sit at the top; settled rows fall to the bottom.
+    // Sort by largest outstanding balance first, then by agreement ID.
     return [...mapped].sort((a, b) => {
-      if (a.daysOverdue !== b.daysOverdue) return b.daysOverdue - a.daysOverdue;
       if (a.totalOutstanding !== b.totalOutstanding) return b.totalOutstanding - a.totalOutstanding;
-      const aTime = a.dueDate ? a.dueDate.getTime() : 0;
-      const bTime = b.dueDate ? b.dueDate.getTime() : 0;
-      if (aTime !== bTime) return aTime - bTime;
       return extractIdNumber(b.id) - extractIdNumber(a.id);
     });
   }, [activeRentals, paymentsList]);
@@ -1088,7 +1049,7 @@ function DuesPage() {
       l: "21–31 Days Due (21st–31st)",
       v: formatRupee(due21To31List.reduce((sum, item) => sum + item.totalOutstanding, 0)),
       n: `${due21To31List.filter(item => item.totalOutstanding > 0).length} agreement(s) due`,
-      icon: AlertTriangle,
+      icon: Calendar,
       iconColor: "text-warning-foreground",
       alert: true,
     },
@@ -1283,8 +1244,7 @@ function DuesPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Agreement</TableHead>
                   <TableHead>Equipment</TableHead>
-                  {/* ITEM-17: what fell due and how long ago, not just the cycle day */}
-                  <TableHead>Due Date / Overdue</TableHead>
+
                   <TableHead>Start Date</TableHead>
                   <TableHead className="text-right">Rate</TableHead>
                   <TableHead className="text-right">Unpaid Duration</TableHead>
@@ -1352,27 +1312,6 @@ function DuesPage() {
                               </div>
                             );
                           })}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {/* ITEM-17: the billing anniversary this rent fell due on,
-                            with its age, so the list can be worked worst-first. */}
-                        <div className="space-y-0.5">
-                          <span className="block text-[12.5px] font-semibold text-foreground">
-                            {item.dueDate ? formatDateDDMMYYYY(getLocalYYYYMMDD(item.dueDate)) : "—"}
-                          </span>
-                          {item.daysOverdue > 0 ? (
-                            <span className="inline-flex items-center rounded-md border border-destructive/20 bg-destructive/8 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
-                              {item.daysOverdue} day{item.daysOverdue === 1 ? "" : "s"} overdue
-                            </span>
-                          ) : (
-                            <span className="block text-[10px] font-medium text-muted-foreground">
-                              {item.totalOutstanding > 0 ? "Due now" : "Up to date"}
-                            </span>
-                          )}
-                          <span className="block text-[10px] text-muted-foreground/70">
-                            Bills every {getOrdinalSuffix(getStartDayOfMonth(r.start))}
-                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1480,7 +1419,7 @@ function DuesPage() {
                 })}
                 {filteredRentals.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-10 text-center text-[13px] text-muted-foreground">
+                    <TableCell colSpan={10} className="py-10 text-center text-[13px] text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <CheckCircle2 className="h-8 w-8 text-success/50" />
                         <p>No pending dues found matching this filter.</p>
