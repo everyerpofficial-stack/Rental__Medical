@@ -158,7 +158,7 @@ function CustomerFormDialog({
   const [altPhone, setAltPhone] = useState(customer?.altPhone || "");
   const [contactNumber3, setContactNumber3] = useState(customer?.contactNumber3 || "");
   const [email, setEmail] = useState(customer?.email || "");
-  const [aadhaar, setAadhaar] = useState(customer?.aadhaar || "");
+  const [aadhaar, setAadhaar] = useState((customer?.aadhaar || "").replace(/\D/g, "").slice(0, 12));
   const [pan, setPan] = useState(customer?.pan || "");
   const [address, setAddress] = useState(customer?.address || "");
   const [area, setArea] = useState(customer?.area || "");
@@ -177,7 +177,7 @@ function CustomerFormDialog({
       setAltPhone(customer?.altPhone || "");
       setContactNumber3(customer?.contactNumber3 || "");
       setEmail(customer?.email || "");
-      setAadhaar(customer?.aadhaar || "");
+      setAadhaar((customer?.aadhaar || "").replace(/\D/g, "").slice(0, 12));
       setPan(customer?.pan || "");
       setAddress(customer?.address || "");
       setArea(customer?.area || "");
@@ -253,8 +253,8 @@ function CustomerFormDialog({
     }
 
     if (aadhaar.trim()) {
-      const aadhaarDigits = aadhaar.replace(/\D/g, "");
-      if (aadhaarDigits.length !== 12) {
+      const aadhaarDigits = aadhaar.replace(/\D/g, "").slice(0, 12);
+      if (aadhaarDigits.length > 0 && aadhaarDigits.length !== 12) {
         toast.error("Aadhaar Number must contain exactly 12 digits.");
         setIsSubmitting(false);
         return;
@@ -316,7 +316,7 @@ function CustomerFormDialog({
       pincode: pincode,
       address: address || "No address provided",
       area: area.trim(),
-      aadhaar,
+      aadhaar: aadhaar.replace(/\D/g, "").slice(0, 12),
       pan,
       rentals: customer?.rentals || 0,
       status: customer?.status || "Active",
