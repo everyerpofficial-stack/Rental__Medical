@@ -103,18 +103,18 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
   const name = (row.name || "").trim();
   if (!name) return { ok: false, error: "Missing customer name" };
 
-  const phoneDigits = (row.phone || "").replace(/\D/g, "");
+  const phoneDigits = String(row.phone || "").replace(/\D/g, "");
   if (phoneDigits.length !== 10) return { ok: false, error: `${name}: Primary Number must be exactly 10 digits` };
 
-  const altPhoneDigits = (row.altPhone || "").replace(/\D/g, "");
+  const altPhoneDigits = String(row.altPhone || "").replace(/\D/g, "");
   if (altPhoneDigits && altPhoneDigits.length !== 10) return { ok: false, error: `${name}: Alternative Phone must be exactly 10 digits` };
 
-  const contactNumber3Digits = (row.contactNumber3 || "").replace(/\D/g, "");
+  const contactNumber3Digits = String(row.contactNumber3 || "").replace(/\D/g, "");
   if (contactNumber3Digits && contactNumber3Digits.length !== 10) return { ok: false, error: `${name}: Alternative Phone 1 must be exactly 10 digits` };
 
   // ITEM-4: names may repeat across customers - only the phone number is unique.
   const phoneOwner = getCustomers().find(
-    (c) => (c.phone || "").replace(/\D/g, "") === phoneDigits
+    (c) => String(c.phone || "").replace(/\D/g, "") === phoneDigits
   );
   if (phoneOwner) {
     return { ok: false, error: `${name}: phone number already registered to "${phoneOwner.name}" (${phoneOwner.id})` };
@@ -280,7 +280,7 @@ function CustomerFormDialog({
     const others = getCustomers().filter((c) => c.id !== customer?.id);
 
     const phoneOwner = others.find(
-      (c) => (c.phone || "").replace(/\D/g, "") === normalizedPhone
+      (c) => String(c.phone || "").replace(/\D/g, "") === normalizedPhone
     );
     if (phoneOwner) {
       toast.error(
