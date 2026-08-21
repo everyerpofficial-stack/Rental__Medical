@@ -216,8 +216,8 @@ interface AdditionalItem {
   isCustom?: boolean;
 }
 
-function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, onSave }: {
-  trigger: React.ReactNode; title?: string; rental?: Rental; onSave?: () => void;
+function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, onSave, inline, onClose }: {
+  trigger?: React.ReactNode; title?: string; rental?: Rental; onSave?: () => void; inline?: boolean; onClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
@@ -489,9 +489,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       signatureUrl,
       thumbprintUrl,
     };
-    localStorage.setItem("medirent_new_agreement_draft", JSON.stringify(draft));
+        localStorage.setItem("medirent_new_agreement_draft", JSON.stringify(draft));
     toast.success("Current agreement details saved to draft.");
     setOpen(false);
+    if (onClose) onClose();
     window.location.href = "/equipment?addNew=true";
   };
 
@@ -968,7 +969,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       customersList.map((c: any) => {
         const primary = String(c.phone || "").trim();
         const alt = String(c.altPhone || "").trim();
-        const parts = [`${c.name} — ${c.id}`];
+        const parts = [c.name];
         if (primary) parts.push(`Ph: ${primary}`);
         if (alt) parts.push(`Alt: ${alt}`);
         return {
@@ -1645,8 +1646,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       });
     }
 
-    toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
+        toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
     setOpen(false);
+    if (onClose) onClose();
     if (onSave) onSave();
     } catch (error) {
       console.error("[Save Agreement] Failed:", error);
@@ -1665,21 +1667,27 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent 
-        className="max-w-3xl lg:max-w-6xl w-full h-[90vh] max-h-[90vh] flex flex-col p-6 overflow-hidden gap-0"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
-        <DialogHeader className="shrink-0 pb-2 border-b">
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+    return (
+    <div className="space-y-4 animate-[fade-in_0.3s_ease-out]">
+      {/* Header Bar */}
+      <div className="flex items-center justify-between pb-3 border-b border-border bg-gradient-to-r from-muted/30 via-background to-muted/20 px-4 py-3 rounded-xl border">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0 border border-primary/20">
+            <PenTool className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-[15px] font-bold text-foreground leading-tight">{title}</h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Process and register rental agreement details</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={onClose} className="h-8.5 text-xs font-semibold gap-1.5 shadow-sm">
+          <X className="h-3.5 w-3.5 text-muted-foreground" /> Back to Rentals
+        </Button>
+      </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-y-auto lg:overflow-hidden min-h-0 mt-4">
-          {/* Left Column: Scrollable Form */}
-          <div className="flex-1 lg:overflow-y-auto lg:pr-4 space-y-4 min-h-0">
+      <div className="flex flex-col lg:flex-row gap-6 mt-4">
+        {/* Left Column: Scrollable Form */}
+        <div className="flex-1 space-y-4">
             {hasDraft && (
               <div className="flex items-center justify-between bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg text-xs font-semibold mb-2">
                 <span>We found a saved draft. Would you like to restore your progress?</span>
@@ -2923,17 +2931,16 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               <Button variant="outline" type="button" className="w-full justify-start" onClick={() => toast.success(`Agreement emailed successfully to customer.`)}><Mail className="mr-1.5 h-3.5 w-3.5" />Email Agreement</Button>
               
               <div className="flex gap-2 w-full mt-2">
-                <DialogClose asChild>
-                  <Button variant="outline" type="button" className="flex-1">Cancel</Button>
-                </DialogClose>
+                                <Button variant="outline" type="button" className="flex-1" onClick={onClose}>Cancel</Button>
                 {!isStaff && rental && rental.status === "Pending Approval" && (
                   <Button 
                     type="button" 
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] px-2" 
                     onClick={() => {
-                      approveRental(rental.id);
+                                            approveRental(rental.id);
                       toast.success(`Agreement ${rental.id} approved successfully!`);
                       setOpen(false);
+                      if (onClose) onClose();
                       if (onSave) onSave();
                     }}
                   >
@@ -2943,7 +2950,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 )}
                 <Button type="button" className="flex-1" onClick={handleSave} disabled={isSubmitting}><FileText className="mr-1.5 h-3.5 w-3.5" />Save</Button>
               </div>
-            </div>
+                        </div>
           </div>
         </div>
 
@@ -2955,20 +2962,20 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           onScanSuccess={handleBulkScanSuccess}
           title="Bulk Scan Equipment Serials"
         />
-      </DialogContent>
-      {/* Bug 8: QR Scanner modal — triggered per equipment row scan button */}
-      <QrScannerModal
-        isOpen={isScannerOpen}
-        onOpenChange={(open) => {
-          setIsScannerOpen(open);
-          if (!open) setScannerTargetIdx(null);
-        }}
-        inlineMode={true}
-        onScanSuccess={handleQrScanSuccess}
-        title="Scan Equipment Barcode / QR Code"
-      />
-    </Dialog>
-  );
+
+        {/* QR Scanner modal */}
+        <QrScannerModal
+          isOpen={isScannerOpen}
+          onOpenChange={(open) => {
+            setIsScannerOpen(open);
+            if (!open) setScannerTargetIdx(null);
+          }}
+          inlineMode={true}
+          onScanSuccess={handleQrScanSuccess}
+          title="Scan Equipment Barcode / QR Code"
+        />
+      </div>
+    );
 }
 
 function CancelRentalDialog({ rental, trigger, onCancel }: { rental: Rental; trigger: React.ReactNode; onCancel?: () => void }) {
@@ -4426,6 +4433,8 @@ function RentalsPage() {
   // Active and Overdue agreements that carry a real unpaid balance), so they
   // are a separate control from the status dropdown rather than more options in it.
   const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues">("all");
+  const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
+  const [editingRental, setEditingRental] = useState<Rental | null>(null);
   // PERF: render the first page only; the rest load on demand.
   const [visibleCount, setVisibleCount] = useState(RENTALS_PAGE_SIZE);
   const [rentalsList, setRentalsList] = useState(() => getRentals());
@@ -4554,48 +4563,65 @@ function RentalsPage() {
   );
   const hasMoreRentals = filteredRentals.length > visibleCount;
 
-  return (
+    return (
     <AppShell
-      title="Rental Agreements"
-      subtitle="Create, track and manage all equipment rental contracts"
+      title={activeView === "new" ? "New Rental Agreement" : activeView === "edit" ? "Edit Rental Agreement" : "Rental Agreements"}
+      subtitle={activeView === "new" ? "Create a new rental contract" : activeView === "edit" ? "Modify agreement details" : "Create, track and manage all equipment rental contracts"}
       actions={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const headers = ["Agreement ID", "Customer", "Equipment", "Serial", "Period", "Monthly Rent", "Deposit", "Status"];
-              const rows = rentalsList.map(r => [
-                r.id,
-                r.customer,
-                r.equipment,
-                r.serial,
-                `${formatDateDDMMYYYY(r.start)} to ${r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}`,
-                (r.monthlyRent ?? 0).toString(),
-                (r.deposit ?? 0).toString(),
-                r.status
-              ]);
-              downloadExcel("rental_agreements_export.xls", headers, rows, [120, 200, 250, 150, 200, 110, 110, 100]);
-              toast.success("Rental agreements log exported successfully.");
-            }}
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export
-          </Button>
-          <CreateRentalDialog
-            onSave={refresh}
-            trigger={
-              <Button size="sm">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                New Agreement
-              </Button>
-            }
-          />
-        </>
+        activeView === "list" ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const headers = ["Agreement ID", "Customer", "Equipment", "Serial", "Period", "Monthly Rent", "Deposit", "Status"];
+                const rows = rentalsList.map(r => [
+                  r.id,
+                  r.customer,
+                  r.equipment,
+                  r.serial,
+                  `${formatDateDDMMYYYY(r.start)} to ${r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}`,
+                  (r.monthlyRent ?? 0).toString(),
+                  (r.deposit ?? 0).toString(),
+                  r.status
+                ]);
+                downloadExcel("rental_agreements_export.xls", headers, rows, [120, 200, 250, 150, 200, 110, 110, 100]);
+                toast.success("Rental agreements log exported successfully.");
+              }}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Export
+            </Button>
+            <Button size="sm" onClick={() => setActiveView("new")}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New Agreement
+            </Button>
+          </>
+        ) : null
       }
     >
-      {/* Stats */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      {activeView === "new" ? (
+        <CreateRentalDialog
+          inline
+          title="New Rental Agreement"
+          onSave={refresh}
+          onClose={() => setActiveView("list")}
+        />
+      ) : activeView === "edit" ? (
+        <CreateRentalDialog
+          inline
+          title="Edit Rental Agreement"
+          rental={editingRental!}
+          onSave={refresh}
+          onClose={() => {
+            setActiveView("list");
+            setEditingRental(null);
+          }}
+        />
+      ) : (
+        <>
+          {/* Stats */}
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[
           { l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
           { l: "Active",           v: rentalsList.filter(r => r.status === "Active").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
@@ -4777,18 +4803,20 @@ function RentalsPage() {
                             <MapPin className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        {/* Bug 7 fix: Edit button for each rental agreement */}
+                                                {/* Bug 7 fix: Edit button for each rental agreement */}
                         {!isStaff && r.status !== "Cancelled" && (
-                          <CreateRentalDialog
-                            title="Edit Rental Agreement"
-                            rental={r}
-                            onSave={refresh}
-                            trigger={
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit Agreement">
-                                <Edit className="h-3.5 w-3.5" />
-                              </Button>
-                            }
-                          />
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" 
+                            title="Edit Agreement"
+                            onClick={() => {
+                              setEditingRental(r);
+                              setActiveView("edit");
+                            }}
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                         <Button
                           variant="ghost"
@@ -4950,16 +4978,16 @@ function RentalsPage() {
         </CardContent>
       </Card>
 
+              </>
+      )}
+
       {/* Mobile FAB */}
-      <CreateRentalDialog
-        onSave={refresh}
-        trigger={
-          <button className="fab md:hidden">
-            <Plus className="h-5 w-5" />
-            New Agreement
-          </button>
-        }
-      />
+      {activeView === "list" && (
+        <button className="fab md:hidden" onClick={() => setActiveView("new")}>
+          <Plus className="h-5 w-5" />
+          New Agreement
+        </button>
+      )}
     </AppShell>
   );
 }

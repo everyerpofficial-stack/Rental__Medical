@@ -1584,71 +1584,39 @@ function ReturnsPage() {
               </div>
             </div>
 
-            {/* Slide-in Agreement Customer Profile Summary & Checklist with Payment History */}
+                        {/* Slide-in Agreement Customer Profile Summary & Checklist with Payment History */}
             {selectedRental && (
-              <div className="grid gap-5 lg:grid-cols-3 items-start animate-[slide-up_0.3s_ease-out]">
-                {/* Left Columns: Customer summary & checklist */}
-                <div className="lg:col-span-2 space-y-4">
-                  {/* Agreement Customer Profile Summary */}
-                  <div className="rounded-xl border border-border/40 bg-muted/5 p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="h-12 w-12 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-soft shrink-0">
-                        {getCustomerInitials(selectedRental.customer)}
-                      </div>
-                      <div>
-                        <h4 className="text-[14px] font-bold text-foreground leading-tight flex items-center gap-2">
-                          {selectedRental.customer}
-                          <StatusBadge status={selectedRental.status} />
-                        </h4>
-                        {(() => {
-                          const p1 = selectedCustomer?.phone || (selectedRental as any)?.phone || "";
-                          const p2 = selectedCustomer?.altPhone || (selectedRental as any)?.altPhone || "";
-                          const p3 = selectedCustomer?.contactNumber3 || (selectedRental as any)?.contactNumber3 || "";
-                          return (
-                            <div className="text-[11.5px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                              <span>Agreement ID: <span className="font-mono font-bold text-foreground/80">{selectedRental.id}</span></span>
-                              {p1 && (
-                                <span className="flex items-center gap-1">
-                                  · Contact: <a href={`tel:${p1}`} className="hover:underline font-semibold text-foreground/80">{p1}</a>
-                                </span>
-                              )}
-                              {p2 && (
-                                <span className="flex items-center gap-1">
-                                  · Alt: <a href={`tel:${p2}`} className="hover:underline text-foreground/80">{p2}</a>
-                                </span>
-                              )}
-                              {p3 && (
-                                <span className="flex items-center gap-1">
-                                  · Alt 1: <a href={`tel:${p3}`} className="hover:underline text-foreground/80">{p3}</a>
-                                </span>
-                              )}
-                              {!p1 && !p2 && !p3 && (
-                                <span>· No phone registered</span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                        {(() => {
-                          const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
-                          const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";
-                          const custCity = selectedCustomer?.city || (selectedRental as any)?.city || "";
-                          const fullAddr = [custAddr, custArea, custCity].filter(Boolean).join(", ");
-                          return fullAddr ? (
-                            <p className="text-[11.5px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                              <MapPin className="h-3.5 w-3.5 shrink-0 text-primary opacity-80" />
-                              <span><strong>Address:</strong> {fullAddr}</span>
-                            </p>
-                          ) : null;
-                        })()}
-                        <p className="text-[11px] text-muted-foreground mt-0.5">Period: <span className="font-semibold text-foreground/70">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="font-semibold text-foreground/70">{returnDate ? formatDateDDMMYYYY(returnDate) : (selectedRental.end ? formatDateDDMMYYYY(selectedRental.end) : "Ongoing")}</span></p>
-                      </div>
+              <div className="grid gap-5 lg:grid-cols-12 items-start animate-[slide-up_0.3s_ease-out]">
+                {/* Left Column: Customer details, Equipment check, Adjustments, Calculations (col-span-7) */}
+                <div className="lg:col-span-7 space-y-4">
+                  {/* Compact Customer Info Row */}
+                  <div className="rounded-xl border border-border/40 bg-muted/15 py-2 px-3 flex flex-wrap items-center justify-between gap-3 text-[11.5px] text-muted-foreground font-semibold">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-foreground">{selectedRental.customer}</span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">{selectedRental.id}</span>
+                      <StatusBadge status={selectedRental.status} />
                     </div>
+                    {(() => {
+                      const p1 = selectedCustomer?.phone || (selectedRental as any)?.phone || "";
+                      const p2 = selectedCustomer?.altPhone || (selectedRental as any)?.altPhone || "";
+                      const phones = [p1, p2].filter(Boolean).join(", ");
+                      const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
+                      const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";
+                      const addr = [custAddr, custArea].filter(Boolean).join(", ");
+                      return (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
+                          {addr && <span className="truncate max-w-[200px]" title={addr}>Address: <span className="text-foreground/80">{addr}</span></span>}
+                          <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span></span>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Select Equipment Checklist Grid */}
-                  <div className="space-y-3.5 border border-border/60 bg-muted/10 p-4.5 rounded-xl">
+                  <div className="space-y-2 border border-border/60 bg-muted/10 p-3.5 rounded-xl">
                     <div className="flex items-center justify-between">
-                      <Label className="text-[11.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Select Equipment to Return
                       </Label>
                       <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
@@ -1656,7 +1624,7 @@ function ReturnsPage() {
                       </span>
                     </div>
                     
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                       {rentalEquipments.map((item: any) => {
                         const isReturned = item.returned;
                         const eqName = getEquipmentName(item.equipmentId);
@@ -1685,7 +1653,7 @@ function ReturnsPage() {
                                 setSelectedEquipmentIds([...selectedEquipmentIds, item.equipmentId]);
                               }
                             }}
-                            className={`group flex items-start gap-3 p-3.5 rounded-xl border text-[12px] transition-all cursor-pointer relative overflow-hidden select-none ${
+                            className={`group flex items-start gap-2.5 p-3 rounded-xl border text-[11px] transition-all cursor-pointer relative overflow-hidden select-none ${
                               isReturned 
                                 ? "bg-muted/15 border-border/30 opacity-55 cursor-not-allowed" 
                                 : isChecked
@@ -1693,54 +1661,48 @@ function ReturnsPage() {
                                   : "bg-background border-border hover:border-primary/40 hover:shadow-soft"
                             }`}
                           >
-                            {/* Selector Tick Box */}
                             {!isReturned && (
-                              <div className={`h-4.5 w-4.5 rounded-md border flex items-center justify-center mt-0.5 shrink-0 transition-all ${
+                              <div className={`h-4 w-4 rounded border flex items-center justify-center mt-0.5 shrink-0 transition-all ${
                                 isChecked 
                                   ? "bg-primary border-primary text-primary-foreground" 
                                   : "border-border bg-background group-hover:border-primary/50"
                               }`}>
-                                {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                                {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
                               </div>
                             )}
 
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <span className={`block font-bold text-[12.5px] tracking-tight leading-tight ${isReturned ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <span className={`block font-bold text-[11.5px] truncate ${isReturned ? "text-muted-foreground line-through" : "text-foreground"}`}>
                                 {eqName}
                               </span>
                               
-                              <div className="space-y-0.5 text-[11.5px] text-muted-foreground mt-1">
+                              <div className="space-y-0.5 text-[10px] text-muted-foreground">
                                 <div className="flex items-center justify-between gap-1 overflow-hidden">
-                                  <span className="shrink-0 font-medium text-muted-foreground">Serial:</span>
+                                  <span>Serial:</span>
                                   <span className="font-mono font-bold text-foreground/90 truncate">{item.serial || "Not Set"}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-1 overflow-hidden">
-                                  <span className="shrink-0 font-medium text-muted-foreground">Model:</span>
+                                  <span>Model:</span>
                                   <span className="font-semibold text-foreground/90 truncate">{modelNo}</span>
-                                </div>
-                                <div className="flex items-center justify-between gap-1 overflow-hidden">
-                                  <span className="shrink-0 font-medium text-muted-foreground">Owner:</span>
-                                  <span className="font-semibold text-foreground/90 truncate">{ownerName}</span>
                                 </div>
                               </div>
 
-                              <div className="mt-2.5 pt-2 border-t border-border/40 space-y-1 text-[11px]">
+                              <div className="mt-1.5 pt-1.5 border-t border-border/40 space-y-0.5 text-[9.5px]">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-muted-foreground">Rent: <span className="font-bold text-foreground/80">₹{rentRate.toLocaleString("en-IN")}/{rentCycleLabel}</span></span>
-                                  <span className={`px-1.5 py-0.2 rounded-[4px] text-[9.5px] font-black ${isRentPaid ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                                  <span>Rent: <span className="font-bold text-foreground/80">₹{rentRate.toLocaleString("en-IN")}/{rentCycleLabel}</span></span>
+                                  <span className={`px-1 rounded-[3px] text-[8.5px] font-black ${isRentPaid ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
                                     {rentPaidText}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-muted-foreground">Deposit: <span className="font-bold text-foreground/80">₹{cleanNum(item.deposit).toLocaleString("en-IN")}</span></span>
-                                  <span className={`px-1.5 py-0.2 rounded-[4px] text-[9.5px] font-black ${isDepositPaid ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                                  <span>Deposit: <span className="font-bold text-foreground/80">₹{cleanNum(item.deposit).toLocaleString("en-IN")}</span></span>
+                                  <span className={`px-1 rounded-[3px] text-[8.5px] font-black ${isDepositPaid ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
                                     {depositPaidText}
                                   </span>
                                 </div>
                               </div>
                             </div>
 
-                            {/* Top corner indicator badge for already returned items */}
                             {isReturned && (() => {
                               const retRecord = mockReturns.find(r => 
                                 (r.returnedEquipmentIds && r.returnedEquipmentIds.includes(item.equipmentId)) ||
@@ -1749,7 +1711,7 @@ function ReturnsPage() {
                               const retDateRaw = item.returnedDate || item.returnDate || retRecord?.date || selectedRental.end;
                               const formattedRetDate = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
                               return (
-                                <span className="absolute top-1.5 right-1.5 text-[9.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded shadow-2xs">
+                                <span className="absolute top-1 right-1 text-[8.5px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 py-0.2 rounded">
                                   Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
                                 </span>
                               );
@@ -1759,391 +1721,344 @@ function ReturnsPage() {
                       })}
                     </div>
                   </div>
-                </div>
 
-                {/* Right Column: Payment History */}
-                <Card className="border border-border/50 bg-card/65 shadow-soft backdrop-blur-xs flex flex-col h-full overflow-hidden max-h-[385px] lg:mt-0">
-                  <CardHeader className="p-4 border-b border-border/40 pb-3 flex flex-row items-center gap-2 shrink-0">
-                    <Receipt className="h-4 w-4 text-primary" />
-                    <div>
-                      <CardTitle className="text-[13.5px] font-bold text-foreground">Payment Ledger</CardTitle>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Agreement transactions list</p>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-0 flex-1 overflow-y-auto min-h-[180px]">
-                    {agreementPayments.length === 0 ? (
-                      <div className="py-16 text-center text-muted-foreground text-[12px] px-4">
-                        <Receipt className="h-6 w-6 mx-auto text-muted-foreground/20 mb-2" />
-                        <p className="font-bold text-foreground/75">No payments found</p>
-                        <p className="text-[10.5px] text-muted-foreground/60 mt-0.5">No logged transactions found for this agreement.</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-border/40">
-                        {agreementPayments.map((p) => {
-                          const isDeposit = p.type?.toLowerCase().includes("deposit");
-                          return (
-                            <div key={p.id} className="p-3 text-[12px] hover:bg-muted/10 transition-colors flex items-start justify-between gap-3">
-                              <div className="space-y-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`px-1.5 py-0.2 rounded-[4px] text-[9.5px] font-black tracking-tight ${
-                                    isDeposit 
-                                      ? "bg-blue-50 text-blue-700 border border-blue-200" 
-                                      : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  }`}>
-                                    {p.type || "Rent"}
-                                  </span>
-                                  <span className="font-mono text-[10.5px] font-bold text-muted-foreground/70">{p.id}</span>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground/90 truncate font-medium">{p.notes || "Rent payment"}</p>
-                                <div className="flex items-center gap-2 text-[10.5px] text-muted-foreground/60 mt-1">
-                                  <span>{formatDateDDMMYYYY(p.date)}</span>
-                                  <span>·</span>
-                                  <span>Mode: <strong className="text-foreground/70 font-semibold">{p.mode}</strong></span>
-                                  {p.txRef && (
-                                    <>
-                                      <span>·</span>
-                                      <span className="truncate max-w-[80px] font-mono">Ref: {p.txRef}</span>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                              <span className="font-extrabold text-foreground text-[12.5px] whitespace-nowrap shrink-0">
-                                ₹{cleanNum(p.amount).toLocaleString("en-IN")}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            {/* Live Audit Dues & Adjustments Adjustment Rows */}
-            {selectedRental && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <Sliders className="h-4 w-4 text-primary" />
-                  <Label className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Adjustment Controls
-                  </Label>
-                </div>
-                
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 bg-muted/20 p-4.5 rounded-xl border border-border/40">
-                  {/* Column 1, Row 1: Rental Duration */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border flex flex-col justify-between">
-                    <FieldLabel>Total Rental Duration</FieldLabel>
-                    <div className="text-[13.5px] font-bold text-foreground h-9 flex items-center">
-                      {selectedRental ? formatRentalDuration(selectedRental.start, returnDate, rentalEquipments[0]?.rentCycle) : "0 Days"}
-                    </div>
-                  </div>
-
-                  {/* Column 2, Row 1: Total Rent Payable */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border">
-                    <FieldLabel>Total Rent Payable</FieldLabel>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-2 text-[12px] font-bold text-muted-foreground">₹</span>
-                      <Input
-                        placeholder="0.00"
-                        className="h-8 pl-7 text-[13px] font-semibold border-border focus-visible:ring-primary/20"
-                        value={finalRent}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFinalRent(val);
-                          const fRentNum = cleanNum(val);
-                          const paidNum = cleanNum(totalPaidAmount);
-                          setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Column 3, Row 1: Total Rent Paid */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border">
-                    <FieldLabel>Total Rent Paid</FieldLabel>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-2 text-[12px] font-bold text-muted-foreground">₹</span>
-                      <Input
-                        placeholder="0.00"
-                        className="h-8 pl-7 text-[13px] font-semibold border-border focus-visible:ring-primary/20"
-                        value={totalPaidAmount}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setTotalPaidAmount(val);
-                          const fRentNum = cleanNum(finalRent);
-                          const paidNum = cleanNum(val);
-                          setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Column 4, Row 1: Outstanding Rent Due */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border">
-                    <FieldLabel>Outstanding Rent Due</FieldLabel>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-2 text-[12px] font-bold text-muted-foreground">₹</span>
-                      <Input
-                        placeholder="0.00"
-                        className={`h-8 pl-7 text-[13px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
-                        value={pendingBalance}
-                        onChange={(e) => setPendingBalance(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Column 1, Row 2: Damage Charges */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border">
-                    <FieldLabel>Damage Charges</FieldLabel>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-2 text-[12px] font-bold text-muted-foreground">₹</span>
-                      <Input
-                        placeholder="0.00"
-                        className="h-8 pl-7 text-[13px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
-                        value={damageCharges}
-                        onChange={(e) => setDamageCharges(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Column 2, Row 2: Return Discount */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border">
-                    <FieldLabel>Return Discount</FieldLabel>
-                    <div className="relative mt-1">
-                      <span className="absolute left-3 top-2 text-[12px] font-bold text-muted-foreground">₹</span>
-                      <Input
-                        placeholder="0.00"
-                        className="h-8 pl-7 text-[13px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
-                        value={discount}
-                        onChange={(e) => setDiscount(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Column 3, Row 2: Unpaid Additional Accessories */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border flex flex-col justify-between min-h-[64px]">
-                    <FieldLabel>Unpaid Accessories</FieldLabel>
-                    <div className="text-[11.5px] font-semibold text-foreground leading-tight mt-1">
-                      {unpaidItems.length > 0 ? (
-                        <div className="max-h-[36px] overflow-y-auto space-y-0.5">
-                          {unpaidItems.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between text-rose-600 text-[10px]">
-                              <span className="truncate max-w-[110px]">{item.name}</span>
-                              <span>₹{cleanNum(item.amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">₹0</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Column 4, Row 2: Security Deposit */}
-                  <div className="space-y-1.5 bg-background rounded-lg p-3.5 border border-border flex flex-col justify-between">
-                    <FieldLabel>Security Deposit</FieldLabel>
-                    <div className="text-[14px] font-bold text-blue-600 h-9 flex items-center">
-                      ₹{deposit.toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Detailed Return & Reconciliation Summary Grid Panel */}
-            {selectedRental ? (
-              (() => {
-                // ITEM-10: read the shared settlement values rather than
-                // recomputing them - the ledger and the saved record must never
-                // be able to drift apart again.
-                const dmgCharges = dmg;
-                const unpaidAccessoriesTotal = unpaidAccessoryTotal;
-                const totalDueVal = totalDueBeforeDiscount;
-                const returnDiscountVal = effectiveDiscount;
-                const afterDiscountTotalDueVal = afterDiscountTotalDue;
-                const totalDepositVal = deposit;
-
-                return (
-                  <div className="rounded-xl border border-border/60 bg-muted/5 overflow-hidden">
-                    <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-border/60 bg-muted/20">
-                      <div className="metric-icon h-7 w-7 shrink-0 bg-primary/10 text-primary border-primary/20">
-                        <Receipt className="h-4 w-4" />
-                      </div>
-                      <span className="text-[12px] font-bold uppercase tracking-wider text-foreground">
-                        Reconciliation Ledger Details
-                      </span>
+                  {/* Adjustment Controls */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sliders className="h-3.5 w-3.5 text-primary" />
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Adjustment Controls
+                      </Label>
                     </div>
                     
-                    <div className="p-0">
-                      <Table>
-                        <TableHeader className="bg-muted/10">
-                          <TableRow>
-                            <TableHead className="font-bold text-[11px] text-muted-foreground uppercase pl-6">Ledger Line Item</TableHead>
-                            <TableHead className="font-bold text-[11px] text-muted-foreground uppercase">Calculation Details</TableHead>
-                            <TableHead className="text-right font-bold text-[11px] text-muted-foreground uppercase pr-6">Amount (₹)</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow className="hover:bg-muted/5 transition-colors">
-                            <TableCell className="font-semibold text-[13px] text-foreground pl-6">Total Due</TableCell>
-                            <TableCell className="text-[11.5px] text-muted-foreground">
-                              Remaining Rent Dues (₹{remainingRentDues.toLocaleString("en-IN")}) 
-                              {dmgCharges > 0 && ` + Damage Charges (₹${dmgCharges.toLocaleString("en-IN")})`}
-                              {unpaidAccessoriesTotal > 0 && ` + Unpaid Accessories (₹${unpaidAccessoriesTotal.toLocaleString("en-IN")})`}
-                            </TableCell>
-                            <TableCell className="text-right font-bold text-[13px] pr-6">
-                              ₹{totalDueVal.toLocaleString("en-IN")}
-                            </TableCell>
-                          </TableRow>
+                    <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 bg-muted/20 p-3 rounded-xl border border-border/40">
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between">
+                        <FieldLabel>Duration</FieldLabel>
+                        <div className="text-[12px] font-bold text-foreground h-7 flex items-center">
+                          {selectedRental ? formatRentalDuration(selectedRental.start, returnDate, rentalEquipments[0]?.rentCycle) : "0 Days"}
+                        </div>
+                      </div>
 
-                          {rentOverpaid > 0 && (
-                            <TableRow className="hover:bg-muted/5 transition-colors bg-blue-50/10">
-                              <TableCell className="font-semibold text-[13px] text-blue-700 pl-6">Rent Advance Credit</TableCell>
-                              <TableCell className="text-[11.5px] text-blue-600">Customer paid ₹{rentOverpaid.toLocaleString("en-IN")} more than rent due — credited against deposit</TableCell>
-                              <TableCell className="text-right font-bold text-blue-600 text-[13px] pr-6">
-                                + ₹{rentOverpaid.toLocaleString("en-IN")}
-                              </TableCell>
-                            </TableRow>
-                          )}
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
+                        <FieldLabel>Total Rent Payable</FieldLabel>
+                        <div className="relative mt-0.5">
+                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <Input
+                            placeholder="0.00"
+                            className="h-7 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            value={finalRent}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFinalRent(val);
+                              const fRentNum = cleanNum(val);
+                              const paidNum = cleanNum(totalPaidAmount);
+                              setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                          <TableRow className="hover:bg-muted/5 transition-colors">
-                            <TableCell className="font-semibold text-[13px] text-foreground pl-6">Return Discount</TableCell>
-                            <TableCell className="text-[11.5px] text-muted-foreground">Discount applied on return</TableCell>
-                            <TableCell className="text-right font-bold text-emerald-600 text-[13px] pr-6">
-                              - ₹{returnDiscountVal.toLocaleString("en-IN")}
-                            </TableCell>
-                          </TableRow>
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
+                        <FieldLabel>Total Rent Paid</FieldLabel>
+                        <div className="relative mt-0.5">
+                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <Input
+                            placeholder="0.00"
+                            className="h-7 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            value={totalPaidAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTotalPaidAmount(val);
+                              const fRentNum = cleanNum(finalRent);
+                              const paidNum = cleanNum(val);
+                              setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                          <TableRow className="hover:bg-muted/5 transition-colors bg-muted/5 font-semibold">
-                            <TableCell className="text-[13px] text-foreground font-bold pl-6">After Discount Total Due</TableCell>
-                            <TableCell className="text-[11.5px] text-muted-foreground">Total Due - Return Discount</TableCell>
-                            <TableCell className="text-right font-bold text-[13px] pr-6">
-                              ₹{afterDiscountTotalDueVal.toLocaleString("en-IN")}
-                            </TableCell>
-                          </TableRow>
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
+                        <FieldLabel>Outstanding Rent Due</FieldLabel>
+                        <div className="relative mt-0.5">
+                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <Input
+                            placeholder="0.00"
+                            className={`h-7 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
+                            value={pendingBalance}
+                            onChange={(e) => setPendingBalance(e.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                          <TableRow className="hover:bg-muted/5 transition-colors">
-                            <TableCell className="font-semibold text-[13px] text-foreground pl-6">Security Deposit Offset</TableCell>
-                            <TableCell className="text-[11.5px] text-muted-foreground">Total security deposit paid under agreement</TableCell>
-                            <TableCell className="text-right font-bold text-blue-600 text-[13px] pr-6">
-                              ₹{totalDepositVal.toLocaleString("en-IN")}
-                            </TableCell>
-                          </TableRow>
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
+                        <FieldLabel>Damage Charges</FieldLabel>
+                        <div className="relative mt-0.5">
+                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <Input
+                            placeholder="0.00"
+                            className="h-7 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
+                            value={damageCharges}
+                            onChange={(e) => setDamageCharges(e.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                          <TableRow className={`font-black text-[13.5px] ${netRefund >= 0 ? "bg-emerald-50/20 text-emerald-700" : "bg-rose-50/20 text-rose-700"}`}>
-                            <TableCell className="py-3.5 pl-6 font-bold">Final Settlement</TableCell>
-                            <TableCell className="text-[11.5px] font-medium">
-                              {netRefund >= 0 
-                                ? "Security Deposit Offset - After Discount Total Due (Refundable to Customer)" 
-                                : "After Discount Total Due - Security Deposit Offset (Collect from Customer)"
-                              }
-                            </TableCell>
-                            <TableCell className="text-right py-3.5 pr-6">
-                              {netRefund >= 0 
-                                ? `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Refundable)` 
-                                : `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Collect Dues)`
-                              }
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </div>
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
+                        <FieldLabel>Return Discount</FieldLabel>
+                        <div className="relative mt-0.5">
+                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <Input
+                            placeholder="0.00"
+                            className="h-7 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
+                            value={discount}
+                            onChange={(e) => setDiscount(e.target.value)}
+                          />
+                        </div>
+                      </div>
 
-                    {/* Due Amount Payment Settlement Option */}
-                    {netRefund < 0 && (() => {
-                      const totalDueAmt = Math.abs(netRefund);
-                      const currentPaidVal = duePaymentStatus === "Paid" 
-                        ? totalDueAmt 
-                        : duePaymentStatus === "Partial" 
-                        ? Math.min(totalDueAmt, Math.max(0, cleanNum(duePaidAmount))) 
-                        : 0;
-                      const remainingDueVal = Math.max(0, totalDueAmt - currentPaidVal);
-
-                      return (
-                        <div className="m-4 rounded-xl border border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/20 p-4 space-y-4">
-                          <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
-                            <div className="flex items-center gap-2">
-                              <CreditCard className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                              <span className="text-[12.5px] font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide">
-                                Due Amount Payment Settlement (Total Collectible: ₹{totalDueAmt.toLocaleString("en-IN")})
-                              </span>
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between min-h-[52px]">
+                        <FieldLabel>Unpaid Accessories</FieldLabel>
+                        <div className="text-[10px] font-semibold text-foreground leading-tight">
+                          {unpaidItems.length > 0 ? (
+                            <div className="max-h-[30px] overflow-y-auto space-y-0.5">
+                              {unpaidItems.map((item: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-rose-600 text-[9px]">
+                                  <span className="truncate max-w-[70px]">{item.name}</span>
+                                  <span>₹{cleanNum(item.amount)}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex items-center gap-2">
-                              {duePaymentStatus === "Partial" && (
-                                <span className="text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2.5 py-0.5 rounded-full">
-                                  Pending Due: ₹{remainingDueVal.toLocaleString("en-IN")}
-                                </span>
+                          ) : (
+                            <span className="text-muted-foreground">₹0</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between">
+                        <FieldLabel>Security Deposit</FieldLabel>
+                        <div className="text-[12px] font-bold text-blue-600 h-7 flex items-center">
+                          ₹{deposit.toLocaleString("en-IN")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reconciliation Ledger Details */}
+                  {(() => {
+                    const dmgCharges = dmg;
+                    const unpaidAccessoriesTotal = unpaidAccessoryTotal;
+                    const totalDueVal = totalDueBeforeDiscount;
+                    const returnDiscountVal = effectiveDiscount;
+                    const afterDiscountTotalDueVal = afterDiscountTotalDue;
+                    const totalDepositVal = deposit;
+
+                    return (
+                      <div className="rounded-xl border border-border/60 bg-muted/5 overflow-hidden">
+                        <div className="flex items-center gap-2.5 px-3.5 py-2 border-b border-border/60 bg-muted/20">
+                          <Receipt className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">
+                            Reconciliation Ledger Details
+                          </span>
+                        </div>
+                        
+                        <div className="p-0">
+                          <Table>
+                            <TableHeader className="bg-muted/10">
+                              <TableRow className="h-8">
+                                <TableHead className="font-bold text-[10px] text-muted-foreground uppercase pl-4 py-1">Ledger Line Item</TableHead>
+                                <TableHead className="font-bold text-[10px] text-muted-foreground uppercase py-1">Calculation Details</TableHead>
+                                <TableHead className="text-right font-bold text-[10px] text-muted-foreground uppercase pr-4 py-1">Amount (₹)</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              <TableRow className="hover:bg-muted/5 transition-colors h-8">
+                                <TableCell className="font-semibold text-[11.5px] text-foreground pl-4 py-1">Total Due</TableCell>
+                                <TableCell className="text-[10.5px] text-muted-foreground py-1">
+                                  Remaining Rent Dues (₹{remainingRentDues.toLocaleString("en-IN")}) 
+                                  {dmgCharges > 0 && ` + Damage (₹${dmgCharges})`}
+                                  {unpaidAccessoriesTotal > 0 && ` + Accessories (₹${unpaidAccessoriesTotal})`}
+                                </TableCell>
+                                <TableCell className="text-right font-bold text-[11.5px] pr-4 py-1">
+                                  ₹{totalDueVal.toLocaleString("en-IN")}
+                                </TableCell>
+                              </TableRow>
+
+                              {rentOverpaid > 0 && (
+                                <TableRow className="hover:bg-muted/5 transition-colors bg-blue-50/10 h-8">
+                                  <TableCell className="font-semibold text-[11.5px] text-blue-700 pl-4 py-1">Advance Credit</TableCell>
+                                  <TableCell className="text-[10.5px] text-blue-600 py-1">Customer paid ₹{rentOverpaid} extra</TableCell>
+                                  <TableCell className="text-right font-bold text-blue-600 text-[11.5px] pr-4 py-1">
+                                    + ₹{rentOverpaid.toLocaleString("en-IN")}
+                                  </TableCell>
+                                </TableRow>
                               )}
-                              <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-2.5 py-0.5 rounded-full">
-                                Settlement Options
-                              </span>
+
+                              <TableRow className="hover:bg-muted/5 transition-colors h-8">
+                                <TableCell className="font-semibold text-[11.5px] text-foreground pl-4 py-1">Return Discount</TableCell>
+                                <TableCell className="text-[10.5px] text-muted-foreground py-1">Discount applied on return</TableCell>
+                                <TableCell className="text-right font-bold text-emerald-600 text-[11.5px] pr-4 py-1">
+                                  - ₹{returnDiscountVal.toLocaleString("en-IN")}
+                                </TableCell>
+                              </TableRow>
+
+                              <TableRow className="hover:bg-muted/5 transition-colors bg-muted/5 font-semibold h-8">
+                                <TableCell className="text-[11.5px] text-foreground font-bold pl-4 py-1">After Discount Due</TableCell>
+                                <TableCell className="text-[10.5px] text-muted-foreground py-1">Total Due - Return Discount</TableCell>
+                                <TableCell className="text-right font-bold text-[11.5px] pr-4 py-1">
+                                  ₹{afterDiscountTotalDueVal.toLocaleString("en-IN")}
+                                </TableCell>
+                              </TableRow>
+
+                              <TableRow className="hover:bg-muted/5 transition-colors h-8">
+                                <TableCell className="font-semibold text-[11.5px] text-foreground pl-4 py-1">Deposit Offset</TableCell>
+                                <TableCell className="text-[10.5px] text-muted-foreground py-1">Security deposit paid</TableCell>
+                                <TableCell className="text-right font-bold text-blue-600 text-[11.5px] pr-4 py-1">
+                                  ₹{totalDepositVal.toLocaleString("en-IN")}
+                                </TableCell>
+                              </TableRow>
+
+                              <TableRow className={`font-black text-[12px] h-9 ${netRefund >= 0 ? "bg-emerald-50/20 text-emerald-700 border-t border-emerald-500/20" : "bg-rose-50/20 text-rose-700 border-t border-rose-500/20"}`}>
+                                <TableCell className="py-2 pl-4 font-bold">Final Settlement</TableCell>
+                                <TableCell className="text-[10.5px] font-medium py-2">
+                                  {netRefund >= 0 ? "Refundable to Customer" : "Collect from Customer"}
+                                </TableCell>
+                                <TableCell className="text-right py-2 pr-4 font-extrabold">
+                                  {netRefund >= 0 
+                                    ? `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Refund)` 
+                                    : `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Collect)`
+                                  }
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Right Column: Payments Ledger, Due Payment Settlement, Remarks, WhatsApp (col-span-5) */}
+                <div className="lg:col-span-5 space-y-4 font-semibold">
+                  {/* Payment Ledger card (compact scrollable) */}
+                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
+                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
+                      <Receipt className="h-3.5 w-3.5 text-primary" />
+                      <div>
+                        <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
+                      {agreementPayments.length === 0 ? (
+                        <div className="py-6 text-center text-muted-foreground px-4">
+                          <p className="font-bold text-foreground/75">No payments found</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/40">
+                          {agreementPayments.map((p) => {
+                            const isDeposit = p.type?.toLowerCase().includes("deposit");
+                            return (
+                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
+                                      isDeposit 
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200" 
+                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    }`}>
+                                      {p.type || "Rent"}
+                                    </span>
+                                    <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
+                                    <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
+                                </div>
+                                <span className="font-bold text-foreground text-[11.5px]">
+                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* Due Amount Payment Settlement Option */}
+                  {netRefund < 0 && (() => {
+                    const totalDueAmt = Math.abs(netRefund);
+                    const currentPaidVal = duePaymentStatus === "Paid" 
+                      ? totalDueAmt 
+                      : duePaymentStatus === "Partial" 
+                      ? Math.min(totalDueAmt, Math.max(0, cleanNum(duePaidAmount))) 
+                      : 0;
+                    const remainingDueVal = Math.max(0, totalDueAmt - currentPaidVal);
+
+                    return (
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-50/10 dark:bg-amber-950/10 p-3 space-y-2.5">
+                        <div className="flex items-center justify-between flex-wrap gap-1.5 border-b border-amber-500/20 pb-1.5">
+                          <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1">
+                            <CreditCard className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                            Settlement (Collectible: ₹{totalDueAmt.toLocaleString("en-IN")})
+                          </span>
+                          {duePaymentStatus === "Partial" && (
+                            <span className="text-[9.5px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                              Pending: ₹{remainingDueVal}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="space-y-1">
+                            <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Due Payment Status</Label>
+                            <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-lg border border-border h-8">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDuePaymentStatus("Paid");
+                                  setDuePaidAmount(totalDueAmt.toString());
+                                  setDueCashAmount(Math.round(totalDueAmt / 2).toString());
+                                  setDueBankAmount((totalDueAmt - Math.round(totalDueAmt / 2)).toString());
+                                }}
+                                className={`flex items-center justify-center rounded text-[10px] font-bold transition-all ${
+                                  duePaymentStatus === "Paid" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                Full Paid
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDuePaymentStatus("Partial");
+                                  const defaultPartial = Math.round(totalDueAmt / 2);
+                                  setDuePaidAmount(defaultPartial.toString());
+                                  setDueCashAmount(Math.round(defaultPartial / 2).toString());
+                                  setDueBankAmount((defaultPartial - Math.round(defaultPartial / 2)).toString());
+                                }}
+                                className={`flex items-center justify-center rounded text-[10px] font-bold transition-all ${
+                                  duePaymentStatus === "Partial" ? "bg-amber-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                Partial
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setDuePaymentStatus("Not Paid")}
+                                className={`flex items-center justify-center rounded text-[10px] font-bold transition-all ${
+                                  duePaymentStatus === "Not Paid" ? "bg-rose-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                Not Paid
+                              </button>
                             </div>
                           </div>
 
-                          <div className="space-y-4">
-                            {/* Status Buttons: Full Payment / Partial Payment / Not Paid */}
-                            <div className="space-y-1.5">
-                              <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Due Payment Status</Label>
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 bg-background p-1.5 rounded-lg border border-border h-auto sm:h-11">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDuePaymentStatus("Paid");
-                                    setDuePaidAmount(totalDueAmt.toString());
-                                    setDueCashAmount(Math.round(totalDueAmt / 2).toString());
-                                    setDueBankAmount((totalDueAmt - Math.round(totalDueAmt / 2)).toString());
-                                  }}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
-                                    duePaymentStatus === "Paid"
-                                      ? "bg-emerald-600 text-white shadow-xs"
-                                      : "text-muted-foreground hover:text-foreground"
-                                  }`}
-                                >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  <span>Full Payment</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setDuePaymentStatus("Partial");
-                                    const defaultPartial = Math.round(totalDueAmt / 2);
-                                    setDuePaidAmount(defaultPartial.toString());
-                                    setDueCashAmount(Math.round(defaultPartial / 2).toString());
-                                    setDueBankAmount((defaultPartial - Math.round(defaultPartial / 2)).toString());
-                                  }}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
-                                    duePaymentStatus === "Partial"
-                                      ? "bg-amber-600 text-white shadow-xs"
-                                      : "text-muted-foreground hover:text-foreground"
-                                  }`}
-                                >
-                                  <Clock className="h-3.5 w-3.5" />
-                                  <span>Partial Payment</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => setDuePaymentStatus("Not Paid")}
-                                  className={`flex items-center justify-center gap-1.5 rounded-md py-2 sm:py-0 text-[12px] font-bold transition-all ${
-                                    duePaymentStatus === "Not Paid"
-                                      ? "bg-rose-600 text-white shadow-xs"
-                                      : "text-muted-foreground hover:text-foreground"
-                                  }`}
-                                >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  <span>Not Paid (Due)</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Sub-controls when Paid or Partial */}
-                            {duePaymentStatus !== "Not Paid" ? (
-                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-end">
-                                {/* Option 2: Payment Mode */}
-                                <div className="space-y-1.5">
-                                  <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+                          {duePaymentStatus !== "Not Paid" ? (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                  <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Mode</Label>
                                   <Select 
                                     value={duePaymentMode} 
                                     onValueChange={(mode) => {
@@ -2155,9 +2070,7 @@ function ReturnsPage() {
                                       }
                                     }}
                                   >
-                                    <SelectTrigger className="h-10 text-[13px] bg-background font-medium">
-                                      <SelectValue placeholder="Select mode" />
-                                    </SelectTrigger>
+                                    <SelectTrigger className="h-8 text-[11px] bg-background font-medium"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="Cash">Cash</SelectItem>
                                       <SelectItem value="Bank">Bank</SelectItem>
@@ -2166,16 +2079,13 @@ function ReturnsPage() {
                                   </Select>
                                 </div>
 
-                                {/* Partial Amount Input */}
                                 {duePaymentStatus === "Partial" && (
-                                  <div className="space-y-1.5">
-                                    <Label className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                                      Payment Amount Received (₹)
-                                    </Label>
+                                  <div className="space-y-1">
+                                    <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-amber-700">Amount (₹)</Label>
                                     <Input
                                       type="number"
                                       placeholder={`Max ₹${totalDueAmt}`}
-                                      className="h-10 text-[13px] font-bold bg-background text-foreground border-amber-300 dark:border-amber-700"
+                                      className="h-8 text-[11px] font-bold bg-background"
                                       value={duePaidAmount}
                                       onChange={(e) => {
                                         const val = e.target.value;
@@ -2190,241 +2100,202 @@ function ReturnsPage() {
                                     />
                                   </div>
                                 )}
+                              </div>
 
-                                {/* Transaction Reference Number (Optional for Bank) */}
-                                <div className="space-y-1.5">
-                                  <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                                    Txn / Ref No. (Optional)
-                                  </Label>
-                                  <Input
-                                    placeholder="e.g. UPI Ref / Bank Txn ID"
-                                    className="h-10 text-[13px] bg-background"
-                                    value={dueTxRef}
-                                    onChange={(e) => setDueTxRef(e.target.value)}
-                                  />
-                                </div>
+                              <div className="space-y-1">
+                                <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Txn / Ref No. (Optional)</Label>
+                                <Input
+                                  placeholder="e.g. UPI Ref / Bank Txn ID"
+                                  className="h-8 text-[11px] bg-background"
+                                  value={dueTxRef}
+                                  onChange={(e) => setDueTxRef(e.target.value)}
+                                />
+                              </div>
 
-                                {/* Split Cash + Bank Inputs */}
-                                {duePaymentMode === "Cash+Bank" && (
-                                  <div className="sm:col-span-2 lg:col-span-3 grid grid-cols-2 gap-3 p-3 bg-background rounded-lg border border-border mt-1">
-                                    <div className="space-y-1.5">
-                                      <Label className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                                        Cash Amount (₹)
-                                      </Label>
-                                      <Input
-                                        type="number"
-                                        placeholder="Cash part"
-                                        className="h-9 text-[13px] font-semibold bg-emerald-50/20 border-emerald-300 dark:border-emerald-800"
-                                        value={dueCashAmount}
-                                        onChange={(e) => {
-                                          const cVal = e.target.value;
-                                          setDueCashAmount(cVal);
-                                          const cNum = Math.max(0, cleanNum(cVal));
-                                          setDueBankAmount(Math.max(0, currentPaidVal - cNum).toString());
-                                        }}
-                                      />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                      <Label className="text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">
-                                        Bank Amount (₹)
-                                      </Label>
-                                      <Input
-                                        type="number"
-                                        placeholder="Bank part"
-                                        className="h-9 text-[13px] font-semibold bg-blue-50/20 border-blue-300 dark:border-blue-800"
-                                        value={dueBankAmount}
-                                        onChange={(e) => {
-                                          const bVal = e.target.value;
-                                          setDueBankAmount(bVal);
-                                          const bNum = Math.max(0, cleanNum(bVal));
-                                          setDueCashAmount(Math.max(0, currentPaidVal - bNum).toString());
-                                        }}
-                                      />
-                                    </div>
+                              {duePaymentMode === "Cash+Bank" && (
+                                <div className="grid grid-cols-2 gap-2 p-1.5 bg-background rounded-lg border border-border">
+                                  <div className="space-y-0.5">
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-emerald-700">Cash Amount</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-7 text-[11px] bg-emerald-50/20 border-emerald-200"
+                                      value={dueCashAmount}
+                                      onChange={(e) => {
+                                        const cVal = e.target.value;
+                                        setDueCashAmount(cVal);
+                                        const cNum = Math.max(0, cleanNum(cVal));
+                                        setDueBankAmount(Math.max(0, currentPaidVal - cNum).toString());
+                                      }}
+                                    />
                                   </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="p-3 rounded-lg bg-rose-100/60 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-[11.5px] flex items-center gap-2">
-                                <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                                <span>
-                                  Full due amount of <strong>₹{totalDueAmt.toLocaleString("en-IN")}</strong> will be recorded as an <strong>Unpaid Pending Due</strong> in Rent Dues & Payments Ledger.
-                                </span>
-                              </div>
-                            )}
-
-                            {/* Summary Card for Partial Payment */}
-                            {duePaymentStatus === "Partial" && (
-                              <div className="p-3 rounded-lg bg-amber-100/40 dark:bg-amber-900/20 border border-amber-300/60 dark:border-amber-800/60 flex items-center justify-between text-[12px] flex-wrap gap-2">
-                                <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
-                                  <span>Total Dues: <strong>₹{totalDueAmt.toLocaleString("en-IN")}</strong></span>
-                                  <span>·</span>
-                                  <span className="text-emerald-700 dark:text-emerald-400">Received Now: <strong>₹{currentPaidVal.toLocaleString("en-IN")}</strong></span>
+                                  <div className="space-y-0.5">
+                                    <Label className="text-[9px] font-bold uppercase tracking-wider text-blue-700">Bank Amount</Label>
+                                    <Input
+                                      type="number"
+                                      className="h-7 text-[11px] bg-blue-50/20 border-blue-200"
+                                      value={dueBankAmount}
+                                      onChange={(e) => {
+                                        const bVal = e.target.value;
+                                        setDueBankAmount(bVal);
+                                        const bNum = Math.max(0, cleanNum(bVal));
+                                        setDueCashAmount(Math.max(0, currentPaidVal - bNum).toString());
+                                      }}
+                                    />
+                                  </div>
                                 </div>
-                                <span className="font-bold text-rose-700 dark:text-rose-300 bg-background px-2.5 py-1 rounded border border-rose-200 dark:border-rose-900">
-                                  Remaining Pending Due: ₹{remainingDueVal.toLocaleString("en-IN")}
-                                </span>
-                              </div>
-                            )}
-                          </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[10.5px]">
+                              Collectible dues of <strong>₹{totalDueAmt.toLocaleString("en-IN")}</strong> will be recorded as <strong>Unpaid Pending Due</strong>.
+                            </div>
+                          )}
                         </div>
-                      );
-                    })()}
-                  </div>
-                );
-              })()
-            ) : (
-              <div className="rounded-xl border border-dashed border-border/80 p-8 text-center text-muted-foreground text-[12.5px] flex-1 flex flex-col items-center justify-center bg-muted/5 min-h-[160px]">
-                <Package className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                <p className="font-semibold text-foreground/75">No agreement selected</p>
-                <p className="text-muted-foreground text-[11px] mt-0.5">Select a rental agreement above to generate calculations & pro-rata details.</p>
-              </div>
-            )}
+                      </div>
+                    );
+                  })()}
 
-            {/* Return Collected By & Inspection Notes */}
-            <div className="grid gap-5 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <FieldLabel>Return Collected By</FieldLabel>
-                <div className="relative">
-                  <Input
-                    placeholder="Enter collector's name"
-                    className="h-10 text-[13px] pl-9"
-                    value={collectedBy}
-                    onChange={(e) => setCollectedBy(e.target.value)}
-                  />
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/60" />
+                  {/* Remarks & Collector */}
+                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
+                      <div className="relative">
+                        <Input
+                          placeholder="Collector name"
+                          className="h-8 text-[11.5px] pl-7"
+                          value={collectedBy}
+                          onChange={(e) => setCollectedBy(e.target.value)}
+                        />
+                        <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
+                      <Input
+                        placeholder="Condition, accessories, etc."
+                        className="h-8 text-[11.5px]"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* WhatsApp Preview Box */}
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/10 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-emerald-500/20 pb-1.5">
+                      <span className="text-[10px] font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1">
+                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                        WhatsApp Message
+                      </span>
+                      <div className="flex gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const msg = generateWhatsAppPickupMessage({
+                              customerName: selectedRental.customer,
+                              rentDate: selectedRental.start,
+                              phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
+                              altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
+                              equipment: returnedNames || selectedRental.equipment,
+                              serial: selectedRental.serial,
+                              model: selectedRental.model,
+                              area: selectedCustomer?.area || (selectedRental as any)?.area,
+                              address: selectedCustomer?.address || (selectedRental as any)?.address,
+                              locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
+                              latitude: (selectedRental as any)?.latitude,
+                              longitude: (selectedRental as any)?.longitude,
+                              collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
+                              refundAmount: netRefund > 0 ? netRefund : 0,
+                              rental: selectedRental,
+                              customer: selectedCustomer,
+                              equipmentIds: selectedEquipmentIds,
+                            });
+                            navigator.clipboard.writeText(msg);
+                            toast.success("WhatsApp message copied!");
+                          }}
+                          className="h-6 px-2 text-[9.5px] font-bold gap-1 border-emerald-300"
+                        >
+                          <Copy className="h-2.5 w-2.5 text-primary" /> Copy
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            const msg = generateWhatsAppPickupMessage({
+                              customerName: selectedRental.customer,
+                              rentDate: selectedRental.start,
+                              phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
+                              altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
+                              equipment: returnedNames || selectedRental.equipment,
+                              serial: selectedRental.serial,
+                              model: selectedRental.model,
+                              area: selectedCustomer?.area || (selectedRental as any)?.area,
+                              address: selectedCustomer?.address || (selectedRental as any)?.address,
+                              locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
+                              latitude: (selectedRental as any)?.latitude,
+                              longitude: (selectedRental as any)?.longitude,
+                              collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
+                              refundAmount: netRefund > 0 ? netRefund : 0,
+                              rental: selectedRental,
+                              customer: selectedCustomer,
+                              equipmentIds: selectedEquipmentIds,
+                            });
+                            const cleanPhone = (selectedCustomer?.phone || (selectedRental as any)?.phone || "").replace(/\D/g, "");
+                            const text = encodeURIComponent(msg);
+                            const targetUrl = cleanPhone ? `https://wa.me/91${cleanPhone}?text=${text}` : `https://wa.me/?text=${text}`;
+                            window.open(targetUrl, "_blank");
+                          }}
+                          className="h-6 px-2 text-[9.5px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                        >
+                          <MessageCircle className="h-2.5 w-2.5" /> Send
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Textarea
+                      readOnly
+                      rows={3}
+                      value={generateWhatsAppPickupMessage({
+                        customerName: selectedRental.customer,
+                        rentDate: selectedRental.start,
+                        phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
+                        altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
+                        equipment: returnedNames || selectedRental.equipment,
+                        serial: selectedRental.serial,
+                        model: selectedRental.model,
+                        area: selectedCustomer?.area || (selectedRental as any)?.area,
+                        address: selectedCustomer?.address || (selectedRental as any)?.address,
+                        locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
+                        latitude: (selectedRental as any)?.latitude,
+                        longitude: (selectedRental as any)?.longitude,
+                        collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
+                        refundAmount: netRefund > 0 ? netRefund : 0,
+                        rental: selectedRental,
+                        customer: selectedCustomer,
+                        equipmentIds: selectedEquipmentIds,
+                      })}
+                      className="font-mono text-[11px] bg-background border-emerald-200 leading-normal p-2 resize-none"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="sm:col-span-2 space-y-1.5">
-                <FieldLabel>Audit & Inspection Remarks</FieldLabel>
-                <Textarea
-                  placeholder="Describe condition details, listing of accessories returned, audit adjustments details..."
-                  className="min-h-[75px] resize-none text-[13px] focus-visible:ring-primary/20"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Auto-Generated WhatsApp Pickup Message Box */}
-            {selectedRental && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/20 p-4 space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-emerald-500/20 pb-2">
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span className="text-[12.5px] font-bold text-emerald-900 dark:text-emerald-200 uppercase tracking-wide">
-                      WhatsApp Pickup / Collection Message Preview
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const msg = generateWhatsAppPickupMessage({
-                          customerName: selectedRental.customer,
-                          rentDate: selectedRental.start,
-                          phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
-                          altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
-                          equipment: returnedNames || selectedRental.equipment,
-                          serial: selectedRental.serial,
-                          model: selectedRental.model,
-                          area: selectedCustomer?.area || (selectedRental as any)?.area,
-                          address: selectedCustomer?.address || (selectedRental as any)?.address,
-                          locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
-                          latitude: (selectedRental as any)?.latitude,
-                          longitude: (selectedRental as any)?.longitude,
-                          collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
-                          refundAmount: netRefund > 0 ? netRefund : 0,
-                          rental: selectedRental,
-                          customer: selectedCustomer,
-                          equipmentIds: selectedEquipmentIds,   // ITEM-5
-                        });
-                        navigator.clipboard.writeText(msg);
-                        toast.success("WhatsApp pickup message copied to clipboard!");
-                      }}
-                      className="h-7 px-2.5 text-[11.5px] font-bold gap-1.5 border-emerald-300"
-                    >
-                      <Copy className="h-3.5 w-3.5 text-primary" /> Copy Message
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        const msg = generateWhatsAppPickupMessage({
-                          customerName: selectedRental.customer,
-                          rentDate: selectedRental.start,
-                          phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
-                          altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
-                          equipment: returnedNames || selectedRental.equipment,
-                          serial: selectedRental.serial,
-                          model: selectedRental.model,
-                          area: selectedCustomer?.area || (selectedRental as any)?.area,
-                          address: selectedCustomer?.address || (selectedRental as any)?.address,
-                          locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
-                          latitude: (selectedRental as any)?.latitude,
-                          longitude: (selectedRental as any)?.longitude,
-                          collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
-                          refundAmount: netRefund > 0 ? netRefund : 0,
-                          rental: selectedRental,
-                          customer: selectedCustomer,
-                          equipmentIds: selectedEquipmentIds,   // ITEM-5
-                        });
-                        const cleanPhone = (selectedCustomer?.phone || (selectedRental as any)?.phone || "").replace(/\D/g, "");
-                        const text = encodeURIComponent(msg);
-                        const targetUrl = cleanPhone 
-                          ? `https://wa.me/91${cleanPhone}?text=${text}` 
-                          : `https://wa.me/?text=${text}`;
-                        window.open(targetUrl, "_blank");
-                      }}
-                      className="h-7 px-2.5 text-[11.5px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" /> Send to WhatsApp
-                    </Button>
-                  </div>
-                </div>
-
-                <Textarea
-                  readOnly
-                  rows={6}
-                  value={generateWhatsAppPickupMessage({
-                    customerName: selectedRental.customer,
-                    rentDate: selectedRental.start,
-                    phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
-                    altPhone: selectedCustomer?.altPhone || (selectedRental as any)?.altPhone,
-                    equipment: returnedNames || selectedRental.equipment,
-                    serial: selectedRental.serial,
-                    model: selectedRental.model,
-                    area: selectedCustomer?.area || (selectedRental as any)?.area,
-                    address: selectedCustomer?.address || (selectedRental as any)?.address,
-                    locationAddress: (selectedRental as any)?.locationAddress || (selectedCustomer as any)?.locationAddress,
-                    latitude: (selectedRental as any)?.latitude,
-                    longitude: (selectedRental as any)?.longitude,
-                    collectAmount: netRefund < 0 ? Math.abs(netRefund) : 0,
-                    refundAmount: netRefund > 0 ? netRefund : 0,
-                    rental: selectedRental,
-                    customer: selectedCustomer,
-                    equipmentIds: selectedEquipmentIds,   // ITEM-5
-                  })}
-                  className="font-mono text-[12.5px] bg-background border-emerald-300 dark:border-emerald-800 leading-relaxed font-semibold cursor-text text-foreground"
-                />
               </div>
             )}
 
             {/* Footer buttons row */}
-            <div className="flex items-center justify-between border-t border-border/50 pt-5">
-              <p className="text-[11.5px] text-muted-foreground flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            <div className="flex items-center justify-between border-t border-border/50 pt-4 shrink-0">
+              <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
                 <span>Processing automatically sets returning serials to Available / Maintenance.</span>
               </p>
-              <div className="flex gap-2.5">
-                <Button variant="outline" type="button" onClick={handleGenerateReceipt} disabled={!selectedAgreement}>
-                  <Receipt className="mr-1.5 h-4 w-4 text-muted-foreground" />
+              <div className="flex gap-2">
+                <Button variant="outline" type="button" size="sm" onClick={handleGenerateReceipt} disabled={!selectedAgreement} className="h-8.5 text-[11px] font-bold">
+                  <Receipt className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
                   Print Receipt
                 </Button>
-                <Button type="button" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting}>
-                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                <Button type="button" size="sm" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting} className="h-8.5 text-[11px] font-bold">
+                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
                   {isSubmitting ? "Processing..." : "Process Return"}
                 </Button>
               </div>
@@ -2889,4 +2760,3 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
     </Label>
   );
 }
-

@@ -218,28 +218,249 @@ function toCSV(rows: unknown[]): string {
  * tables in one .csv, so each entity is written as its own labelled block
  * separated by a blank line — readable in Excel and greppable by hand.
  */
-export function downloadBackupCSV(): BackupSnapshot {
-  const snapshot = createBackupSnapshot();
-  const sections: string[] = [];
+function escapeXml(str: unknown): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
 
-  for (const key of BACKUP_KEYS) {
-    const value = snapshot.data[key];
-    if (!Array.isArray(value) || value.length === 0) continue;
-    const label = key.replace("medirent-", "").toUpperCase();
-    sections.push(`### ${label} (${value.length} rows)\n${toCSV(value)}`);
+function buildDocLink(doc: any, cust: any): string {
+  if (!doc) return "N/A";
+  if (doc.url && (doc.url.startsWith("http://") || doc.url.startsWith("https://"))) {
+    return `<a href="${escapeXml(doc.url)}" target="_blank">Open Document Link</a>`;
   }
+  if (doc.fileData && (doc.fileData.startsWith("http://") || doc.fileData.startsWith("https://"))) {
+    return `<a href="${escapeXml(doc.fileData)}" target="_blank">Open Document Link</a>`;
+  }
+  if (doc.type === "Location Tag") {
+    let locText = doc.fileData || "";
+    if (locText.startsWith("data:text/plain")) {
+      try {
+        const parts = locText.split(",");
+        if (parts[0].includes("base64")) {
+          locText = atob(parts[1]);
+        } else {
+          locText = decodeURIComponent(parts[1]);
+        }
+      } catch {}
+    }
+    const latMatch = locText.match(/Latitude:\s*(-?\d+\.\d+)/i) || locText.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+    const lngMatch = locText.match(/Longitude:\s*(-?\d+\.\d+)/i);
+    let mapUrl = "";
+    if (latMatch && lngMatch) {
+      mapUrl = `https://www.google.com/maps/dir/?api=1&destination=${latMatch[1]},${lngMatch[1]}`;
+    } else if (latMatch && latMatch[2]) {
+      mapUrl = `https://www.google.com/maps/dir/?api=1&destination=${latMatch[1]},${latMatch[2]}`;
+    } else {
+      const addrMatch = locText.match(/Address:\s*(.+)/i);
+      const cleanAddr = addrMatch ? addrMatch[1].trim() : (cust?.address || "");
+      if (cleanAddr) {
+        mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddr)}`;
+      }
+    }
+    if (mapUrl) {
+      return `<a href="${escapeXml(mapUrl)}" target="_blank">Google Maps Direction</a>`;
+    }
+  }
+  if (doc.fileData && doc.fileData.startsWith("data:")) {
+    return `Stored in ERP DB (${doc.size || 'Image/PDF Data'})`;
+  }
+  return `Stored in ERP Database (ID: ${doc.id || 'Doc'})`;
+}
 
-  const content =
-    `# Relife ERP backup — ${snapshot.createdAt}\n\n` +
-    (sections.length > 0 ? sections.join("\n\n") : "# No data to export");
+export interface ExcelSheetDefinition {
+  name: string;
+  headers: string[];
+  rows: (string | number)[][];
+  colWidths?: number[];
+}
 
-  triggerDownload(
-    `relife-erp-backup-${snapshot.createdDate}.csv`,
-    content,
-    "text/csv;charset=utf-8",
-  );
+export function generateMultiSheetExcel(filename: string, sheets: ExcelSheetDefinition[]) {
+  if (!isBrowser()) return;
+  const xlsName = filename.endsWith(".xls") ? filename : `${filename.replace(/\.[^/.]+$/, "")}.xls`;
+  let worksheetXml = "";
+  let tablesHtml = "";
+
+  sheets.forEach((sheet) => {
+    const cleanSheetName = sheet.name.replace(/[:\\/?*\[\]]/g, "").slice(0, 31);
+    worksheetXml += `
+    <x:ExcelWorksheet>
+      <x:Name>${escapeXml(cleanSheetName)}</x:Name>
+      <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+    </x:ExcelWorksheet>`;
+
+    tablesHtml += `\n  <table id="${escapeXml(cleanSheetName)}">\n    <thead>\n      <tr>`;
+    sheet.headers.forEach((h, i) => {
+      const widthStyle = sheet.colWidths && sheet.colWidths[i] ? ` style="width: ${Number(sheet.colWidths[i])}px;"` : "";
+      tablesHtml += `\n        <th${widthStyle}>${escapeXml(h)}</th>`;
+    });
+    tablesHtml += `\n      </tr>\n    </thead>\n    <tbody>`;
+
+    sheet.rows.forEach((row) => {
+      tablesHtml += `\n      <tr>`;
+      row.forEach((rawCell) => {
+        const cell = rawCell === null || rawCell === undefined ? "" : String(rawCell);
+        const isHtml = cell.includes("<a ") && cell.includes("</a>");
+        const isNumStr = !isHtml && (/^\+?\d{8,}$/.test(cell.trim()) || /^[A-Z0-9]{3,}-[A-Z0-9-]+$/i.test(cell.trim()));
+        const fmtAttr = isNumStr ? ' class="text-fmt"' : "";
+        tablesHtml += `\n        <td${fmtAttr}>${isHtml ? cell : escapeXml(cell)}</td>`;
+      });
+      tablesHtml += `\n      </tr>`;
+    });
+    tablesHtml += `\n    </tbody>\n  </table>\n<br/>`;
+  });
+
+  const content = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<!--[if gte mso 9]>
+<xml>
+ <x:ExcelWorkbook>
+  <x:ExcelWorksheets>${worksheetXml}
+  </x:ExcelWorksheets>
+ </x:ExcelWorkbook>
+</xml>
+<![endif]-->
+<meta charset="UTF-8">
+<style>
+  th { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #1e3a8a; color: #ffffff; border: 0.5pt solid #cbd5e1; text-align: left; padding: 6px; font-size: 10pt; }
+  td { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px; font-size: 9.5pt; color: #334155; }
+  .text-fmt { mso-number-format:"\\@"; }
+  a { color: #2563eb; text-decoration: underline; font-weight: 500; }
+</style>
+</head>
+<body>${tablesHtml}
+</body>
+</html>`;
+
+  triggerDownload(xlsName, content, "application/vnd.ms-excel;charset=utf-8");
+}
+
+export function downloadBackupExcel(): BackupSnapshot {
+  const snapshot = createBackupSnapshot();
+  const customers = (snapshot.data["medirent-customers"] || []) as any[];
+  const equipment = (snapshot.data["medirent-equipment"] || []) as any[];
+  const rentals = (snapshot.data["medirent-rentals"] || []) as any[];
+  const payments = (snapshot.data["medirent-payments"] || []) as any[];
+  const returnsList = (snapshot.data["medirent-returns"] || []) as any[];
+  const owners = (snapshot.data["medirent-owners"] || []) as any[];
+  const documents = (snapshot.data["medirent-documents"] || []) as any[];
+  const exchanges = (snapshot.data["medirent-exchanges"] || []) as any[];
+  const staffUsers = (snapshot.data["medirent-staff-users"] || []) as any[];
+
+  const sheets: ExcelSheetDefinition[] = [
+    {
+      name: "Customers",
+      headers: ["Customer ID", "Full Name", "Primary Phone", "Alt Phone", "Alt Phone 1", "Email", "City", "State", "Pincode", "Address", "Area", "Aadhaar Number", "PAN Number", "Status", "Notes"],
+      colWidths: [100, 180, 140, 140, 140, 180, 110, 100, 90, 250, 130, 140, 130, 90, 200],
+      rows: customers.map((c: any) => [
+        c.id || "", c.name || "", c.phone || "", c.altPhone || "", c.contactNumber3 || "",
+        c.email || "", c.city || "", c.state || "", c.pincode || "", c.address || "",
+        c.area || "", c.aadhaar || "", c.pan || "", c.status || "Active", c.notes || ""
+      ])
+    },
+    {
+      name: "Equipment",
+      headers: ["Equipment ID", "Equipment Name", "Model", "Serial Number", "Owner / Vendor", "Monthly Rent (₹)", "Daily Rent (₹)", "Deposit (₹)", "Status", "Purchase Date", "Purchase Cost (₹)"],
+      colWidths: [110, 180, 150, 140, 150, 120, 120, 120, 100, 110, 120],
+      rows: equipment.map((e: any) => [
+        e.id || "", e.name || e.category || "", e.model || "", e.serial || "", e.ownerName || e.owner || "Own",
+        Number(e.monthlyRent || e.rentRate) || 0, Number(e.dailyRent) || 0, Number(e.deposit) || 0,
+        e.status || "Available", e.purchaseDate || "", Number(e.purchaseCost) || 0
+      ])
+    },
+    {
+      name: "Rental Agreements",
+      headers: ["Agreement ID", "Customer ID", "Customer Name", "Consulting Hospital", "Referred By", "Rent Start Date", "Rent End Date", "Monthly Rent (₹)", "Deposit (₹)", "Equipment Items", "Serials", "Status", "Payment Mode", "Collected By", "Remarks"],
+      colWidths: [130, 110, 180, 160, 150, 110, 110, 120, 120, 220, 160, 110, 110, 130, 200],
+      rows: rentals.map((r: any) => {
+        const items = Array.isArray(r.equipmentItems) && r.equipmentItems.length > 0
+          ? r.equipmentItems.map((it: any) => `${it.name || "Equip"}${it.model ? " (" + it.model + ")" : ""}`).join(", ")
+          : (r.equipment || "");
+        const serials = Array.isArray(r.equipmentItems) && r.equipmentItems.length > 0
+          ? r.equipmentItems.map((it: any) => it.serial || "N/A").join(", ")
+          : (r.serial || "");
+        return [
+          r.id || "", r.customerId || "", r.customer || "", r.consultingHospital || "", r.referredBy || "",
+          r.start || "", r.end || "", Number(r.monthlyRent) || 0, Number(r.deposit) || 0,
+          items, serials, r.status || "Active", r.paymentMode || "Cash", r.paymentCollectedBy || "", r.remarks || r.notes || ""
+        ];
+      })
+    },
+    {
+      name: "Payments",
+      headers: ["Payment ID", "Agreement ID", "Customer Name", "Payment Type", "Amount Paid (₹)", "Discount (₹)", "Payment Mode", "Cash Paid (₹)", "Bank Paid (₹)", "Payment Date", "Collected By", "Status", "Remarks"],
+      colWidths: [110, 130, 180, 120, 120, 110, 110, 110, 110, 110, 130, 90, 180],
+      rows: payments.map((p: any) => [
+        p.id || "", p.agreement || p.rentalId || "", p.customer || p.customerName || "", p.type || "Rent",
+        Number(p.amount) || 0, Number(p.discount) || 0, p.mode || p.paymentMode || "Cash",
+        Number(p.cashPaidAmount) || 0, Number(p.bankUpiPaidAmount) || 0, p.date || p.paymentDate || "",
+        p.collectedBy || p.paymentCollectedBy || "", p.status || "Paid", p.remarks || p.notes || ""
+      ])
+    },
+    {
+      name: "Returns",
+      headers: ["Return ID", "Agreement ID", "Customer Name", "Return Date", "Items Returned", "Damage Charges (₹)", "Return Discount (₹)", "Unpaid Accessories (₹)", "Deposit Refunded (₹)", "Status", "Payment Mode", "Collector Name", "Remarks"],
+      colWidths: [110, 130, 180, 110, 200, 130, 130, 130, 130, 110, 110, 130, 180],
+      rows: returnsList.map((ret: any) => [
+        ret.id || "", ret.agreementId || ret.rentalId || "", ret.customerName || ret.customer || "", ret.returnDate || ret.date || "",
+        Array.isArray(ret.items) ? ret.items.map((i: any) => i.name || i.equipmentId).join(", ") : (ret.equipment || ""),
+        Number(ret.damageCharges) || 0, Number(ret.returnDiscount) || 0, Number(ret.unpaidAccessoriesCost) || 0,
+        Number(ret.refundedDeposit) || 0, ret.settlementStatus || ret.status || "Completed", ret.paymentMode || "Cash",
+        ret.collectorName || "", ret.remarks || ""
+      ])
+    },
+    {
+      name: "Owners",
+      headers: ["Owner ID", "Company / Owner Name", "Contact Person", "Phone Number", "Email", "Address", "GST Number", "Bank Details"],
+      colWidths: [100, 200, 160, 140, 180, 250, 140, 200],
+      rows: owners.map((o: any) => [
+        o.id || "", o.name || "", o.contactPerson || "", o.phone || "", o.email || "",
+        o.address || "", o.gstin || o.gst || "", o.bankDetails || ""
+      ])
+    },
+    {
+      name: "KYC Documents",
+      headers: ["Document ID", "Customer ID", "Customer Name", "Agreement ID", "Document Type", "File Name", "File Size", "Date Tagged / Uploaded", "Document Link / KYC Link"],
+      colWidths: [120, 110, 180, 130, 140, 180, 100, 130, 260],
+      rows: documents.map((d: any) => {
+        const cust = customers.find((c: any) => c.id === d.customerId);
+        return [
+          d.id || "", d.customerId || "", cust?.name || d.customerName || "", d.rentalId || "",
+          d.type || "Document", d.name || "", d.size || "", d.date || "", buildDocLink(d, cust)
+        ];
+      })
+    },
+    {
+      name: "Exchanges",
+      headers: ["Exchange ID", "Agreement ID", "Customer Name", "Original Equipment", "Replacement Equipment", "Exchange Date", "Reason", "Handled By"],
+      colWidths: [110, 130, 180, 180, 180, 110, 200, 130],
+      rows: exchanges.map((ex: any) => [
+        ex.id || "", ex.rentalId || ex.agreementId || "", ex.customerName || ex.customer || "",
+        ex.oldEquipmentName || ex.oldSerial || "", ex.newEquipmentName || ex.newSerial || "",
+        ex.date || "", ex.reason || "", ex.handledBy || ""
+      ])
+    },
+    {
+      name: "Staff Users",
+      headers: ["User ID", "Full Name", "Username / Phone", "Role", "Status", "Created Date"],
+      colWidths: [100, 180, 140, 100, 90, 110],
+      rows: staffUsers.map((s: any) => [
+        s.id || "", s.name || "", s.username || s.phone || "", s.role || "Staff", s.status || "Active", s.createdAt || ""
+      ])
+    }
+  ];
+
+  generateMultiSheetExcel(`relife-erp-backup-${snapshot.createdDate}.xls`, sheets);
   markBackedUpToday();
   return snapshot;
+}
+
+export function downloadBackupCSV(): BackupSnapshot {
+  return downloadBackupExcel();
 }
 
 /** Reads the most recent auto-snapshot held in localStorage, if any. */

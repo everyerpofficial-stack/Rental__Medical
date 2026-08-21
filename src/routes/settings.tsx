@@ -1464,7 +1464,7 @@ function BackupSettingsTab() {
           </div>
           <p className="text-[11.5px] text-muted-foreground">
             The <strong>.JSON</strong> file is the one to keep — it is the only format that can be restored below.
-            The <strong>.CSV</strong> is for reading in Excel and cannot be restored from.
+            The <strong>.XLS Excel Workbook</strong> includes section-wise sheet tabs (Customers, Equipment, Rentals, Payments, Returns, Owners, Documents, etc.) with custom column widths and document links.
           </p>
 
           {history.length > 0 && (

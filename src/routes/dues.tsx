@@ -108,8 +108,21 @@ function PayDialog({
   const [discountType, setDiscountType] = useState<"one-time" | "permanent">("one-time");
   const [discountVal, setDiscountVal] = useState("");
 
-  const payAmount = Number(manualPayAmount) || 0;
+    const payAmount = Number(manualPayAmount) || 0;
   const isMultiItem = selectedEqIds.length > 1;
+
+  const customerInfo = useMemo(() => {
+    const custs = getCustomers();
+    const c = custs.find((c: any) => c.id === rental.customerId || (c.name && rental.customer && c.name.toLowerCase() === rental.customer.toLowerCase()));
+    const p1 = rental.phone || c?.phone || "";
+    const p2 = rental.altPhone || c?.altPhone || "";
+    const p3 = rental.contactNumber3 || c?.contactNumber3 || "";
+    const phones = [p1, p2, p3].filter(Boolean).join(", ");
+    return {
+      id: rental.customerId || c?.id || "",
+      phone: phones || "No phone registered",
+    };
+  }, [rental]);
 
   const selectedItemRate = useMemo(() => {
     if (selectedEqIds.length === 1) {
@@ -577,43 +590,52 @@ function PayDialog({
         <CreditCard className="h-3.5 w-3.5" /> Pay
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 border-border/60 shadow-2xl">
+            <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-3xl p-0 gap-0 border-border/60 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] md:max-h-[90vh]">
           {/* Header Bar */}
-          <div className="p-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
-                <CreditCard className="h-5 w-5" />
+          <div className="py-2.5 px-4 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
+                <CreditCard className="h-4.5 w-4.5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-foreground">{rental.customer}</h3>
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                  <h3 className="text-[14px] font-bold text-foreground leading-tight">{rental.customer}</h3>
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-primary/10 text-primary border border-primary/20">
                     {rental.id}
                   </span>
                 </div>
-                <p className="text-[12px] text-muted-foreground mt-0.5">
-                  Record payment & update equipment rent balance
-                </p>
+                <div className="text-[10.5px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {customerInfo.id && (
+                    <span className="font-medium bg-muted/60 px-1.5 py-0.2 rounded text-foreground/80">
+                      ID: {customerInfo.id}
+                    </span>
+                  )}
+                  {customerInfo.phone && (
+                    <span className="flex items-center gap-1 font-medium">
+                      • Contact: <span className="text-foreground/80 font-bold">{customerInfo.phone}</span>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
-              <div className="px-3 py-1.5 rounded-lg bg-muted/40 border border-border/40 text-right">
-                <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Total Due</span>
-                <span className={`font-mono font-bold text-sm ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
+              <div className="px-2.5 py-1 rounded-lg bg-muted/40 border border-border/40 text-right">
+                <span className="text-[9px] text-muted-foreground uppercase font-semibold block leading-tight">Total Due</span>
+                <span className={`font-mono font-bold text-[13px] ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
                   ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
                 </span>
               </div>
             </div>
           </div>
           
-          <div className="p-5">
-            {hasPayableItems ? (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="p-4 overflow-y-auto flex-1">
+                        {hasPayableItems ? (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                 {/* Left Column: Equipment Items List */}
-                <div className="md:col-span-7 space-y-3">
-                  <div className="flex justify-between items-center pb-1">
-                    <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <div className="md:col-span-7 space-y-2">
+                  <div className="flex justify-between items-center pb-0.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                       Select Equipment ({selectedEqIds.length} of {activeEqItems.length || eqItems.length})
                     </Label>
                     {activeEqItems.length > 1 && (
@@ -627,14 +649,14 @@ function PayDialog({
                             setSelectedEqIds(activeIds);
                           }
                         }}
-                        className="text-[11px] text-primary font-bold hover:underline"
+                        className="text-[10.5px] text-primary font-bold hover:underline"
                       >
                         {selectedEqIds.length === activeEqItems.length ? "Select Single" : "Select All Items"}
                       </button>
                     )}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
                     {eqItems.map((item: any) => {
                       const details = calcUnpaidDetailsForEquipment(rental, item.equipmentId);
                       const isReturned = !!item.returned;
@@ -764,77 +786,77 @@ function PayDialog({
                   </div>
                 </div>
 
-                {/* Right Column: Payment Details & Summary Sidebar */}
-                <div className="md:col-span-5 space-y-4 flex flex-col justify-between">
-                  <div className="space-y-4 bg-muted/15 border border-border/50 p-4 rounded-xl">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Payment Details</h4>
+                                {/* Right Column: Payment Details & Summary Sidebar */}
+                <div className="md:col-span-5 flex flex-col justify-between h-full">
+                  <div className="space-y-2.5 bg-muted/15 border border-border/50 p-3 rounded-xl">
+                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-primary">Payment Details</h4>
 
                     {!isMultiItem && (
                       <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
                           <Input
                             type="number"
                             placeholder="e.g. 500"
                             value={manualPayAmount}
                             onChange={(e) => handleAmountChange(e.target.value)}
-                            className="h-9 text-[13px] font-bold bg-background text-foreground"
+                            className="h-8 text-[12px] font-bold bg-background text-foreground"
                           />
                         </div>
 
                         {selectedEqIds.length === 1 && (
-                          <div className="p-3.5 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-3 mt-2 mb-2">
+                          <div className="p-2.5 rounded-lg border border-dashed border-primary/20 bg-primary/5 space-y-1.5 my-1">
                             <div className="flex items-center gap-2">
                               <input
                                 id="apply-discount-checkbox"
                                 type="checkbox"
                                 checked={applyDiscount}
                                 onChange={(e) => handleApplyDiscountToggle(e.target.checked)}
-                                className="rounded border-muted text-primary focus:ring-primary h-4 w-4 shrink-0"
+                                className="rounded border-muted text-primary focus:ring-primary h-3.5 w-3.5 shrink-0"
                               />
-                              <Label htmlFor="apply-discount-checkbox" className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                              <Label htmlFor="apply-discount-checkbox" className="text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
                                 Apply Discount
                               </Label>
                             </div>
 
                             {applyDiscount && (
-                              <div className="space-y-2.5 animate-[fade-in_0.2s_ease-out] transition-all">
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Discount Type</Label>
-                                  <div className="flex gap-2">
+                              <div className="grid grid-cols-2 gap-2 pt-0.5 animate-[fade-in_0.2s_ease-out] transition-all">
+                                <div className="space-y-0.5">
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Type</Label>
+                                  <div className="flex gap-1">
                                     <button
                                       type="button"
                                       onClick={() => setDiscountType("one-time")}
-                                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold border transition-all text-center ${
+                                      className={`flex-1 py-0.5 px-1 rounded text-[9.5px] font-bold border transition-all text-center leading-tight ${
                                         discountType === "one-time"
                                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
                                           : "bg-background text-muted-foreground border-border hover:bg-muted/40"
                                       }`}
                                     >
-                                      This Month Only
+                                      One-Time
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => setDiscountType("permanent")}
-                                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold border transition-all text-center ${
+                                      className={`flex-1 py-0.5 px-1 rounded text-[9.5px] font-bold border transition-all text-center leading-tight ${
                                         discountType === "permanent"
                                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
                                           : "bg-background text-muted-foreground border-border hover:bg-muted/40"
                                       }`}
                                     >
-                                      All Future Months
+                                      Perm
                                     </button>
                                   </div>
                                 </div>
 
-                                <div className="space-y-1">
-                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Discount Amount (₹)</Label>
+                                <div className="space-y-0.5">
+                                  <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
                                   <Input
                                     type="number"
                                     placeholder="e.g. 500"
                                     value={discountVal}
                                     onChange={(e) => handleDiscountChange(e.target.value)}
-                                    className="h-8 text-[12px] bg-background font-semibold"
+                                    className="h-7 text-[11px] bg-background font-semibold"
                                   />
                                 </div>
                               </div>
@@ -844,20 +866,20 @@ function PayDialog({
                       </>
                     )}
 
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
-                      <Input
-                        type="date"
-                        value={paymentDate}
-                        onChange={(e) => setPaymentDate(e.target.value)}
-                        className="h-9 text-[12px] bg-background"
-                      />
-                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+                        <Input
+                          type="date"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          className="h-8 text-[11px] bg-background"
+                        />
+                      </div>
 
-                    {!isMultiItem && (
-                      <>
-                        <div className="space-y-1.5">
-                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Method</Label>
+                      {!isMultiItem ? (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Method</Label>
                           <Select
                             value={paymentMode}
                             onValueChange={(m) => {
@@ -869,7 +891,7 @@ function PayDialog({
                               }
                             }}
                           >
-                            <SelectTrigger className="h-9 text-[12px] bg-background"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-[11px] bg-background"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {["Cash", "Bank", "Cash+Bank"].map((m) => (
                                 <SelectItem key={m} value={m}>{m}</SelectItem>
@@ -877,15 +899,26 @@ function PayDialog({
                             </SelectContent>
                           </Select>
                         </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Method</Label>
+                          <div className="h-8 flex items-center bg-muted/40 px-2 rounded-md text-[10px] font-medium border border-border/40 text-muted-foreground">
+                            Managed below
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
+                    {!isMultiItem && (
+                      <>
                         {paymentMode === "Cash+Bank" && (
-                          <div className="grid grid-cols-2 gap-2 p-2.5 bg-background rounded-lg border border-border">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash Amount (₹)</Label>
+                          <div className="grid grid-cols-2 gap-2 p-1.5 bg-background rounded-lg border border-border">
+                            <div className="space-y-0.5">
+                              <Label className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash (₹)</Label>
                               <Input
                                 type="number"
-                                placeholder="Cash portion"
-                                className="h-8 text-[12px] font-semibold bg-emerald-50/20"
+                                placeholder="Cash"
+                                className="h-7 text-[11px] font-semibold bg-emerald-50/20"
                                 value={cashAmount}
                                 onChange={(e) => {
                                   const val = e.target.value;
@@ -895,12 +928,12 @@ function PayDialog({
                                 }}
                               />
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank Amount (₹)</Label>
+                            <div className="space-y-0.5">
+                              <Label className="text-[9px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank (₹)</Label>
                               <Input
                                 type="number"
-                                placeholder="Bank portion"
-                                className="h-8 text-[12px] font-semibold bg-blue-50/20"
+                                placeholder="Bank"
+                                className="h-7 text-[11px] font-semibold bg-blue-50/20"
                                 value={bankAmount}
                                 onChange={(e) => {
                                   const val = e.target.value;
@@ -913,38 +946,38 @@ function PayDialog({
                           </div>
                         )}
 
-                        <div className="space-y-1.5">
-                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Txn Reference (Optional)</Label>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Txn Reference (Optional)</Label>
                           <Input
                             placeholder="UPI txn ID, cheque no, etc."
                             value={txRef}
                             onChange={(e) => setTxRef(e.target.value)}
-                            className="h-9 text-[12px] bg-background"
+                            className="h-8 text-[11px] bg-background"
                           />
                         </div>
                       </>
                     )}
 
                     {/* Total Payable Banner */}
-                    <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 flex items-center justify-between shadow-xs mt-2">
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Payable</span>
-                      <span className="text-2xl font-bold font-mono text-emerald-600">
+                    <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 flex items-center justify-between shadow-xs mt-1.5">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Payable</span>
+                      <span className="text-lg font-bold font-mono text-emerald-600">
                         ₹{(isMultiItem ? multiItemTotal : payAmount).toLocaleString("en-IN")}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 pt-2">
+                  <div className="flex items-center gap-2 pt-2 shrink-0">
                     <DialogClose asChild className="flex-1">
-                      <Button variant="outline" type="button" className="h-10 text-xs font-semibold">Cancel</Button>
+                      <Button variant="outline" type="button" className="h-8.5 text-[11px] font-semibold">Cancel</Button>
                     </DialogClose>
                     <Button
                       type="button"
                       onClick={handlePay}
                       disabled={isPaying}
-                      className="flex-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="flex-2 h-8.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] gap-1 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <CheckCircle2 className="h-4 w-4" /> {isPaying ? "Recording…" : "Confirm Payment"}
+                      <CheckCircle2 className="h-3.5 w-3.5" /> {isPaying ? "Recording…" : "Confirm Payment"}
                     </Button>
                   </div>
                 </div>
@@ -1289,67 +1322,77 @@ function DuesPage() {
       return;
     }
 
-    const headers = [
+        const headers = [
       "Customer Name",
       "Phone Number",
-      "Agreement ID",
       "Equipment",
-      "Serial Number",
+      "Deposit Amount (₹)",
       "Start Date",
-      "Billing Cycle Day",
-      "Due Bracket",
       "Rent Rate (₹)",
-      "Remaining Due (₹)",
-      "Status"
+      "Pending Months",
+      "Total Paid Amount (₹)",
+      "Remaining Due (₹)"
     ];
 
     const rows = listToExport.map((item) => {
       const r = item.rental;
       const cust = customersList.find((c: any) => c.id === r.customerId);
-      const custPhone = cust?.phone || r.phone || "";
-      const day = getStartDayOfMonth(item.start);
-      let dueBracket = "1-10 Days (1st–10th)";
-      if (day >= 11 && day <= 20) dueBracket = "11-20 Days (11th–20th)";
-      if (day >= 21 && day <= 31) dueBracket = "21-31 Days (21st–31st)";
+
+      // Show all phone numbers (primary, alt, contact3)
+      const p1 = r.phone || cust?.phone || "";
+      const p2 = r.altPhone || cust?.altPhone || "";
+      const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
+      const phoneList = [p1, p2, p3].map((p) => String(p || "").trim()).filter(Boolean);
+      const allPhones = Array.from(new Set(phoneList)).join(" / ");
 
       const eqItems = r.equipmentItems || [
         {
           equipmentId: r.equipmentId,
           serial: r.serial,
           monthlyRent: Number(r.monthlyRent) || 0,
+          deposit: Number(r.deposit) || 0,
         }
       ];
 
-      const eqNames = eqItems.map((ei: any) => getEquipmentName(ei.equipmentId)).join(", ");
-      const serials = eqItems.map((ei: any) => ei.serial || "XXXX").join(", ");
+      // Equipment Name + Model Number (NO serial numbers)
+      const eqNames = eqItems.map((ei: any) => {
+        const eq = equipmentById.get(ei.equipmentId);
+        const name = ei.name || getEquipmentName(ei.equipmentId);
+        const model = ei.model || eq?.model || "";
+        return model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
+      }).join(", ");
+
+      const depositVal = eqItems.reduce((sum: number, ei: any) => sum + (Number(ei.deposit) || 0), 0) || Number(r.deposit) || 0;
+      const startDateFormatted = formatDateDDMMYYYY(r.start);
+
       const rates = eqItems.map((ei: any) => {
         const isMonthly = Number(ei.monthlyRent) > 0;
         const rate = isMonthly ? Number(ei.monthlyRent) : Number(ei.dailyRent || ei.rentRate || 0);
         return `₹${rate.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}`;
       }).join(", ");
 
-      const startDateFormatted = formatDateDDMMYYYY(r.start);
-      const billingDayText = `Every ${day}${day === 1 ? "st" : day === 2 ? "nd" : day === 3 ? "rd" : "th"}`;
+      const pendingDurations = eqItems.map((ei: any) => {
+        const { unpaidText } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
+        return unpaidText;
+      }).filter((t: string) => t && t !== "—").join(", ");
 
       return [
         r.customer || "Unknown",
-        custPhone,
-        r.id,
+        allPhones || "—",
         eqNames || r.equipment || "Equipment",
-        serials || r.serial || "N/A",
+        depositVal,
         startDateFormatted,
-        billingDayText,
-        dueBracket,
         rates,
-        `₹${item.totalOutstanding.toLocaleString("en-IN")}`,
-        r.status || "Active",
+        pendingDurations || "0m",
+        item.totalPaid,
+        item.totalOutstanding
       ];
     });
 
     const tabLabel = activeTab === "all" ? "1-10_11-20_21-31" : activeTab === "1-10" ? "1-10_Days" : activeTab === "11-20" ? "11-20_Days" : "21-31_Days";
     const filename = `rent_due_statement_${tabLabel}_${getLocalYYYYMMDD()}.xls`;
 
-    downloadExcel(filename, headers, rows, [180, 120, 130, 220, 140, 110, 130, 160, 140, 130, 100]);
+    downloadExcel(filename, headers, rows, [180, 220, 260, 130, 110, 140, 130, 140, 140]);
     toast.success(`Excel report "${filename}" generated & downloaded successfully!`);
   };
 
@@ -1521,10 +1564,10 @@ function DuesPage() {
                                 <span className={isReturned ? "line-through text-muted-foreground/50" : "text-foreground/80 font-medium"}>
                                   {/* ITEM-17/ITEM-7: name, model and serial, so the
                                       row says which physical unit is on rent. */}
-                                  {formatEquipmentLabel({
+                                                                    {formatEquipmentLabel({
                                     name: eqItem.name || getEquipmentName(eqItem.equipmentId),
                                     model: eqItem.model || equipmentById.get(eqItem.equipmentId)?.model,
-                                    serial: eqItem.serial || equipmentById.get(eqItem.equipmentId)?.serial,
+                                    serial: "",
                                   })}
                                 </span>
                                 {isReturned && (() => {
@@ -1570,53 +1613,14 @@ function DuesPage() {
                           })}
                         </div>
                       </TableCell>
-                      <TableCell className="px-2 py-2 text-right">
-                        <div className="space-y-1 text-right">
-                          {eqItems.map((eqItem: any) => {
-                            const { grandTotalPaid } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
-                            return (
-                              <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-success/50" : "text-success"}`}>
-                                ₹{grandTotalPaid.toLocaleString("en-IN")}
-                              </div>
-                            );
-                          })}
-                          {eqItems.length > 1 && (
-                            <div className="border-t border-border/40 mt-1 pt-1 text-right">
-                              <span className="text-[8.5px] font-semibold text-muted-foreground block uppercase leading-none">Total Paid</span>
-                              <span className="text-[11.5px] font-extrabold text-success">
-                                ₹{item.totalPaid.toLocaleString("en-IN")}
-                              </span>
-                            </div>
-                          )}
+                                            <TableCell className="px-2 py-2 text-right">
+                        <div className="text-[11.5px] font-extrabold text-success text-right">
+                          ₹{item.totalPaid.toLocaleString("en-IN")}
                         </div>
                       </TableCell>
                       <TableCell className="px-2 py-2 text-right">
-                        <div className="space-y-1 text-right">
-                          {eqItems.map((eqItem: any) => {
-                            const { outstanding } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
-                            return (
-                              <div
-                                key={eqItem.equipmentId}
-                                className={`text-[11.5px] font-bold ${
-                                  eqItem.returned 
-                                    ? "text-muted-foreground/40 font-normal" 
-                                    : outstanding > 0 
-                                      ? "text-destructive" 
-                                      : "text-success"
-                                }`}
-                              >
-                                {eqItem.returned ? "—" : `₹${outstanding.toLocaleString("en-IN")}`}
-                              </div>
-                            );
-                          })}
-                          {eqItems.length > 1 && (
-                            <div className="border-t border-border/40 mt-1 pt-1 text-right">
-                              <span className="text-[8.5px] font-semibold text-muted-foreground block uppercase leading-none">Total Due</span>
-                              <span className={`text-[11.5px] font-extrabold ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
-                                ₹{item.totalOutstanding.toLocaleString("en-IN")}
-                              </span>
-                            </div>
-                          )}
+                        <div className={`text-[11.5px] font-extrabold text-right ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
+                          ₹{item.totalOutstanding.toLocaleString("en-IN")}
                         </div>
                       </TableCell>
                       <TableCell className="px-2 py-2"><StatusBadge status={r.status} /></TableCell>
