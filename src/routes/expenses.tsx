@@ -730,8 +730,13 @@ function IncomeExpenseFormDialog({
     }
   }, [initialItem, open, defaultEntity]);
 
+  // Guards a double-submit: without it a second click created a second entry
+  // with a fresh getNextIncomeExpenseNumber() id, and nothing de-duplicated them.
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
     const numAmt = parseFloat(amount);
     if (isNaN(numAmt) || numAmt <= 0) {
       toast.error("Please enter a valid amount greater than 0");
@@ -754,7 +759,21 @@ function IncomeExpenseFormDialog({
       description: description.trim() || undefined,
     };
 
-    saveIncomeExpense(newItem);
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      saveIncomeExpense(newItem);
+    } catch (err) {
+      // setStorageItem re-throws on QuotaExceededError. Without this the throw
+      // escaped the handler, no toast fired, and the dialog just sat there.
+      toast.error("Could not save this entry — nothing was recorded.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+      return;
+    } finally {
+      setIsSaving(false);
+    }
     toast.success(`${type} entry of ₹${numAmt.toLocaleString("en-IN")} saved for ${entity}!`);
     onSave();
     onClose();

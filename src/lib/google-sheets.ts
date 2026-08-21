@@ -13,6 +13,8 @@
  * Each tab has a header row with field names, followed by data rows.
  */
 
+import { toast } from "sonner";
+
 const isBrowser = typeof window !== "undefined";
 
 // ─── Config helpers ─────────────────────────────────────────────────────────
@@ -21,7 +23,10 @@ export function getGSheetsUrl(): string {
   if (!isBrowser) return "";
   // Priority: localStorage (user-saved) → build-time env var → empty (forces user to configure)
   // ⚠️  No hardcoded fallback URL — the URL must be configured explicitly to protect the database.
-  return localStorage.getItem("medirent-gsheets-url") || (import.meta.env.VITE_GSHEETS_URL || "https://script.google.com/macros/s/AKfycbwK9uf6Vwop40yzdmxD_B9jlplagJZuiOCke_kT0mGzCWYjVjCMjJWzGmu_t2uSLD_jNQ/exec");
+  //     A literal here ships to every visitor in the client bundle and grants full
+  //     read/write/delete access to the spreadsheet. Configure via Settings → Database
+  //     or VITE_GSHEETS_URL instead.
+  return localStorage.getItem("medirent-gsheets-url") || import.meta.env.VITE_GSHEETS_URL || "";
 }
 
 export function setGSheetsUrl(url: string) {
@@ -41,7 +46,7 @@ export function isGSheetsEnabled(): boolean {
  *  TOKEN constant in Code.gs and re-saving it here (or via Settings). */
 export function getGSheetsToken(): string {
   if (!isBrowser) return "";
-  return localStorage.getItem("medirent-gsheets-token") || (import.meta.env.VITE_GSHEETS_TOKEN || "392284cd2d4b0ea7d53f74cba8cd2288d044898d586824f1");
+  return localStorage.getItem("medirent-gsheets-token") || import.meta.env.VITE_GSHEETS_TOKEN || "";
 }
 
 export function setGSheetsToken(token: string) {
@@ -73,8 +78,16 @@ export async function sheetsRequest(
     let data;
     try {
       data = JSON.parse(text);
-    } catch (e) {
-      return { success: true, data: text };
+    } catch {
+      // Apps Script answers with an HTML page — not JSON — when the deployment
+      // isn't shared publicly, when the script threw, or when Google serves a
+      // sign-in interstitial. Treating that as success made syncRowToSheet drop
+      // the pending-write guard for a row that was never written, so the next
+      // pull silently replaced the local record with the stale remote one.
+      return {
+        success: false,
+        error: `Non-JSON response from Apps Script (likely an auth or deployment error): ${text.slice(0, 200)}`,
+      };
     }
 
     if (data && data.error) {
@@ -147,7 +160,14 @@ interface PendingSync {
   id: string;
   data?: any;
   timestamp: number;
+  /** How many times this write has been re-issued by cleanStalePendingSyncs.
+   *  Capped so a permanently-failing write stops being re-POSTed forever. */
+  attempts?: number;
 }
+
+/** Give up on a pending write after this many retries and tell the user, rather
+ *  than re-POSTing it on every 15s sync cycle for the lifetime of the tab. */
+const MAX_SYNC_ATTEMPTS = 5;
 
 export interface DeletedRecord {
   sheet: string;
@@ -214,7 +234,13 @@ function setPendingSyncs(syncs: PendingSync[]) {
   }
 }
 
-export function addPendingSync(type: "upsert" | "delete", sheet: string, id: string, data?: any) {
+export function addPendingSync(
+  type: "upsert" | "delete",
+  sheet: string,
+  id: string,
+  data?: any,
+  attempts?: number
+) {
   const syncs = getPendingSyncs();
   const filtered = syncs.filter((s) => !(s.sheet === sheet && s.id === id));
   filtered.push({
@@ -223,6 +249,9 @@ export function addPendingSync(type: "upsert" | "delete", sheet: string, id: str
     id,
     data,
     timestamp: Date.now(),
+    // Carry the retry count forward when this entry is a re-issue, so the
+    // ceiling in cleanStalePendingSyncs is actually reachable.
+    attempts: attempts ?? 0,
   });
   setPendingSyncs(filtered);
 }
@@ -247,17 +276,39 @@ export function cleanStalePendingSyncs() {
   // e.g. an approved rental flipping back to "Pending Approval" over and over.
   // Re-issuing the write re-registers a fresh pending entry, so local state
   // stays protected until the write actually confirms.
-  for (const s of stale) {
+  //
+  // The retry is bounded: a write that can never succeed (revoked token, bad
+  // deployment URL, sustained rate limiting) used to be re-POSTed on every sync
+  // cycle forever, which is itself a way to exhaust the Apps Script quota.
+  const retryable = stale.filter((s) => (s.attempts ?? 0) < MAX_SYNC_ATTEMPTS);
+  const exhausted = stale.filter((s) => (s.attempts ?? 0) >= MAX_SYNC_ATTEMPTS);
+
+  if (exhausted.length > 0) {
+    console.error(
+      `[GSheets] Giving up on ${exhausted.length} write(s) after ${MAX_SYNC_ATTEMPTS} attempts:`,
+      exhausted
+    );
+    toast.error(
+      `${exhausted.length} change${exhausted.length === 1 ? "" : "s"} could not be saved to Google Sheets. ` +
+        `They are still on this device — check Settings → Database and re-sync.`,
+      { duration: 12000 }
+    );
+  }
+
+  for (const s of retryable) {
+    const nextAttempt = (s.attempts ?? 0) + 1;
     if (s.type === "upsert" && s.data) {
-      syncRowToSheet(s.sheet, s.data);
+      syncRowToSheet(s.sheet, s.data, nextAttempt);
     } else if (s.type === "delete") {
-      deleteRowFromSheet(s.sheet, s.id);
+      deleteRowFromSheet(s.sheet, s.id, nextAttempt);
     }
   }
 }
 
-/** Write a single row upsert (insert or update by id field) */
-export function syncRowToSheet(sheet: string, row: Record<string, unknown>) {
+/** Write a single row upsert (insert or update by id field).
+ *  `attempts` is set only by cleanStalePendingSyncs when re-issuing a stuck
+ *  write, so the retry ceiling survives the re-registration. */
+export function syncRowToSheet(sheet: string, row: Record<string, unknown>, attempts = 0) {
   if (!row || !row.id) return;
   const id = String(row.id);
 
@@ -265,7 +316,7 @@ export function syncRowToSheet(sheet: string, row: Record<string, unknown>) {
   clearDeletedRecord(sheet, id);
 
   // Track this locally as a pending upsert
-  addPendingSync("upsert", sheet, id, row);
+  addPendingSync("upsert", sheet, id, row, attempts);
 
   // Fire and forget – don't block UI
   let cleanRow = row;
@@ -285,7 +336,7 @@ export function syncRowToSheet(sheet: string, row: Record<string, unknown>) {
 }
 
 /** Delete a row from a sheet by id */
-export function deleteRowFromSheet(sheet: string, id: string) {
+export function deleteRowFromSheet(sheet: string, id: string, attempts = 0) {
   if (!id) return;
   const strId = String(id);
 
@@ -293,7 +344,7 @@ export function deleteRowFromSheet(sheet: string, id: string) {
   recordDeletedId(sheet, strId);
 
   // Track this locally as a pending delete
-  addPendingSync("delete", sheet, strId);
+  addPendingSync("delete", sheet, strId, undefined, attempts);
 
   sheetsRequest("delete", { sheet, id: strId })
     .then((res) => {
@@ -344,8 +395,13 @@ export async function syncAllToSheets(
       let data;
       try {
         data = JSON.parse(text);
-      } catch (e) {
-        // Fallback for non-JSON or raw text success responses
+      } catch {
+        // An HTML body here means the request never reached the script (auth
+        // interstitial, deployment error). Counting it as written would report
+        // a successful bulk sync that wrote nothing.
+        throw new Error(
+          `Non-JSON response from Apps Script (likely an auth or deployment error): ${text.slice(0, 200)}`
+        );
       }
 
       if (data && data.error) {
@@ -409,6 +465,7 @@ export const SHEETS = {
   FILE_CHUNKS: "FileChunks",
   STAFF: "Staff",
   SETTINGS: "Settings",
+  INCOME_EXPENSES: "IncomeExpenses",
 } as const;
 
 /** Send OTP verification code to a user's email via GET (avoids CORS redirect issue with POST) */
@@ -429,8 +486,12 @@ export async function sendOtpEmail(email: string, otp: string): Promise<{ succes
     try {
       data = JSON.parse(text);
     } catch {
-      // If response isn't JSON but request succeeded, treat as success
-      return { success: true };
+      // Reporting success here advanced the user to the OTP step to wait for a
+      // code that was never sent — an HTML body means the script did not run.
+      return {
+        success: false,
+        error: `Non-JSON response from Apps Script (likely an auth or deployment error): ${text.slice(0, 200)}`,
+      };
     }
 
     if (data && data.error) {

@@ -8,12 +8,25 @@ import {
   returns as initialReturns,
 } from "./mock-data";
 import { syncRowToSheet, deleteRowFromSheet, isGSheetsEnabled, SHEETS, readSheetData, getPendingSyncs, cleanStalePendingSyncs, sheetsRequest, getDeletedRecords } from "./google-sheets";
+import { createBackupSnapshot } from "./backup";
 
 // Helper to check for SSR
 const isBrowser = typeof window !== "undefined";
 
 // Clear local storage one-time if it hasn't been reset to empty mock-data yet
 if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
+  // This runs as an import side effect, so it fires the first time any route
+  // loads after the version suffix is bumped — on every existing device, with
+  // no prompt. With Sheets enabled the rows come back on the next pull; with
+  // Sheets off or unreachable they are simply gone. Take a snapshot first so
+  // the wipe is always recoverable from Settings → Backup.
+  try {
+    const preMigration = createBackupSnapshot();
+    localStorage.setItem("medirent-pre-migration-snapshot", JSON.stringify(preMigration));
+  } catch (e) {
+    console.error("[Migration] Could not snapshot before the v9 reset:", e);
+  }
+
   // BUG-DATA FIX: Preserve user accounts and sequential ID counters across resets.
   // Only wipe operational data — never wipe staff user accounts or counter keys.
   const _preservedStaffUsers = localStorage.getItem("medirent-staff-users");
@@ -33,39 +46,44 @@ if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
   localStorage.setItem("medirent-db-cleared-v9", "true");
 }
 
-// ─── Pre-seed default admin account ─────────────────────────────────────────
-// This ensures the app always has an admin account on any fresh device or
-// deployment without requiring the user to go through the First-Run Setup screen.
-// Password: Relife@806709  (SHA-256 pre-computed — never stored in plaintext)
+// ─── First-run admin account ────────────────────────────────────────────────
+// There is deliberately no pre-seeded account here.
+//
+// A hardcoded admin in this module shipped its password hash to every visitor
+// in the client bundle, and — because it matched on `id === "1" || firstAdmin`
+// and then *replaced* that record — it silently destroyed the admin account a
+// customer had created through FirstRunSetup on every single page load, locking
+// them out of their own deployment. It also guaranteed `medirent-staff-users`
+// was never empty, which made FirstRunSetup unreachable.
+//
+// Account creation now happens exactly once, in FirstRunSetup (see __root.tsx),
+// with a password the operator chooses. An optional build-time seed is
+// supported for automated deployments: it only ever applies to a genuinely
+// empty staff list and never overwrites an existing account.
 if (isBrowser) {
-  const existingStaff = localStorage.getItem("medirent-staff-users");
   let staffList: any[] = [];
-  if (existingStaff) {
-    try {
-      staffList = JSON.parse(existingStaff);
-      if (!Array.isArray(staffList)) staffList = [];
-    } catch (_) { staffList = []; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem("medirent-staff-users") || "[]");
+    if (Array.isArray(parsed)) staffList = parsed;
+  } catch {
+    staffList = [];
   }
 
-  const defaultAdmin = {
-    id: "1",
-    name: "Relife Admin",
-    email: "relifemedicaltechnologies.mys@gmail.com",
-    // SHA-256 of "Relife@806709"
-    passwordHash: "2d8b2a1ff89a8b02e74a88a7fba7304e1724aa45324dd82ce7da2f9d4d3b0cec",
-    role: "Admin",
-    firstAdmin: true,
-  };
+  const seedEmail = import.meta.env.VITE_SEED_ADMIN_EMAIL;
+  const seedHash = import.meta.env.VITE_SEED_ADMIN_HASH;
 
-  const oldIdx = staffList.findIndex((u: any) => u.email === "g.avinash10005@gmail.com" || u.id === "1" || u.firstAdmin);
-  if (oldIdx > -1) {
-    staffList[oldIdx] = defaultAdmin;
-  } else if (!staffList.some((u: any) => u.email.toLowerCase() === defaultAdmin.email)) {
-    staffList.unshift(defaultAdmin);
+  if (staffList.length === 0 && seedEmail && seedHash) {
+    staffList.push({
+      id: crypto.randomUUID(),
+      name: "Administrator",
+      email: String(seedEmail).toLowerCase().trim(),
+      passwordHash: seedHash,
+      role: "Admin",
+      firstAdmin: true,
+      mustChangePassword: true,
+    });
+    localStorage.setItem("medirent-staff-users", JSON.stringify(staffList));
   }
-
-  localStorage.setItem("medirent-staff-users", JSON.stringify(staffList));
-  localStorage.setItem("medirent-setup-done", "true");
 }
 
 
@@ -107,7 +125,11 @@ export function formatDateDDMMYYYY(dateStr: string | undefined | null): string {
       return `${day.padStart(2, "0")}-${month.padStart(2, "0")}-${year}`;
     }
   }
-  const d = new Date(dateStr);
+  // H-9: `new Date("03/04/2026")` reads as March 4 in a US locale, not 3 April,
+  // so a DD/MM/YYYY value (which Sheets returns whenever the cell is styled
+  // that way) rendered with day and month swapped. parseLocalDate resolves the
+  // ambiguity by checking which component holds the 4-digit year.
+  const d = parseLocalDate(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -124,14 +146,22 @@ export function getLocalYYYYMMDD(dateInput: Date | string = new Date()): string 
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
       return trimmed;
     }
-    const d = new Date(trimmed);
+    // H-9: `new Date("03-04-2026")` reads as March 4, not 3 April, so a
+    // DD-MM-YYYY string silently came back with day and month swapped; a
+    // DD-MM-YYYY string the constructor rejected outright was returned
+    // unchanged, meaning this function could hand back a value in the very
+    // format it promises to convert away from. parseLocalDate already handles
+    // both layouts correctly, so defer to it.
+    const d = parseLocalDate(trimmed);
     if (!isNaN(d.getTime())) {
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, "0");
       const day = String(d.getDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
-    return trimmed.split("T")[0];
+    // Unparseable. Return empty rather than a string that is not YYYY-MM-DD —
+    // callers compare these lexically, and a DD-MM-YYYY value sorts wrongly.
+    return "";
   }
 
   const year = dateInput.getFullYear();
@@ -175,6 +205,52 @@ export function parseLocalDate(dateStr: string | undefined | null): Date {
     }
   }
   return new Date(cleaned); // fallback
+}
+
+// ─── HTML escaping for printed documents ────────────────────────────────────
+/**
+ * Every print path (agreements, receipts, return receipts, reports, document
+ * verification sheets) builds its markup by interpolating record fields into a
+ * template literal and then handing it to `printWindow.document.write()`. That
+ * window is same-origin, so anything script-shaped in a record field would run
+ * with full access to this app's localStorage — session token, user role, staff
+ * password hashes.
+ *
+ * Records are not trustworthy input: they round-trip through a shared Google
+ * Sheet that several people (and, historically, anyone with the deployment URL)
+ * can edit by hand.
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Returns a copy of `value` with every string escaped for HTML, leaving numbers,
+ * booleans and dates alone so downstream `.toLocaleString()` / `cleanNum()`
+ * calls still behave.
+ *
+ * Applied once at the top of each document builder, which is far harder to get
+ * wrong than remembering to wrap ~60 individual interpolation sites — and it
+ * cannot be missed when a new field is added to a template.
+ */
+export function escapeRecordForHtml<T>(value: T, depth = 0): T {
+  if (depth > 6 || value == null) return value;
+  if (typeof value === "string") return escapeHtml(value) as unknown as T;
+  if (typeof value !== "object") return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => escapeRecordForHtml(v, depth + 1)) as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = escapeRecordForHtml(v, depth + 1);
+  }
+  return out as unknown as T;
 }
 
 // ─── Equipment Display Labels ─────────────────────────────────
@@ -312,11 +388,16 @@ export function getNextAgreementNumber(): string {
   const year = new Date().getFullYear();
   const key = `medirent-agr-counter-${year}`;
   
-  // Auto-align counter with the maximum ID in the database to prevent duplicate/stale counters
+  // Auto-align counter with the maximum ID in the database to prevent duplicate/stale counters.
+  // H-7: seed from the persisted counter as well as the stored list — every
+  // other generator does. Starting from 0 meant that deleting or cancelling the
+  // highest-numbered agreement of the year handed that number straight back to
+  // the next save, and saveRental upserts by id, so the reissued agreement
+  // silently overwrote whatever still referenced the old one.
   const rentals = getRentals();
   const yearPrefix = `AGR-${year}-`;
-  let maxIdNum = 0;
-  
+  let maxIdNum = parseInt(localStorage.getItem(key) || "0", 10) || 0;
+
   rentals.forEach((r: any) => {
     if (r.id && r.id.startsWith(yearPrefix)) {
       const parts = r.id.split("-");
@@ -339,11 +420,12 @@ export function peekNextAgreementNumber(): string {
   if (!isBrowser) return `AGR-${new Date().getFullYear()}-0001`;
   const year = new Date().getFullYear();
   
-  // Auto-align counter with the maximum ID in the database to prevent duplicate/stale counters
+  // Mirrors getNextAgreementNumber so the previewed ID matches the saved one.
   const rentals = getRentals();
   const yearPrefix = `AGR-${year}-`;
-  let maxIdNum = 0;
-  
+  const key = `medirent-agr-counter-${year}`;
+  let maxIdNum = parseInt(localStorage.getItem(key) || "0", 10) || 0;
+
   rentals.forEach((r: any) => {
     if (r.id && r.id.startsWith(yearPrefix)) {
       const parts = r.id.split("-");
@@ -638,6 +720,37 @@ export function batchDatabaseWrites<T>(fn: () => T): T {
   } finally {
     dbUpdateScheduled = wasScheduled;
     scheduleDbUpdateNotification();
+  }
+}
+
+/**
+ * Runs `fn` as an all-or-nothing write across `keys`.
+ *
+ * setStorageItem deliberately re-throws on QuotaExceededError so callers can
+ * react, but an operation like saveReturn writes returns, rentals, equipment,
+ * payments and customers in sequence. Without this, a quota failure on the
+ * third write left the first two standing — a return recorded against
+ * equipment still marked Rented, or an agreement marked Completed with no
+ * settlement payment against it. The quota case is realistic here: base64
+ * delivery photos and KYC scans share the same 5–10 MB origin budget.
+ *
+ * Snapshots the touched keys up front and puts them back if anything throws,
+ * so the caller's catch sees a database that is still internally consistent.
+ */
+export function transactDatabaseWrites<T>(keys: string[], fn: () => T): T {
+  if (!isBrowser) return fn();
+  const backup = new Map<string, string | null>(
+    keys.map((k) => [k, localStorage.getItem(k)])
+  );
+  try {
+    return batchDatabaseWrites(fn);
+  } catch (err) {
+    for (const [k, v] of backup) {
+      if (v === null) localStorage.removeItem(k);
+      else localStorage.setItem(k, v);
+    }
+    _invalidateRentalsCache();
+    throw err;
   }
 }
 
@@ -1226,6 +1339,29 @@ let _customersCacheStamp = "";
 let _equipmentCache: any[] | null = null;
 let _equipmentCacheStamp = "";
 
+/**
+ * Rentals whose status getRentals() corrected and which still need pushing to
+ * Google Sheets. getRentals() runs during render, so it only queues here;
+ * flushPendingStatusCorrections() does the network writes from an effect.
+ * Keyed by rental id so repeated renders coalesce instead of piling up.
+ */
+const _pendingStatusCorrections = new Map<string, any>();
+
+/**
+ * Pushes any status corrections queued by getRentals() to Google Sheets.
+ * Call from an effect (AppShell does, on mount and after each sync) — never
+ * from render.
+ */
+export function flushPendingStatusCorrections() {
+  if (!isBrowser || _pendingStatusCorrections.size === 0) return;
+  const corrections = Array.from(_pendingStatusCorrections.values());
+  _pendingStatusCorrections.clear();
+  if (!isGSheetsEnabled()) return;
+  corrections.forEach((r) =>
+    syncRowToSheet(SHEETS.RENTALS, r as unknown as Record<string, unknown>)
+  );
+}
+
 // Rentals Data Store
 export function getRentals() {
   // Fast path: return cached result when nothing has been written since last call.
@@ -1358,14 +1494,22 @@ export function getRentals() {
     return corrected;
   });
 
-  // Push corrected statuses to Google Sheets (and register them as pending
-  // upserts in the process) — without this, the corrected value only lives
-  // in localStorage, and AppShell's sync-from-Sheets call (which fires
-  // immediately on every page mount, then every 15s) pulls the OLD status
-  // back down from the still-unchanged remote row and silently overwrites
-  // this fix seconds after every page load, even after a hard refresh.
-  if (statusCorrections.length > 0 && isGSheetsEnabled()) {
-    statusCorrections.forEach((r) => syncRowToSheet(SHEETS.RENTALS, r as unknown as Record<string, unknown>));
+  // Corrected statuses still need pushing to Google Sheets — without that, the
+  // corrected value only lives in localStorage, and AppShell's sync-from-Sheets
+  // call (which fires immediately on every page mount, then every 15s) pulls the
+  // OLD status back down from the still-unchanged remote row and silently
+  // overwrites this fix seconds after every page load.
+  //
+  // But getRentals() is a *read*, called from useMemo during render on most
+  // pages and transitively by getCustomers()/getEquipment(). Issuing one POST
+  // per corrected rental from here meant network writes on every render pass —
+  // doubled again by StrictMode in development — which was a significant source
+  // of Apps Script quota pressure. Queue them instead and let
+  // flushPendingStatusCorrections() drain the queue from an effect.
+  if (statusCorrections.length > 0) {
+    for (const r of statusCorrections) {
+      _pendingStatusCorrections.set(r.id, r);
+    }
   }
 
   const result = sortLatestFirst(changed ? statusCorrectedList : list, "start");
@@ -1589,7 +1733,30 @@ export function getReturns() {
   return sortLatestFirst(healedList, "date");
 }
 
+/**
+ * Records a return, releases the equipment, settles the agreement and — on a
+ * partial return — splits the remaining items into a new agreement.
+ *
+ * Runs as a single transaction: it touches seven storage keys, and a failure
+ * part-way through used to leave the database internally inconsistent with no
+ * way back. See transactDatabaseWrites.
+ */
 export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipmentIds?: string[] }) {
+  return transactDatabaseWrites(
+    [
+      "medirent-returns",
+      "medirent-rentals",
+      "medirent-payments",
+      "medirent-equipment",
+      "medirent-customers",
+      "medirent-documents",
+      "medirent-owners",
+    ],
+    () => saveReturnInner(ret)
+  );
+}
+
+function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmentIds?: string[] }) {
   const list = getReturns();
   // BUG-1 FIX: Upsert-safe — don't push duplicates on every save call
   const existingIdx = list.findIndex((r) => r.id === ret.id);
@@ -1673,14 +1840,20 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
         // 4. Split payments:
         const paymentsList = getPayments();
         let paymentsChanged = false;
-        
+        // Rows created by the apportionment, and existing rows it rewrote.
+        // Both sets need pushing to Sheets — see the write below.
+        const newApportionedPayments: any[] = [];
+        const changedPayments: any[] = [];
+
         const updatedPaymentsList = paymentsList.map((p: any) => {
           if (p.agreement !== rental.id) return p;
           
           if (p.equipmentId) {
             if (remainingItems.some((item: any) => item.equipmentId === p.equipmentId)) {
               paymentsChanged = true;
-              return { ...p, agreement: newAgreementId };
+              const reassigned = { ...p, agreement: newAgreementId };
+              changedPayments.push(reassigned);
+              return reassigned;
             }
             return p;
           } else {
@@ -1690,33 +1863,42 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
             const returnedShare = Math.max(0, originalAmount - remainingShare);
             
             if (remainingShare > 0) {
-              const newPaymentId = getNextPaymentNumber();
-              setTimeout(() => {
-                const freshPayments = getPayments();
-                const newPayment = {
-                  ...p,
-                  id: newPaymentId,
-                  agreement: newAgreementId,
-                  amount: remainingShare,
-                  notes: `${p.notes || ''} (Apportioned share for remaining items in agreement ${newAgreementId})`
-                };
-                freshPayments.unshift(newPayment);
-                setStorageItem("medirent-payments", freshPayments);
-              }, 0);
+              // Collected synchronously and merged into the single write below.
+              // This used to be written from a setTimeout(…, 0), which landed
+              // after the list write, was never pushed to Sheets, and was lost
+              // outright if the tab navigated inside that window.
+              newApportionedPayments.push({
+                ...p,
+                id: getNextPaymentNumber(),
+                agreement: newAgreementId,
+                amount: remainingShare,
+                notes: `${p.notes || ''} (Apportioned share for remaining items in agreement ${newAgreementId})`
+              });
             }
-            
-            return {
+
+            const reapportioned = {
               ...p,
               amount: returnedShare,
               notes: `${p.notes || ''} (Apportioned share for returned items in agreement ${rental.id})`
             };
+            changedPayments.push(reapportioned);
+            return reapportioned;
           }
         });
 
-        if (paymentsChanged) {
-          // PERF FIX: Use direct localStorage write for this internal payments redistribution
-          // to avoid firing an extra medirent-db-updated event during saveReturn.
-          localStorage.setItem("medirent-payments", JSON.stringify(updatedPaymentsList));
+        if (paymentsChanged || newApportionedPayments.length > 0) {
+          // Go through setStorageItem, not a raw localStorage write: the raw
+          // write skipped the pending-sync registration, so the next pull from
+          // Sheets — which rebuilds each key as (remote + pending − tombstones)
+          // — deleted these rows outright. batchDatabaseWrites (wrapped around
+          // the whole of saveReturn) still collapses this into one
+          // medirent-db-updated event, which is what the raw write was for.
+          setStorageItem("medirent-payments", [...newApportionedPayments, ...updatedPaymentsList]);
+          if (isGSheetsEnabled()) {
+            [...newApportionedPayments, ...changedPayments].forEach((p) =>
+              syncRowToSheet(SHEETS.PAYMENTS, p as Record<string, unknown>)
+            );
+          }
         }
 
         // 5. Update the original agreement to contain ONLY the returned items
@@ -1764,10 +1946,27 @@ export function saveReturn(ret: typeof initialReturns[number] & { returnedEquipm
       });
     }
 
-    // PERF FIX: Use direct localStorage write for rentals update to avoid firing
-    // an extra medirent-db-updated event. The main event comes from setStorageItem
-    // on medirent-returns already dispatched at the start of saveReturn.
-    localStorage.setItem("medirent-rentals", JSON.stringify(rentalsList));
+    // Go through setStorageItem, not a raw localStorage write.
+    //
+    // The raw write skipped the pending-sync registration entirely, so on a
+    // partial return the newly-split agreement existed only on this device: it
+    // was not in Sheets and had no pending-sync entry, and the next background
+    // pull — which rebuilds each key as (remote + pending − tombstones) —
+    // deleted it along with the original agreement's "Completed" status. Idling
+    // for 30s after a partial return was enough to lose the whole split.
+    //
+    // batchDatabaseWrites (wrapped around saveReturn) still coalesces this into
+    // a single medirent-db-updated event, which is what the raw write was for.
+    setStorageItem("medirent-rentals", rentalsList);
+    if (isGSheetsEnabled()) {
+      syncRowToSheet(SHEETS.RENTALS, rental as unknown as Record<string, unknown>);
+      if (newAgreementId) {
+        const createdRental = rentalsList.find((r: any) => r.id === newAgreementId);
+        if (createdRental) {
+          syncRowToSheet(SHEETS.RENTALS, createdRental as unknown as Record<string, unknown>);
+        }
+      }
+    }
 
     // Release the returned equipment back to 'Available' or 'UnderMaintenance' depending on return condition
     returnedIds.forEach((eqId: string) => {
@@ -2227,8 +2426,8 @@ export function downloadExcel(filename: string, headers: string[], rows: string[
       <tr>`;
   
   headers.forEach((h, i) => {
-    const widthStyle = colWidths && colWidths[i] ? ` style="width: ${colWidths[i]}px;"` : "";
-    html += `\n        <th${widthStyle}>${h}</th>`;
+    const widthStyle = colWidths && colWidths[i] ? ` style="width: ${Number(colWidths[i]) || 0}px;"` : "";
+    html += `\n        <th${widthStyle}>${escapeHtml(h)}</th>`;
   });
   
   html += `
@@ -2276,9 +2475,11 @@ export function downloadAgreementFile(rental: any) {
   printAgreement(rental);
 }
 
-export function getAgreementHtmlContent(rental: any, isPrintMode: boolean = false, isZoomedPreview: boolean = false): string {
+export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean = false, isZoomedPreview: boolean = false): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  if (!rental) return "";
+  if (!rentalInput) return "";
+  // Escape once here rather than at each of the ~40 interpolation sites below.
+  const rental = escapeRecordForHtml(rentalInput);
 
   // Helper to convert numbers to words (Indian numbering format)
   const convertNumberToWords = (amount: number): string => {
@@ -2919,14 +3120,17 @@ export function printAgreement(rental: any) {
   printWindow.document.close();
 }
 
-export function printReceipt(payment: any, customerName?: string) {
+export function printReceipt(paymentInput: any, customerNameInput?: string) {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  if (!payment || typeof window === "undefined") return;
+  if (!paymentInput || typeof window === "undefined") return;
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     alert("Please allow popups to print/download the receipt.");
     return;
   }
+  // Escape once here rather than at each interpolation site below.
+  const payment = escapeRecordForHtml(paymentInput);
+  const customerName = customerNameInput === undefined ? undefined : escapeHtml(customerNameInput);
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -3182,9 +3386,11 @@ export function printReceipt(payment: any, customerName?: string) {
   printWindow.document.close();
 }
 
-export function getReturnReceiptHtmlContent(ret: any, isPrintMode: boolean = false, isZoomedPreview: boolean = false): string {
+export function getReturnReceiptHtmlContent(retInput: any, isPrintMode: boolean = false, isZoomedPreview: boolean = false): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  if (!ret) return "";
+  if (!retInput) return "";
+  // Escape once here rather than at each interpolation site below.
+  const ret = escapeRecordForHtml(retInput);
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -3645,25 +3851,25 @@ export function getDocumentPreviewUrl(doc: DocumentItem): string {
   <div class="card">
     <div class="logo">🔒</div>
     <h2>Document Archive</h2>
-    <div class="doc-name">${doc.name}</div>
+    <div class="doc-name">${escapeHtml(doc.name)}</div>
     <span class="badge">SECURELY ARCHIVED</span>
-    
+
     <div class="details">
       <div class="row">
         <span class="label">Document ID</span>
-        <span class="value" style="font-family: monospace;">${doc.id}</span>
+        <span class="value" style="font-family: monospace;">${escapeHtml(doc.id)}</span>
       </div>
       <div class="row">
         <span class="label">Category</span>
-        <span class="value">${docTypeLabel}</span>
+        <span class="value">${escapeHtml(docTypeLabel)}</span>
       </div>
       <div class="row">
         <span class="label">Uploaded On</span>
-        <span class="value">${doc.date}</span>
+        <span class="value">${escapeHtml(doc.date)}</span>
       </div>
       <div class="row">
         <span class="label">File Size</span>
-        <span class="value">${doc.size || "150 KB"}</span>
+        <span class="value">${escapeHtml(doc.size || "150 KB")}</span>
       </div>
     </div>
     
@@ -3823,7 +4029,7 @@ export async function syncMissingFileChunks(
 }
 
 // Print Annual Performance Report
-export function printReport(reportData: {
+export function printReport(reportDataInput: {
   date: string;
   totalCustomers: number;
   activeRentals: number;
@@ -3838,6 +4044,9 @@ export function printReport(reportData: {
     alert("Please allow popups to print/download the report.");
     return;
   }
+  // Equipment names reach `utilization[].name` straight from the records, so
+  // escape before any of it is interpolated into the markup below.
+  const reportData = escapeRecordForHtml(reportDataInput);
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -4116,6 +4325,9 @@ export async function syncFromSheetsToLocalStorage(force = false) {
     { key: "medirent-exchanges", sheet: SHEETS.EXCHANGES },
     { key: "medirent-staff-users", sheet: SHEETS.STAFF },
     { key: "medirent-company-settings", sheet: SHEETS.SETTINGS },
+    // M-2: without this the income/expense ledger was device-local — it never
+    // reached Sheets and was lost with the browser profile.
+    { key: "medirent-income-expenses", sheet: SHEETS.INCOME_EXPENSES },
   ];
 
   // Fetch all sheets in parallel to drastically improve loading speed from ~20s to ~2s
@@ -4132,7 +4344,9 @@ export async function syncFromSheetsToLocalStorage(force = false) {
 
   // Abort sync if a local write occurred after we started syncing to avoid overwriting newer local state
   const lastWriteAfter = localStorage.getItem("medirent-last-write-time");
-  if (lastWriteAfter && parseInt(lastWriteAfter, 10) > syncStartTime) {
+  // >= not >: a local write landing in the same millisecond the sync started is
+  // still a write that must not be overwritten by this pull.
+  if (lastWriteAfter && parseInt(lastWriteAfter, 10) >= syncStartTime) {
     console.log(`[GSheets] Aborting sync write because a local write occurred during fetch`);
     return;
   }
@@ -4472,34 +4686,17 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
  *  flip without regard to whether rent is actually unpaid. */
 export function getRentalOutstandingBalance(rental: any, paymentsList: any[]): number {
   if (!rental) return 0;
-  const start = parseLocalDate(rental.start);
-  if (isNaN(start.getTime())) return 0;
-
-  const eqItems = rental.equipmentItems || [
-    {
-      equipmentId: rental.equipmentId,
-      serial: rental.serial,
-      monthlyRent: cleanNum(rental.monthlyRent),
-      dailyRent: cleanNum((rental as any).dailyRent),
-      returned: false
-    }
-  ];
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const daysElapsed = Math.ceil(Math.max(0, today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-
-  return eqItems.reduce((total: number, item: any) => {
-    if (item.returned) return total;
-    const monthlyRent = cleanNum(item.monthlyRent || item.rentRate);
-    const dailyRate = cleanNum(item.dailyRent) || cleanNum((rental as any).dailyRent);
-    const isMonthly = (item.rentCycle || (rental as any).rentCycle)
-      ? (item.rentCycle || (rental as any).rentCycle) === "Monthly"
-      : (monthlyRent > 0 && dailyRate === 0);
-    const totalDue = isMonthly ? Math.floor(daysElapsed / 30) * monthlyRent : daysElapsed * dailyRate;
-    const paid = getPaidForEquipment(rental, item.equipmentId, paymentsList, true);
-    return total + Math.max(0, totalDue - paid);
-  }, 0);
+  // H-1: this used to reimplement the elapsed-cycle sum with excludeInitial=true
+  // and never add the upfront rent back, while getAgreementBalance — which both
+  // doc comments claimed it agreed with — credits `rental.rentPaidAmount` when
+  // no Payment row represents it. An agreement prepaid at signing therefore
+  // reported its whole prepayment as outstanding here, and since getRentals()
+  // uses this function to set status, it was labelled Overdue and that status
+  // was pushed to Google Sheets — while the Collect Payment screen, reading
+  // getAgreementBalance, correctly showed nothing owing.
+  //
+  // One implementation, one answer.
+  return getAgreementBalance(rental, paymentsList).rentDue;
 }
 
 export interface AgreementBalance {
@@ -4772,6 +4969,23 @@ export function deleteExchange(id: string) {
   return list;
 }
 
+// H-13: setStorageItem's comment claimed cross-tab sync happened "via the
+// storage event listener", but no such listener existed anywhere in the app —
+// medirent-db-updated is dispatched with window.dispatchEvent and never leaves
+// the tab that fired it. Two tabs open on the ERP diverged silently until a
+// Google Sheets round trip happened to reconcile them, and with Sheets disabled
+// they never reconciled at all.
+//
+// Listening on the write stamp alone is enough: setStorageItem already writes
+// it on every mutation, and `storage` only fires in *other* tabs.
+if (isBrowser) {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== "medirent-last-write-time") return;
+    _invalidateRentalsCache();
+    window.dispatchEvent(new Event("medirent-db-updated"));
+  });
+}
+
 export function useDatabaseTrigger() {
   const [version, setVersion] = useState(0);
   useEffect(() => {
@@ -4919,11 +5133,16 @@ export function getNextIncomeExpenseNumber(): string {
 }
 
 export function printIncomeExpensesPDF(
-  entries: IncomeExpenseItem[],
-  entityName: string = "All Entities",
-  dateScopeLabel: string = "All Time"
+  entriesInput: IncomeExpenseItem[],
+  entityNameInput: string = "All Entities",
+  dateScopeLabelInput: string = "All Time"
 ) {
   if (!isBrowser) return;
+
+  // Escape once here rather than at each interpolation site below.
+  const entries = escapeRecordForHtml(entriesInput);
+  const entityName = escapeHtml(entityNameInput);
+  const dateScopeLabel = escapeHtml(dateScopeLabelInput);
 
   const totalIncome = entries
     .filter((e) => e.type === "Income")

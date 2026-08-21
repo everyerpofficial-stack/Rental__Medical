@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import { isGSheetsEnabled } from "@/lib/google-sheets";
-import { syncFromSheetsToLocalStorage, syncMissingFileChunks } from "@/lib/data-store";
+import { syncFromSheetsToLocalStorage, syncMissingFileChunks, flushPendingStatusCorrections } from "@/lib/data-store";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -65,6 +65,9 @@ const navSections = [
       { to: "/payments", label: "Payments", icon: CreditCard },
       { to: "/dues", label: "Rent Dues", icon: CalendarClock },
       { to: "/returns", label: "Returns", icon: RotateCcw },
+      // M-1: /expenses exists in the route tree but had no entry here, in the
+      // bottom nav, or in the command palette — only a typed URL reached it.
+      { to: "/expenses", label: "Income & Expenses", icon: Banknote },
     ],
   },
   {
@@ -102,8 +105,11 @@ export function AppShell({
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  const [userName, setUserName] = useState("Dr. Rao");
-  const [userRole, setUserRole] = useState("Admin");
+  // Seeded empty, not with a placeholder name and "Admin": the optimistic
+  // "Admin" default flashed the Settings nav item to Staff users on every load
+  // before the mount effect corrected it.
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [, setDbVersion] = useState(0);
   // Mobile "More" drawer state
@@ -126,6 +132,16 @@ export function AppShell({
     window.addEventListener("medirent-db-updated", handleDbUpdate);
     return () => window.removeEventListener("medirent-db-updated", handleDbUpdate);
   }, []);
+
+  // C-6: getRentals() runs during render, so when its status-correction pass
+  // fixes a rental it only *queues* the row. Draining that queue is a network
+  // write and belongs in an effect — doing it inline meant one POST per
+  // corrected rental on every render pass. Runs after each render commit, which
+  // is also after each sync-driven re-render, so corrections reach Sheets
+  // promptly without ever firing from render.
+  useEffect(() => {
+    flushPendingStatusCorrections();
+  });
 
   // Auto-sync loop (every 15 seconds) if Google Sheets is enabled
   useEffect(() => {
@@ -194,6 +210,7 @@ export function AppShell({
   };
 
   const getInitials = (name: string) => {
+    if (!name.trim()) return "";
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -593,8 +610,12 @@ export function AppShell({
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
-            {/* Notifications — desktop only */}
+            {/* Notifications — desktop only.
+                Routes to Rent Dues, which is what the badge is actually about;
+                it previously rendered an unread dot with no click handler. */}
             <Button
+              onClick={() => navigate({ to: "/dues" })}
+              title="Rent dues needing attention"
               variant="ghost"
               size="icon"
               className="relative hidden sm:flex h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"

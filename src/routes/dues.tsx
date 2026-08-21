@@ -210,13 +210,76 @@ function PayDialog({
 
   const multiItemTotal = selectedEqIds.reduce((sum, id) => sum + (Number(itemPayments[id]?.amount) || 0), 0);
 
+  // H-4: guards money handling in this dialog.
+  //
+  //  - `isPaying` stops a double-click recording the payment twice. Each pass
+  //    called getNextPaymentNumber(), so both writes got distinct IDs and
+  //    nothing de-duplicated them — the customer's ledger simply showed the
+  //    payment twice.
+  //  - Cash+Bank splits were never checked against the amount being collected,
+  //    so ₹5,000 cash + ₹5,000 bank against a ₹5,000 line recorded ₹10,000, and
+  //    in the single-payment path the success toast reported `payAmount` while
+  //    the rows written totalled cash + bank.
+  //  - Negative entries passed the `> 0` total check but were then silently
+  //    dropped by the per-item loop, so the toast could name an amount that was
+  //    never saved.
+  const [isPaying, setIsPaying] = useState(false);
+
+  const validatePayment = (): string | null => {
+    if (isMultiItem) {
+      for (const eqId of selectedEqIds) {
+        const item = itemPayments[eqId];
+        if (!item) continue;
+        const amt = Number(item.amount) || 0;
+        if (amt < 0) return `Payment amount for ${getEquipmentName(eqId)} cannot be negative.`;
+        if (item.mode === "Cash+Bank" && amt > 0) {
+          const split = (Number(item.cashAmount) || 0) + (Number(item.bankAmount) || 0);
+          if (split !== amt) {
+            return `${getEquipmentName(eqId)}: Cash + Bank must add up to ₹${amt.toLocaleString("en-IN")} — currently ₹${split.toLocaleString("en-IN")}.`;
+          }
+        }
+      }
+      return null;
+    }
+
+    if (payAmount < 0) return "Payment amount cannot be negative.";
+    if (paymentMode === "Cash+Bank" && payAmount > 0) {
+      const split = (Number(cashAmount) || 0) + (Number(bankAmount) || 0);
+      if (split !== payAmount) {
+        return `Cash + Bank must add up to ₹${payAmount.toLocaleString("en-IN")} — currently ₹${split.toLocaleString("en-IN")}.`;
+      }
+    }
+    return null;
+  };
+
   const handlePay = () => {
+    if (isPaying) return;
+    setIsPaying(true);
+    try {
+      runPay();
+    } catch (err) {
+      toast.error("Could not record this payment — nothing was saved.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const runPay = () => {
     if (!paymentDate) {
       toast.error("Please select a payment date.");
       return;
     }
     if (selectedEqIds.length === 0) {
       toast.error("Please select at least one equipment item.");
+      return;
+    }
+
+    const validationError = validatePayment();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
@@ -718,9 +781,10 @@ function PayDialog({
                     <Button
                       type="button"
                       onClick={handlePay}
-                      className="flex-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-sm"
+                      disabled={isPaying}
+                      className="flex-2 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <CheckCircle2 className="h-4 w-4" /> Confirm Payment
+                      <CheckCircle2 className="h-4 w-4" /> {isPaying ? "Recording…" : "Confirm Payment"}
                     </Button>
                   </div>
                 </div>

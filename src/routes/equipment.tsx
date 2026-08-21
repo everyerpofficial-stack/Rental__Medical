@@ -203,7 +203,17 @@ function OwnerActionDialog({
       ownerHistory: updatedHistory,
     };
 
-    saveEquipment(savedEq);
+    try {
+      saveEquipment(savedEq);
+    } catch (err) {
+      // setStorageItem re-throws on QuotaExceededError; surface it instead of
+      // letting the throw escape and leaving the dialog looking inert.
+      toast.error("Could not save this equipment change — nothing was recorded.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+      return;
+    }
 
     toast.success(
       actionType === "return"

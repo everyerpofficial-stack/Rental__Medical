@@ -67,6 +67,7 @@ import {
   extractIdNumber,
   formatEquipmentLabel,
 } from "@/lib/data-store";
+import { reportError } from "@/lib/error-reporting";
 import { useDebounce } from "@/hooks/use-debounce";
 import { numericInputGuard } from "@/lib/utils";
 
@@ -817,6 +818,10 @@ function ReturnsPage() {
   const [dueCashAmount, setDueCashAmount] = useState<string>("");
   const [dueBankAmount, setDueBankAmount] = useState<string>("");
   const lastSelectedAgreementRef = useRef("");
+  // H-5: the equipment id the QR scanner deep-linked in, held until the
+  // agreement-change effect has had its say. Consumed once — a manual agreement
+  // change afterwards still selects every unreturned item, as before.
+  const scannedEquipmentRef = useRef<string | null>(null);
 
   const [historySearch, setHistorySearch] = useState("");
   // PERF: the field stays bound to historySearch so typing is instant; the
@@ -838,6 +843,13 @@ function ReturnsPage() {
     if (agrId) {
       setSelectedAgreement(agrId);
       if (eqId) {
+        // Setting selectedAgreement above triggers the agreement-change effect,
+        // which used to overwrite this narrow selection with every unreturned
+        // item on the agreement — so scanning one machine pre-ticked all of
+        // them, and an operator who did not notice marked equipment returned
+        // that was still with the customer. Stash it and let that effect honour
+        // it instead.
+        scannedEquipmentRef.current = eqId;
         setSelectedEquipmentIds([eqId]);
       }
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -945,10 +957,15 @@ function ReturnsPage() {
       // Search query filter
       const searchLower = debouncedHistorySearch.toLowerCase().trim();
       const matchesSearch = !searchLower || 
-        ret.id.toLowerCase().includes(searchLower) ||
-        ret.customer.toLowerCase().includes(searchLower) ||
-        ret.equipment.toLowerCase().includes(searchLower) ||
-        ret.agreement.toLowerCase().includes(searchLower) ||
+        // H-3: every one of these had to be String()-wrapped like the guarded
+        // lines below. A return row whose customer / equipment / agreement cell
+        // is absent — edited by hand in the spreadsheet, or written by an older
+        // build — threw TypeError here on the first keystroke, inside a useMemo
+        // that runs during render, taking the whole Returns route down.
+        String(ret.id || "").toLowerCase().includes(searchLower) ||
+        String(ret.customer || "").toLowerCase().includes(searchLower) ||
+        String(ret.equipment || "").toLowerCase().includes(searchLower) ||
+        String(ret.agreement || "").toLowerCase().includes(searchLower) ||
         (rental && String(rental.serial || "").toLowerCase().includes(searchLower)) ||
         (customer && (
           String(customer.phone || "").toLowerCase().includes(searchLower) ||
@@ -1089,7 +1106,12 @@ function ReturnsPage() {
         const activeIds = rentalEquipments
           .filter((item: any) => !item.returned)
           .map((item: any) => item.equipmentId);
-        setSelectedEquipmentIds(activeIds);
+        // H-5: a QR scan names one specific machine — respect it.
+        const scanned = scannedEquipmentRef.current;
+        setSelectedEquipmentIds(
+          scanned && activeIds.includes(scanned) ? [scanned] : activeIds
+        );
+        scannedEquipmentRef.current = null;
       } else {
         setReturnDate("");
         setFinalRent("");
@@ -1225,12 +1247,51 @@ function ReturnsPage() {
   const afterDiscountTotalDue = totalDueBeforeDiscount - effectiveDiscount;
   const netRefund = deposit + rentOverpaid - afterDiscountTotalDue;
 
-  const isDateInvalid = selectedRental && returnDate ? parseLocalDate(returnDate) < parseLocalDate(selectedRental.start) : false;
+  // Lower bound: a return cannot predate the agreement it settles.
+  const isDateBeforeStart = selectedRental && returnDate
+    ? parseLocalDate(returnDate) < parseLocalDate(selectedRental.start)
+    : false;
+  // Upper bound: only the lower bound was checked, so a return dated years
+  // ahead was accepted — it set rental.end to that date and drove
+  // getReturnCalculatedRentPerItem to bill the whole intervening period.
+  const isDateInFuture = returnDate
+    ? parseLocalDate(returnDate) > parseLocalDate(getLocalYYYYMMDD())
+    : false;
+  const isDateInvalid = isDateBeforeStart || isDateInFuture;
+  const dateInvalidReason = isDateBeforeStart
+    ? "Return date cannot be earlier than the rental start date."
+    : isDateInFuture
+      ? "Return date cannot be in the future."
+      : "";
 
+  // H-2: setStorageItem re-throws on QuotaExceededError so callers can react.
+  // Without a guard the throw escaped this handler with isSubmitting still true,
+  // and the Process Return button — disabled on that flag — stayed dead until a
+  // page reload. The same failure was already diagnosed and fixed in
+  // customers.tsx; this is the same remedy.
+  //
+  // The work is kept in its own function rather than wrapped in a try block
+  // in place: this body is ~180 statements, and putting all of them inside a
+  // try made every one a throw point in TypeScript's control-flow graph, which
+  // blew the compiler's memory budget. A separate function is its own flow
+  // scope, so the checker stays fast.
   const handleProcessReturn = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    try {
+      runProcessReturn();
+    } catch (err) {
+      reportError(err, { action: "handleProcessReturn", agreement: selectedAgreement });
+      toast.error("Could not save this return — nothing was charged.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
+  const runProcessReturn = () => {
     if (!selectedAgreement || !returnDate || !condition) {
       toast.error("Please fill in Agreement, Return Date, and Condition before processing.");
       setIsSubmitting(false);
@@ -1238,8 +1299,7 @@ function ReturnsPage() {
     }
 
     if (isDateInvalid) {
-      toast.error("Return date cannot be earlier than the rental start date.");
-      setIsSubmitting(false);
+      toast.error(dateInvalidReason);
       return;
     }
 
@@ -1404,7 +1464,6 @@ function ReturnsPage() {
       }
     }
     setSubmitted(true);
-    setIsSubmitting(false);
     refresh();
     setSelectedAgreement("");
     setCollectedBy(typeof window !== "undefined" ? (localStorage.getItem("medirent-user-name") || "") : "");
@@ -1416,7 +1475,7 @@ function ReturnsPage() {
       return;
     }
     if (isDateInvalid) {
-      toast.error("Return date cannot be earlier than the rental start date.");
+      toast.error(dateInvalidReason);
       return;
     }
     if (selectedEquipmentIds.length === 0) {

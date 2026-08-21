@@ -89,33 +89,43 @@ function ExchangesPage() {
     }
   }, [openCreate]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  // H-6: the QR scanner deep-links in with agreementId + equipmentId, but these
+  // three effects each re-read window.location.search — and the first one wiped
+  // it via replaceState. Effects run in declaration order within a commit, so
+  // the second and third always read an already-emptied query string and the
+  // scanned equipment was never selected. (/returns handles the same deep link
+  // correctly by reading everything in one effect before clearing.)
+  //
+  // Read the whole query string once, at mount, into state that survives the
+  // URL being cleaned.
+  const [deepLink] = useState(() => {
+    if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    const agrId = params.get("agreementId");
-    if (agrId) {
-      setSelectedAgreementId(agrId);
-      setOpenCreate(true);
-      // Clean query params so refresh doesn't trigger again
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
+    const agreementId = params.get("agreementId");
+    if (!agreementId) return null;
+    return {
+      agreementId,
+      equipmentId: params.get("equipmentId"),
+      newEquipmentId: params.get("newEquipmentId"),
+    };
+  });
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const eqId = params.get("equipmentId");
+    if (typeof window === "undefined" || !deepLink) return;
+    setSelectedAgreementId(deepLink.agreementId);
+    setOpenCreate(true);
+    if (deepLink.newEquipmentId) setNewEquipmentId(deepLink.newEquipmentId);
+    // Clean query params so a refresh doesn't re-trigger this.
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, [deepLink]);
+
+  // Deferred: the equipment list is only known once the agreement has resolved.
+  useEffect(() => {
+    const eqId = deepLink?.equipmentId;
     if (eqId && agreementItems.some((i) => i.equipmentId === eqId)) {
       setCurrentEquipmentId(eqId);
     }
-  }, [agreementItems]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const newEqId = params.get("newEquipmentId");
-    if (newEqId) {
-      setNewEquipmentId(newEqId);
-    }
-  }, [openCreate]);
+  }, [agreementItems, deepLink]);
 
 
 
@@ -310,7 +320,18 @@ function ExchangesPage() {
       status: exchangeStatus,
     };
 
-    saveExchange(payload);
+    try {
+      saveExchange(payload);
+    } catch (err) {
+      // setStorageItem re-throws on QuotaExceededError; without this the throw
+      // escaped with isSubmitting still true and the Save button stayed dead.
+      toast.error("Could not save this exchange — nothing was recorded.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+      setIsSubmitting(false);
+      return;
+    }
     toast.success(`Exchange request ${finalExchangeId} saved successfully!`);
     setIsSubmitting(false);
     setOpenCreate(false);
@@ -325,7 +346,10 @@ function ExchangesPage() {
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const swapsThisMonth = exchanges.filter((e) => {
-    const d = new Date(e.exchangeDate);
+    // parseLocalDate, not `new Date`: the raw constructor reads a stored
+    // DD-MM-YYYY value as MM-DD-YYYY and treats a bare YYYY-MM-DD as UTC
+    // midnight, both of which mis-bucket exchanges around a month boundary.
+    const d = parseLocalDate(e.exchangeDate);
     return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   }).length;
 

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,6 +67,19 @@ import {
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — Relife" }] }),
+  // H-14: a real route guard, so /settings cannot be reached by typing the URL.
+  // The nav item was hidden for Staff but the route itself rendered — and this
+  // page carries the Reset Database panel.
+  //
+  // This is a UI guard, not a security boundary: the role lives in localStorage
+  // and anyone with devtools can change it. Enforcing it properly requires the
+  // Apps Script to validate a signed session token on every data request.
+  beforeLoad: () => {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("medirent-user-role") !== "Admin") {
+      throw redirect({ to: "/" });
+    }
+  },
   component: SettingsPage,
 });
 
@@ -1579,10 +1592,13 @@ function BackupSettingsTab() {
 }
 
 function SettingsPage() {
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  // H-14: allow-list, not deny-list. Gating on `role === "Staff"` meant a
+  // missing or unexpected role value — a cleared key, a row typed by hand into
+  // the Staff sheet — opened Settings, including the Danger Zone.
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
   const [activeSection, setActiveSection] = useState<"company" | "credentials" | "database" | "backup">("company");
 
-  if (isStaff) {
+  if (!isAdmin) {
     return (
       <AppShell title="Access Denied" subtitle="You do not have permission to view settings.">
         <div className="max-w-4xl mx-auto py-12 text-center">

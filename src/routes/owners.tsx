@@ -45,6 +45,20 @@ export const Route = createFileRoute("/owners")({
   component: OwnersPage,
 });
 
+/**
+ * H-8: `parseFloat(x) || 100` turned a 0% commission into 100%, because 0 is
+ * falsy — a real case for company-owned stock, and on the CSV import path it
+ * rewrote every zero-commission row. There were no bounds either, so negative
+ * and above-100 values were accepted and stored.
+ *
+ * 100 stays the fallback for genuinely missing/unparseable input.
+ */
+function clampCommissionRate(value: unknown): number {
+  const n = typeof value === "number" ? value : parseFloat(String(value ?? "").trim());
+  if (!Number.isFinite(n)) return 100;
+  return Math.min(100, Math.max(0, n));
+}
+
 // Derive avatar color from index — unified hues from design system
 const avatarHues = [
   "bg-primary/15 text-primary",
@@ -83,7 +97,7 @@ function importOwnerRow(row: Record<string, string>): { ok: boolean; error?: str
     phone: phoneDigits,
     email: row.email || "",
     address: row.address || "",
-    commissionRate: parseFloat(row.commissionRate) || 100,
+    commissionRate: clampCommissionRate(row.commissionRate),
     status: "Active",
   });
   return { ok: true };
@@ -123,7 +137,12 @@ function OwnerFormDialog({
     }
   }, [open, owner]);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = () => {
+    // Without an in-flight guard a double-click ran this twice, and each pass
+    // called getNextOwnerNumber(), so two owners were created with two IDs.
+    if (isSaving) return;
     if (!name) {
       toast.error("Organization Name is required.");
       return;
@@ -148,7 +167,7 @@ function OwnerFormDialog({
     const id = owner?.id || getNextOwnerNumber();
     // Default new owners to Active
     const currentStatus = owner?.status || "Active";
-    saveOwner({
+    const payload = {
       id,
       name,
       ownerName,
@@ -156,9 +175,25 @@ function OwnerFormDialog({
       phone,
       email,
       address,
-      commissionRate: parseFloat(commissionRate) || 100,
+      commissionRate: clampCommissionRate(commissionRate),
       status: currentStatus,
-    });
+    };
+
+    setIsSaving(true);
+    try {
+      saveOwner(payload);
+    } catch (err) {
+      // setStorageItem re-throws on QuotaExceededError. Previously the throw
+      // escaped handleSave, so no toast fired and the dialog just sat there —
+      // the operator saw nothing happen at all.
+      toast.error("Could not save this owner — nothing was recorded.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+      return;
+    } finally {
+      setIsSaving(false);
+    }
 
     toast.success(
       owner ? `Owner "${name}" details updated successfully.` : "New equipment owner registered successfully."
