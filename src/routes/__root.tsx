@@ -679,7 +679,7 @@ function RootComponent() {
   // First-run: true when no staff users have been created yet
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  const checkSetupAndAuth = () => {
+  const checkSetupAndAuth = async () => {
     if (typeof window === "undefined") return;
 
     // Check if setup has been done (any staff user accounts exist)
@@ -691,6 +691,24 @@ function RootComponent() {
         hasUsers = Array.isArray(users) && users.length > 0;
       } catch (_) { /* ignore */ }
     }
+
+    // If no users exist locally but Google Sheets is configured, sync from Sheets first
+    const gsheetsEnabled = isGSheetsEnabled();
+    if (!hasUsers && gsheetsEnabled) {
+      try {
+        const { syncFromSheetsToLocalStorage } = await import("@/lib/data-store");
+        await syncFromSheetsToLocalStorage(true); // force pull staff list
+        
+        const updatedStaffRaw = localStorage.getItem("medirent-staff-users");
+        if (updatedStaffRaw) {
+          const users = JSON.parse(updatedStaffRaw);
+          hasUsers = Array.isArray(users) && users.length > 0;
+        }
+      } catch (err) {
+        console.warn("[GSheets] Startup staff sync failed:", err);
+      }
+    }
+
     setNeedsSetup(!hasUsers);
 
     if (hasUsers) {
@@ -716,8 +734,8 @@ function RootComponent() {
       }
     }
 
-    // Asynchronously trigger database sync so logins are pulled on startup
-    if (isGSheetsEnabled()) {
+    // Trigger full background sync for other tables if database is configured
+    if (hasUsers && gsheetsEnabled) {
       import("@/lib/data-store").then(({ syncFromSheetsToLocalStorage }) => {
         syncFromSheetsToLocalStorage();
       });
