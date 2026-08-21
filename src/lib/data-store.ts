@@ -4582,8 +4582,7 @@ export function getRentPaidForAgreement(agreementId: string, monthlyRent: any, r
   const rentPayments = paymentsList.filter(
     (p: any) => p.agreement === agreementId && (p.type === "Rent" || p.type === "Rent Payment") && p.status === "Paid"
   );
-  const totalRentPayments = rentPayments.reduce((sum, p) => sum + cleanNum(p.amount), 0);
-
+  const totalRentPayments = rentPayments.reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
   let initialPaid = 0;
   if (totalRentPayments === 0 && rental) {
     if (rental.rentalPaymentStatus === "Paid") {
@@ -4623,7 +4622,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   const directPaid = paymentsList
     .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
     .filter((p) => p.equipmentId === equipmentId || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
-    .reduce((sum, p) => sum + cleanNum(p.amount), 0);
+    .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
   // 2. Shared/Agreement-level payments (not matching this item nor any other item's serial / equipmentId)
   const sharedPaymentsPaid = paymentsList
@@ -4635,15 +4634,11 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
       }
       return true;
     })
-    .reduce((sum, p) => sum + cleanNum(p.amount), 0);
-  
+    .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
+
   // 3. Initial advance collected when the agreement was created. It lives on the
   //    rental record rather than as a Payment row, so it has to be added in
   //    separately - but only where no Payment row already accounts for it.
-  const hasRecordedPayments = paymentsList.some((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"));
-
-  // ITEM-10 FIX: how much upfront rent this agreement can actually evidence.
-  //
   //  - `rental.totalRent` used to sit in this fallback chain. It is the rent
   //    *charged* over the term, not money received, so any agreement with a
   //    blank rentPaidAmount reported its entire term's rent as already paid and
@@ -4663,10 +4658,25 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // A Payment row tagged to this item, or an untagged agreement-level payment,
   // already represents that money - adding the upfront amount too would count
   // the same rupees twice.
-  const isInitialAlreadyBooked =
-    hasRecordedPayments &&
-    (sharedPaymentsPaid > 0 ||
-      paymentsList.some((p) => p.agreement === rental.id && p.equipmentId === equipmentId));
+  const isInitialAlreadyBooked = paymentsList.some((p) => {
+    if (p.agreement !== rental.id || p.status !== "Paid") return false;
+    if (p.type !== "Rent" && p.type !== "Rent Payment") return false;
+
+    const pDate = parseLocalDate(p.date);
+    const startDate = parseLocalDate(rental.start);
+    if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
+    const diffDays = Math.abs(pDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays > 5) return false;
+
+    if (p.equipmentId) {
+      return p.equipmentId === equipmentId;
+    } else {
+      if (p.notes) {
+        return !items.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()));
+      }
+      return true;
+    }
+  });
 
   const initialPaid = isInitialAlreadyBooked ? 0 : Math.round(initialTotal * shareRatio);
 

@@ -2678,46 +2678,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 </Select>
               </div>
 
-              {/* ITEM-14: in-between discount on the rental amount. Sits with the
-                  other commercial terms so it is agreed at the same moment as
-                  the rent and deposit, and feeds the itemised breakdown below. */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rental Discount</Label>
-                  <div className="flex overflow-hidden rounded-md border border-border/60">
-                    {(["amount", "percent"] as const).map((dm) => (
-                      <button
-                        key={dm}
-                        type="button"
-                        onClick={() => setRentalDiscountMode(dm)}
-                        aria-pressed={rentalDiscountMode === dm}
-                        className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${
-                          rentalDiscountMode === dm
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-background text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {dm === "amount" ? "₹" : "%"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <Input
-                  type="number"
-                  placeholder={rentalDiscountMode === "percent" ? "e.g. 10" : "e.g. 500"}
-                  value={rentalDiscount}
-                  onChange={(e) => setRentalDiscount(e.target.value)}
-                  className="bg-background h-10"
-                />
-                {rentalDiscountVal > 0 && (
-                  <p className="text-[11px] font-semibold text-emerald-700">
-                    Rent after discount: ₹{netRentVal.toLocaleString("en-IN")}
-                    <span className="ml-1 font-normal text-muted-foreground">
-                      (was ₹{totalRentVal.toLocaleString("en-IN")})
-                    </span>
-                  </p>
-                )}
-              </div>
+
 
               {/* Show rent paid amount only if status is Partial */}
               {rentalPaymentStatus === "Partial" && (

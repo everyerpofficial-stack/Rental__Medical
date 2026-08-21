@@ -20,7 +20,7 @@ import {
   MessageCircle, Mail, Phone, Bell,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
@@ -104,19 +104,67 @@ function PayDialog({
   const [cashAmount, setCashAmount] = useState("");
   const [bankAmount, setBankAmount] = useState("");
 
+  const [applyDiscount, setApplyDiscount] = useState(false);
+  const [discountType, setDiscountType] = useState<"one-time" | "permanent">("one-time");
+  const [discountVal, setDiscountVal] = useState("");
+
   const payAmount = Number(manualPayAmount) || 0;
   const isMultiItem = selectedEqIds.length > 1;
 
+  const selectedItemRate = useMemo(() => {
+    if (selectedEqIds.length === 1) {
+      const details = calcUnpaidDetailsForEquipment(rental, selectedEqIds[0]);
+      return details.rate || details.outstanding;
+    }
+    return 0;
+  }, [rental, selectedEqIds, calcUnpaidDetailsForEquipment]);
+
+  const handleDiscountChange = (val: string, apply = applyDiscount) => {
+    setDiscountVal(val);
+    if (apply && selectedEqIds.length === 1) {
+      const disc = Number(val) || 0;
+      const newPayAmount = Math.max(0, selectedItemRate - disc);
+      setManualPayAmount(newPayAmount.toString());
+      if (paymentMode === "Cash+Bank") {
+        const cAmt = Math.round(newPayAmount / 2);
+        setCashAmount(cAmt.toString());
+        setBankAmount((newPayAmount - cAmt).toString());
+      }
+    }
+  };
+
+  const handleApplyDiscountToggle = (checked: boolean) => {
+    setApplyDiscount(checked);
+    if (checked) {
+      handleDiscountChange(discountVal, true);
+    } else {
+      setManualPayAmount(selectedItemRate.toString());
+      if (paymentMode === "Cash+Bank") {
+        const cAmt = Math.round(selectedItemRate / 2);
+        setCashAmount(cAmt.toString());
+        setBankAmount((selectedItemRate - cAmt).toString());
+      }
+    }
+  };
+
   useEffect(() => {
     if (open) {
-      const totalOutstanding = selectedItemsDetails.outstanding;
-      setManualPayAmount(totalOutstanding.toString());
+      let defaultTotal = 0;
+      selectedEqIds.forEach((eqId) => {
+        const details = calcUnpaidDetailsForEquipment(rental, eqId);
+        defaultTotal += details.rate || details.outstanding;
+      });
+      setManualPayAmount(defaultTotal.toString());
       setPaymentDate(getLocalYYYYMMDD());
-      const cAmt = Math.round(totalOutstanding / 2);
+      const cAmt = Math.round(defaultTotal / 2);
       setCashAmount(cAmt.toString());
-      setBankAmount((totalOutstanding - cAmt).toString());
+      setBankAmount((defaultTotal - cAmt).toString());
+
+      setApplyDiscount(false);
+      setDiscountType("one-time");
+      setDiscountVal("");
     }
-  }, [open, selectedEqIds, selectedItemsDetails.outstanding]);
+  }, [open, selectedEqIds]);
 
   const handleAmountChange = (val: string) => {
     setManualPayAmount(val);
@@ -156,13 +204,13 @@ function PayDialog({
           return;
         }
         const details = calcUnpaidDetailsForEquipment(rental, eqId);
-        const outstanding = details.outstanding;
-        const cAmt = Math.round(outstanding / 2);
+        const defaultAmt = details.rate || details.outstanding;
+        const cAmt = Math.round(defaultAmt / 2);
         next[eqId] = {
-          amount: outstanding.toString(),
+          amount: defaultAmt.toString(),
           mode: "Bank",
           cashAmount: cAmt.toString(),
-          bankAmount: (outstanding - cAmt).toString(),
+          bankAmount: (defaultAmt - cAmt).toString(),
           txRef: "",
         };
       });
@@ -361,6 +409,44 @@ function PayDialog({
       return;
     }
 
+    const isSingleEqSelected = selectedEqIds.length === 1;
+    const finalDiscount = (applyDiscount && isSingleEqSelected) ? (Number(discountVal) || 0) : 0;
+
+    // Apply permanent/continuous discount: update rent rate in the database
+    if (finalDiscount > 0 && discountType === "permanent" && isSingleEqSelected) {
+      const eqId = selectedEqIds[0];
+      const rentalsList = getRentals();
+      const rIdx = rentalsList.findIndex((r) => r.id === rental.id);
+      if (rIdx > -1) {
+        const uRental = { ...rentalsList[rIdx] };
+        uRental.equipmentItems = (uRental.equipmentItems || []).map((item: any) => {
+          if (item.equipmentId === eqId) {
+            const isMonthlyItem = item.rentCycle === "Monthly";
+            if (isMonthlyItem) {
+              item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - finalDiscount);
+            } else {
+              item.dailyRent = Math.max(0, (Number(item.dailyRent) || 0) - finalDiscount);
+            }
+          }
+          return item;
+        });
+
+        if (uRental.equipmentId === eqId) {
+          const isMonthlyRental = (uRental as any).rentCycle === "Monthly" || (Number(uRental.monthlyRent) > 0 && Number(uRental.dailyRent) === 0);
+          if (isMonthlyRental) {
+            uRental.monthlyRent = Math.max(0, (Number(uRental.monthlyRent) || 0) - finalDiscount);
+          } else {
+            uRental.dailyRent = Math.max(0, (Number(uRental.dailyRent) || 0) - finalDiscount);
+          }
+        }
+
+        uRental.monthlyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.monthlyRent) || 0), 0);
+        uRental.dailyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.dailyRent) || 0), 0);
+
+        saveRental(uRental);
+      }
+    }
+
     const totalSelectedOutstanding = selectedItemsDetails.outstanding;
 
     // Calculate allocation ratios
@@ -378,6 +464,8 @@ function PayDialog({
     let cashRemaining = Number(cashAmount) || 0;
     let bankRemaining = Number(bankAmount) || 0;
     let payRemaining = payAmount;
+
+    let discountRecorded = false;
 
     selectedEqIds.forEach((eqId, idx) => {
       const itemRatio = eqItemsRatios.find(r => r.eqId === eqId)?.ratio || 0;
@@ -403,9 +491,12 @@ function PayDialog({
       }
 
       const eqName = getEquipmentName(eqId);
+      const isOneTimeDisc = applyDiscount && discountType === "one-time";
 
       if (paymentMode === "Cash+Bank") {
         if (cAmt > 0) {
+          const discToSave = (isOneTimeDisc && !discountRecorded) ? finalDiscount : 0;
+          if (discToSave > 0) discountRecorded = true;
           savePayment({
             id: getNextPaymentNumber(),
             date: paymentDate,
@@ -416,11 +507,14 @@ function PayDialog({
             amount: cAmt,
             mode: "Cash",
             type: "Rent" as const,
-            notes: `${eqName}: Rent Payment (Cash portion of ₹${totalAmt.toLocaleString("en-IN")})`,
+            notes: `${eqName}: Rent Payment (Cash portion of ₹${totalAmt.toLocaleString("en-IN")})${discToSave > 0 ? ` [Discount of ₹${discToSave} applied]` : ""}`,
             status: "Paid" as const,
+            discount: discToSave,
           });
         }
         if (bAmt > 0) {
+          const discToSave = (isOneTimeDisc && !discountRecorded) ? finalDiscount : 0;
+          if (discToSave > 0) discountRecorded = true;
           savePayment({
             id: getNextPaymentNumber(),
             date: paymentDate,
@@ -432,12 +526,15 @@ function PayDialog({
             mode: "Bank",
             type: "Rent" as const,
             txRef,
-            notes: `${eqName}: Rent Payment (Bank portion of ₹${totalAmt.toLocaleString("en-IN")})`,
+            notes: `${eqName}: Rent Payment (Bank portion of ₹${totalAmt.toLocaleString("en-IN")})${discToSave > 0 ? ` [Discount of ₹${discToSave} applied]` : ""}`,
             status: "Paid" as const,
+            discount: discToSave,
           });
         }
       } else {
         if (totalAmt > 0) {
+          const discToSave = (isOneTimeDisc && !discountRecorded) ? finalDiscount : 0;
+          if (discToSave > 0) discountRecorded = true;
           savePayment({
             id: getNextPaymentNumber(),
             date: paymentDate,
@@ -449,8 +546,9 @@ function PayDialog({
             mode: paymentMode as any,
             type: "Rent" as const,
             txRef,
-            notes: `${eqName}: Rent Payment`,
+            notes: `${eqName}: Rent Payment${discToSave > 0 ? ` [Discount of ₹${discToSave} applied]` : ""}`,
             status: "Paid" as const,
+            discount: discToSave,
           });
         }
       }
@@ -672,16 +770,78 @@ function PayDialog({
                     <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">Payment Details</h4>
 
                     {!isMultiItem && (
-                      <div className="space-y-1.5">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 500"
-                          value={manualPayAmount}
-                          onChange={(e) => handleAmountChange(e.target.value)}
-                          className="h-9 text-[13px] font-bold bg-background text-foreground"
-                        />
-                      </div>
+                      <>
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount to Pay (₹)</Label>
+                          <Input
+                            type="number"
+                            placeholder="e.g. 500"
+                            value={manualPayAmount}
+                            onChange={(e) => handleAmountChange(e.target.value)}
+                            className="h-9 text-[13px] font-bold bg-background text-foreground"
+                          />
+                        </div>
+
+                        {selectedEqIds.length === 1 && (
+                          <div className="p-3.5 rounded-xl border border-dashed border-primary/30 bg-primary/5 space-y-3 mt-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                id="apply-discount-checkbox"
+                                type="checkbox"
+                                checked={applyDiscount}
+                                onChange={(e) => handleApplyDiscountToggle(e.target.checked)}
+                                className="rounded border-muted text-primary focus:ring-primary h-4 w-4 shrink-0"
+                              />
+                              <Label htmlFor="apply-discount-checkbox" className="text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                                Apply Discount
+                              </Label>
+                            </div>
+
+                            {applyDiscount && (
+                              <div className="space-y-2.5 animate-[fade-in_0.2s_ease-out] transition-all">
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Discount Type</Label>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setDiscountType("one-time")}
+                                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold border transition-all text-center ${
+                                        discountType === "one-time"
+                                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                                          : "bg-background text-muted-foreground border-border hover:bg-muted/40"
+                                      }`}
+                                    >
+                                      This Month Only
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDiscountType("permanent")}
+                                      className={`flex-1 py-1 px-2 rounded-md text-[11px] font-bold border transition-all text-center ${
+                                        discountType === "permanent"
+                                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                                          : "bg-background text-muted-foreground border-border hover:bg-muted/40"
+                                      }`}
+                                    >
+                                      All Future Months
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Discount Amount (₹)</Label>
+                                  <Input
+                                    type="number"
+                                    placeholder="e.g. 500"
+                                    value={discountVal}
+                                    onChange={(e) => handleDiscountChange(e.target.value)}
+                                    className="h-8 text-[12px] bg-background font-semibold"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
 
                     <div className="space-y-1.5">
@@ -868,7 +1028,8 @@ function DuesPage() {
         rateText: "₹0",
         isMonthly: false,
         totalDue: 0,
-        grandTotalPaid: 0
+        grandTotalPaid: 0,
+        rate: 0
       };
     }
 
@@ -934,7 +1095,9 @@ function DuesPage() {
       rateText = `₹${dailyRate.toLocaleString("en-IN")}/day`;
     }
 
-    return { unpaidMonths, unpaidDays, outstanding, unpaidText, rateText, isMonthly, totalDue, grandTotalPaid };
+    const rate = isMonthly ? monthlyRent : dailyRate;
+
+    return { unpaidMonths, unpaidDays, outstanding, unpaidText, rateText, isMonthly, totalDue, grandTotalPaid, rate };
   };
 
   // Filter out completed/cancelled rentals, and agreements where everything is returned AND fully paid
