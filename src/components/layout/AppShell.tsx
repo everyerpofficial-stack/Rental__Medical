@@ -65,9 +65,6 @@ const navSections = [
       { to: "/payments", label: "Payments", icon: CreditCard },
       { to: "/dues", label: "Rent Dues", icon: CalendarClock },
       { to: "/returns", label: "Returns", icon: RotateCcw },
-      // M-1: /expenses exists in the route tree but had no entry here, in the
-      // bottom nav, or in the command palette — only a typed URL reached it.
-      { to: "/expenses", label: "Income & Expenses", icon: Banknote },
     ],
   },
   {

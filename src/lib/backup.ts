@@ -31,7 +31,6 @@ export const BACKUP_KEYS = [
   "medirent-owners",
   "medirent-documents",
   "medirent-exchanges",
-  "medirent-income-expenses",
   "medirent-staff-users",
   "medirent-company-settings",
 ] as const;

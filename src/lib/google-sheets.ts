@@ -465,7 +465,6 @@ export const SHEETS = {
   FILE_CHUNKS: "FileChunks",
   STAFF: "Staff",
   SETTINGS: "Settings",
-  INCOME_EXPENSES: "IncomeExpenses",
 } as const;
 
 /** Send OTP verification code to a user's email via GET (avoids CORS redirect issue with POST) */
