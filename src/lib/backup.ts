@@ -228,13 +228,31 @@ function escapeXml(str: unknown): string {
     .replace(/'/g, "&apos;");
 }
 
-function buildDocLink(doc: any, cust: any): string {
-  if (!doc) return "N/A";
+function cleanDate(val: unknown): string {
+  if (val === null || val === undefined) return "";
+  const s = String(val).trim();
+  if (!s) return "";
+  if (s.includes("T")) {
+    const datePart = s.split("T")[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+      const [yyyy, mm, dd] = datePart.split("-");
+      return `${dd}-${mm}-${yyyy}`;
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [yyyy, mm, dd] = s.split("-");
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return s;
+}
+
+function buildDocLink(doc: any, cust: any): { href?: string; text: string } {
+  if (!doc) return { text: "N/A" };
   if (doc.url && (doc.url.startsWith("http://") || doc.url.startsWith("https://"))) {
-    return `<a href="${escapeXml(doc.url)}" target="_blank">Open Document Link</a>`;
+    return { href: doc.url, text: "Open Document Link" };
   }
   if (doc.fileData && (doc.fileData.startsWith("http://") || doc.fileData.startsWith("https://"))) {
-    return `<a href="${escapeXml(doc.fileData)}" target="_blank">Open Document Link</a>`;
+    return { href: doc.fileData, text: "Open Document Link" };
   }
   if (doc.type === "Location Tag") {
     let locText = doc.fileData || "";
@@ -263,80 +281,135 @@ function buildDocLink(doc: any, cust: any): string {
       }
     }
     if (mapUrl) {
-      return `<a href="${escapeXml(mapUrl)}" target="_blank">Google Maps Direction</a>`;
+      return { href: mapUrl, text: "Google Maps Direction" };
     }
   }
   if (doc.fileData && doc.fileData.startsWith("data:")) {
-    return `Stored in ERP DB (${doc.size || 'Image/PDF Data'})`;
+    return { text: `Stored in ERP DB (${doc.size || 'Image/PDF Data'})` };
   }
-  return `Stored in ERP Database (ID: ${doc.id || 'Doc'})`;
+  return { text: `Stored in ERP Database (ID: ${doc.id || 'Doc'})` };
 }
 
 export interface ExcelSheetDefinition {
   name: string;
   headers: string[];
-  rows: (string | number)[][];
+  rows: (any)[][];
   colWidths?: number[];
 }
 
 export function generateMultiSheetExcel(filename: string, sheets: ExcelSheetDefinition[]) {
   if (!isBrowser()) return;
   const xlsName = filename.endsWith(".xls") ? filename : `${filename.replace(/\.[^/.]+$/, "")}.xls`;
-  let worksheetXml = "";
-  let tablesHtml = "";
+
+  let worksheetsXml = "";
 
   sheets.forEach((sheet) => {
     const cleanSheetName = sheet.name.replace(/[:\\/?*\[\]]/g, "").slice(0, 31);
-    worksheetXml += `
-    <x:ExcelWorksheet>
-      <x:Name>${escapeXml(cleanSheetName)}</x:Name>
-      <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-    </x:ExcelWorksheet>`;
-
-    tablesHtml += `\n  <table id="${escapeXml(cleanSheetName)}">\n    <thead>\n      <tr>`;
-    sheet.headers.forEach((h, i) => {
-      const widthStyle = sheet.colWidths && sheet.colWidths[i] ? ` style="width: ${Number(sheet.colWidths[i])}px;"` : "";
-      tablesHtml += `\n        <th${widthStyle}>${escapeXml(h)}</th>`;
-    });
-    tablesHtml += `\n      </tr>\n    </thead>\n    <tbody>`;
-
-    sheet.rows.forEach((row) => {
-      tablesHtml += `\n      <tr>`;
-      row.forEach((rawCell) => {
-        const cell = rawCell === null || rawCell === undefined ? "" : String(rawCell);
-        const isHtml = cell.includes("<a ") && cell.includes("</a>");
-        const isNumStr = !isHtml && (/^\+?\d{8,}$/.test(cell.trim()) || /^[A-Z0-9]{3,}-[A-Z0-9-]+$/i.test(cell.trim()));
-        const fmtAttr = isNumStr ? ' class="text-fmt"' : "";
-        tablesHtml += `\n        <td${fmtAttr}>${isHtml ? cell : escapeXml(cell)}</td>`;
+    
+    let colsXml = "";
+    if (sheet.colWidths && sheet.colWidths.length > 0) {
+      sheet.colWidths.forEach((w) => {
+        colsXml += `<Column ss:Width="${Number(w) || 120}"/>`;
       });
-      tablesHtml += `\n      </tr>`;
+    }
+
+    let headerRowsXml = "<Row>";
+    sheet.headers.forEach((h) => {
+      headerRowsXml += `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`;
     });
-    tablesHtml += `\n    </tbody>\n  </table>\n<br/>`;
+    headerRowsXml += "</Row>";
+
+    let dataRowsXml = "";
+    sheet.rows.forEach((row) => {
+      dataRowsXml += "<Row>";
+      row.forEach((rawCell) => {
+        if (rawCell && typeof rawCell === "object" && rawCell.text !== undefined) {
+          if (rawCell.href) {
+            dataRowsXml += `<Cell ss:StyleID="Hyperlink" ss:HRef="${escapeXml(rawCell.href)}"><Data ss:Type="String">${escapeXml(rawCell.text)}</Data></Cell>`;
+          } else {
+            dataRowsXml += `<Cell ss:StyleID="Default"><Data ss:Type="String">${escapeXml(rawCell.text)}</Data></Cell>`;
+          }
+        } else {
+          const val = rawCell === null || rawCell === undefined ? "" : String(rawCell);
+          const isNum = typeof rawCell === "number";
+          const isPhoneOrId = !isNum && (/^\+?\d{7,}$/.test(val.trim()) || /^[A-Z0-9]{3,}-[A-Z0-9-]+$/i.test(val.trim()));
+          
+          if (isPhoneOrId) {
+            dataRowsXml += `<Cell ss:StyleID="StringText"><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`;
+          } else if (isNum) {
+            dataRowsXml += `<Cell ss:StyleID="Default"><Data ss:Type="Number">${val}</Data></Cell>`;
+          } else {
+            dataRowsXml += `<Cell ss:StyleID="Default"><Data ss:Type="String">${escapeXml(val)}</Data></Cell>`;
+          }
+        }
+      });
+      dataRowsXml += "</Row>";
+    });
+
+    worksheetsXml += `
+ <Worksheet ss:Name="${escapeXml(cleanSheetName)}">
+  <Table>
+   ${colsXml}
+   ${headerRowsXml}
+   ${dataRowsXml}
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <DisplayGridlines/>
+  </WorksheetOptions>
+ </Worksheet>`;
   });
 
-  const content = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-<head>
-<!--[if gte mso 9]>
-<xml>
- <x:ExcelWorkbook>
-  <x:ExcelWorksheets>${worksheetXml}
-  </x:ExcelWorksheets>
- </x:ExcelWorkbook>
-</xml>
-<![endif]-->
-<meta charset="UTF-8">
-<style>
-  th { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #1e3a8a; color: #ffffff; border: 0.5pt solid #cbd5e1; text-align: left; padding: 6px; font-size: 10pt; }
-  td { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px; font-size: 9.5pt; color: #334155; }
-  .text-fmt { mso-number-format:"\\@"; }
-  a { color: #2563eb; text-decoration: underline; font-weight: 500; }
-</style>
-</head>
-<body>${tablesHtml}
-</body>
-</html>`;
+  const xmlContent = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Header">
+   <Font ss:FontName="Segoe UI" ss:Size="10" ss:Bold="1" ss:Color="#FFFFFF"/>
+   <Interior ss:Color="#1E3A8A" ss:Pattern="Solid"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="Default">
+   <Font ss:FontName="Segoe UI" ss:Size="9.5" ss:Color="#334155"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="StringText">
+   <NumberFormat ss:Format="@"/>
+   <Font ss:FontName="Segoe UI" ss:Size="9.5" ss:Color="#334155"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+  <Style ss:ID="Hyperlink">
+   <Font ss:FontName="Segoe UI" ss:Size="9.5" ss:Color="#2563EB" ss:Underline="Single"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+   </Borders>
+  </Style>
+ </Styles>
+ ${worksheetsXml}
+</Workbook>`;
 
-  triggerDownload(xlsName, content, "application/vnd.ms-excel;charset=utf-8");
+  triggerDownload(xlsName, xmlContent, "application/vnd.ms-excel;charset=utf-8");
 }
 
 export function downloadBackupExcel(): BackupSnapshot {
@@ -369,7 +442,7 @@ export function downloadBackupExcel(): BackupSnapshot {
       rows: equipment.map((e: any) => [
         e.id || "", e.name || e.category || "", e.model || "", e.serial || "", e.ownerName || e.owner || "Own",
         Number(e.monthlyRent || e.rentRate) || 0, Number(e.dailyRent) || 0, Number(e.deposit) || 0,
-        e.status || "Available", e.purchaseDate || "", Number(e.purchaseCost) || 0
+        e.status || "Available", cleanDate(e.purchaseDate), Number(e.purchaseCost) || 0
       ])
     },
     {
@@ -385,7 +458,7 @@ export function downloadBackupExcel(): BackupSnapshot {
           : (r.serial || "");
         return [
           r.id || "", r.customerId || "", r.customer || "", r.consultingHospital || "", r.referredBy || "",
-          r.start || "", r.end || "", Number(r.monthlyRent) || 0, Number(r.deposit) || 0,
+          cleanDate(r.start), cleanDate(r.end), Number(r.monthlyRent) || 0, Number(r.deposit) || 0,
           items, serials, r.status || "Active", r.paymentMode || "Cash", r.paymentCollectedBy || "", r.remarks || r.notes || ""
         ];
       })
@@ -397,7 +470,7 @@ export function downloadBackupExcel(): BackupSnapshot {
       rows: payments.map((p: any) => [
         p.id || "", p.agreement || p.rentalId || "", p.customer || p.customerName || "", p.type || "Rent",
         Number(p.amount) || 0, Number(p.discount) || 0, p.mode || p.paymentMode || "Cash",
-        Number(p.cashPaidAmount) || 0, Number(p.bankUpiPaidAmount) || 0, p.date || p.paymentDate || "",
+        Number(p.cashPaidAmount) || 0, Number(p.bankUpiPaidAmount) || 0, cleanDate(p.date || p.paymentDate),
         p.collectedBy || p.paymentCollectedBy || "", p.status || "Paid", p.remarks || p.notes || ""
       ])
     },
@@ -406,7 +479,7 @@ export function downloadBackupExcel(): BackupSnapshot {
       headers: ["Return ID", "Agreement ID", "Customer Name", "Return Date", "Items Returned", "Damage Charges (₹)", "Return Discount (₹)", "Unpaid Accessories (₹)", "Deposit Refunded (₹)", "Status", "Payment Mode", "Collector Name", "Remarks"],
       colWidths: [110, 130, 180, 110, 200, 130, 130, 130, 130, 110, 110, 130, 180],
       rows: returnsList.map((ret: any) => [
-        ret.id || "", ret.agreementId || ret.rentalId || "", ret.customerName || ret.customer || "", ret.returnDate || ret.date || "",
+        ret.id || "", ret.agreementId || ret.rentalId || "", ret.customerName || ret.customer || "", cleanDate(ret.returnDate || ret.date),
         Array.isArray(ret.items) ? ret.items.map((i: any) => i.name || i.equipmentId).join(", ") : (ret.equipment || ""),
         Number(ret.damageCharges) || 0, Number(ret.returnDiscount) || 0, Number(ret.unpaidAccessoriesCost) || 0,
         Number(ret.refundedDeposit) || 0, ret.settlementStatus || ret.status || "Completed", ret.paymentMode || "Cash",
@@ -430,7 +503,7 @@ export function downloadBackupExcel(): BackupSnapshot {
         const cust = customers.find((c: any) => c.id === d.customerId);
         return [
           d.id || "", d.customerId || "", cust?.name || d.customerName || "", d.rentalId || "",
-          d.type || "Document", d.name || "", d.size || "", d.date || "", buildDocLink(d, cust)
+          d.type || "Document", d.name || "", d.size || "", cleanDate(d.date), buildDocLink(d, cust)
         ];
       })
     },
@@ -441,7 +514,7 @@ export function downloadBackupExcel(): BackupSnapshot {
       rows: exchanges.map((ex: any) => [
         ex.id || "", ex.rentalId || ex.agreementId || "", ex.customerName || ex.customer || "",
         ex.oldEquipmentName || ex.oldSerial || "", ex.newEquipmentName || ex.newSerial || "",
-        ex.date || "", ex.reason || "", ex.handledBy || ""
+        cleanDate(ex.date), ex.reason || "", ex.handledBy || ""
       ])
     },
     {
@@ -449,7 +522,7 @@ export function downloadBackupExcel(): BackupSnapshot {
       headers: ["User ID", "Full Name", "Username / Phone", "Role", "Status", "Created Date"],
       colWidths: [100, 180, 140, 100, 90, 110],
       rows: staffUsers.map((s: any) => [
-        s.id || "", s.name || "", s.username || s.phone || "", s.role || "Staff", s.status || "Active", s.createdAt || ""
+        s.id || "", s.name || "", s.username || s.phone || "", s.role || "Staff", s.status || "Active", cleanDate(s.createdAt)
       ])
     }
   ];

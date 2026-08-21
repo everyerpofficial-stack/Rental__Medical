@@ -2082,8 +2082,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           emptyText="No equipment found."
                           options={itemsForSelect.map((e) => ({
                             value: e.id,
-                            // ITEM-7: `Name - Model (S/N: Serial)` everywhere equipment is named.
-                            label: formatEquipmentLabel(e),
+                            label: formatEquipmentLabel({ name: e.name || e.category, model: e.model }),
                           }))}
                           className="h-9"
                         />

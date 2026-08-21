@@ -2254,10 +2254,8 @@ function ReturnsPage() {
                       </div>
                     </div>
 
-                    <Textarea
-                      readOnly
-                      rows={3}
-                      value={generateWhatsAppPickupMessage({
+                    {(() => {
+                      const waMsgText = generateWhatsAppPickupMessage({
                         customerName: selectedRental.customer,
                         rentDate: selectedRental.start,
                         phone: selectedCustomer?.phone || (selectedRental as any)?.phone,
@@ -2275,9 +2273,17 @@ function ReturnsPage() {
                         rental: selectedRental,
                         customer: selectedCustomer,
                         equipmentIds: selectedEquipmentIds,
-                      })}
-                      className="font-mono text-[11px] bg-background border-emerald-200 leading-normal p-2 resize-none"
-                    />
+                      });
+                      const lineCount = (waMsgText.match(/\n/g) || []).length + 1;
+                      return (
+                        <Textarea
+                          readOnly
+                          rows={Math.max(8, lineCount)}
+                          value={waMsgText}
+                          className="font-mono text-[11px] bg-background border-emerald-200 leading-normal p-2 resize-none w-full"
+                        />
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
