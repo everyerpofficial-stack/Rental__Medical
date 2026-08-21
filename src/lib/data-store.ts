@@ -2406,7 +2406,7 @@ export function downloadFile(filename: string, content: string, mimeType: string
 }
 
 // Helper to download a styled Excel (.xls) file with bold headings and custom widths
-export function downloadExcel(filename: string, headers: string[], rows: string[][], colWidths?: number[]) {
+export function downloadExcel(filename: string, headers: string[], rows: (string | number)[][], colWidths?: number[]) {
   if (typeof window === "undefined" || typeof document === "undefined") return;
   
   const xlsName = filename.endsWith(".csv") ? filename.replace(".csv", ".xls") : (filename.endsWith(".xls") ? filename : filename + ".xls");
@@ -2417,7 +2417,7 @@ export function downloadExcel(filename: string, headers: string[], rows: string[
 <meta charset="UTF-8">
 <style>
   th { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #1e3a8a; color: #ffffff; border: 0.5pt solid #cbd5e1; text-align: left; padding: 6px; font-size: 10pt; }
-  td { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px; font-size: 9.5pt; color: #334155; }
+  td { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px; font-size: 9.5pt; color: #334155; white-space: pre-wrap; mso-number-format:"\\@"; vertical-align: top; }
 </style>
 </head>
 <body>

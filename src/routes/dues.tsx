@@ -1338,12 +1338,12 @@ function DuesPage() {
       const r = item.rental;
       const cust = customersList.find((c: any) => c.id === r.customerId);
 
-      // Show all phone numbers (primary, alt, contact3)
+      // Show all phone numbers down by down
       const p1 = r.phone || cust?.phone || "";
       const p2 = r.altPhone || cust?.altPhone || "";
       const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
       const phoneList = [p1, p2, p3].map((p) => String(p || "").trim()).filter(Boolean);
-      const allPhones = Array.from(new Set(phoneList)).join(" / ");
+      const allPhones = Array.from(new Set(phoneList)).join("\n");
 
       const eqItems = r.equipmentItems || [
         {
@@ -1354,13 +1354,13 @@ function DuesPage() {
         }
       ];
 
-      // Equipment Name + Model Number (NO serial numbers)
+      // Equipment Name + Model Number down by down
       const eqNames = eqItems.map((ei: any) => {
         const eq = equipmentById.get(ei.equipmentId);
         const name = ei.name || getEquipmentName(ei.equipmentId);
         const model = ei.model || eq?.model || "";
         return model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
-      }).join(", ");
+      }).join("\n");
 
       const depositVal = eqItems.reduce((sum: number, ei: any) => sum + (Number(ei.deposit) || 0), 0) || Number(r.deposit) || 0;
       const startDateFormatted = formatDateDDMMYYYY(r.start);
@@ -1369,12 +1369,12 @@ function DuesPage() {
         const isMonthly = Number(ei.monthlyRent) > 0;
         const rate = isMonthly ? Number(ei.monthlyRent) : Number(ei.dailyRent || ei.rentRate || 0);
         return `₹${rate.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}`;
-      }).join(", ");
+      }).join("\n");
 
       const pendingDurations = eqItems.map((ei: any) => {
         const { unpaidText } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
         return unpaidText;
-      }).filter((t: string) => t && t !== "—").join(", ");
+      }).filter((t: string) => t && t !== "—").join("\n");
 
       return [
         r.customer || "Unknown",
