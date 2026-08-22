@@ -2226,10 +2226,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       {/* Equipment Details Display Banner */}
                       {(eqItem.equipmentId || eqItem.serial || eqItem.model) && (
                         <div className="sm:col-span-6 flex flex-wrap items-center gap-x-4 gap-y-1.5 bg-muted/40 border border-border/60 rounded-md px-3 py-2 text-[12px] mt-1">
-                          <span className="font-semibold text-foreground flex items-center gap-1.5">
-                            <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                            Selected Equipment Details:
-                          </span>
                           <span className="text-muted-foreground">
                             Model Number: <strong className="text-foreground font-mono bg-background px-1.5 py-0.5 rounded border border-border/50">{eqItem.model || equipmentList.find(e => e.id === eqItem.equipmentId)?.model || "Standard"}</strong>
                           </span>

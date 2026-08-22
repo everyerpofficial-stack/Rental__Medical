@@ -192,6 +192,7 @@ function PayDialog({
   interface ItemPaymentState {
     amount: string;
     discount?: string;
+    discountType?: "one-time" | "permanent";
     mode: "Cash" | "Bank" | "Cash+Bank";
     cashAmount: string;
     bankAmount: string;
@@ -222,6 +223,7 @@ function PayDialog({
         next[eqId] = {
           amount: defaultAmt.toString(),
           discount: "",
+          discountType: "one-time",
           mode: "Bank",
           cashAmount: cAmt.toString(),
           bankAmount: (defaultAmt - cAmt).toString(),
@@ -238,6 +240,10 @@ function PayDialog({
 
   const handleItemDiscountChange = (eqId: string, val: string) => {
     updateItemPayment(eqId, { discount: val });
+  };
+
+  const handleItemDiscountTypeChange = (eqId: string, type: "one-time" | "permanent") => {
+    updateItemPayment(eqId, { discountType: type });
   };
 
   const handleItemAmountChange = (eqId: string, val: string) => {
@@ -359,6 +365,34 @@ function PayDialog({
       const itemsToPay = selectedEqIds
         .map((eqId) => ({ eqId, state: itemPayments[eqId] }))
         .filter((it) => it.state && (Number(it.state.amount) > 0 || Number(it.state.discount) > 0));
+
+      // Update permanent discounts in rental DB if any item has a permanent discount
+      const permDiscountItems = itemsToPay.filter(
+        (it) => it.state.discountType === "permanent" && (Number(it.state.discount) || 0) > 0
+      );
+      if (permDiscountItems.length > 0) {
+        const rentalsList = getRentals();
+        const rIdx = rentalsList.findIndex((r) => r.id === rental.id);
+        if (rIdx > -1) {
+          const uRental = { ...rentalsList[rIdx] };
+          uRental.equipmentItems = (uRental.equipmentItems || []).map((item: any) => {
+            const match = permDiscountItems.find((p) => p.eqId === item.equipmentId);
+            if (match) {
+              const dVal = Number(match.state.discount) || 0;
+              const isMonthlyItem = item.rentCycle === "Monthly";
+              if (isMonthlyItem) {
+                item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - dVal);
+              } else {
+                item.dailyRent = Math.max(0, (Number(item.dailyRent) || 0) - dVal);
+              }
+            }
+            return item;
+          });
+          uRental.monthlyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.monthlyRent) || 0), 0);
+          uRental.dailyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.dailyRent) || 0), 0);
+          saveRental(uRental);
+        }
+      }
 
       const standardItems = itemsToPay.filter((it) => it.state.mode !== "Cash+Bank");
       const splitItems = itemsToPay.filter((it) => it.state.mode === "Cash+Bank");
@@ -761,11 +795,11 @@ function PayDialog({
 
                               {isMultiItem && isChecked && itemPayments[item.equipmentId] && (
                                 <div
-                                  className="mt-3 pt-3 border-t border-border/40 space-y-2"
+                                  className="mt-3 pt-3 border-t border-border/40 space-y-2.5"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <div className="grid grid-cols-3 gap-2">
-                                    <div className="space-y-1">
+                                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                                    <div className="sm:col-span-4 space-y-1">
                                       <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
                                       <Input
                                         type="number"
@@ -774,8 +808,34 @@ function PayDialog({
                                         className="h-8 text-[12px] bg-background font-semibold"
                                       />
                                     </div>
-                                    <div className="space-y-1">
-                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Discount (₹)</Label>
+                                    <div className="sm:col-span-5 space-y-1">
+                                      <div className="flex items-center justify-between">
+                                        <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Discount (₹)</Label>
+                                        <div className="flex gap-0.5 bg-muted/60 p-0.5 rounded border border-border/50">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleItemDiscountTypeChange(item.equipmentId, "one-time")}
+                                            className={`px-1.5 py-0.2 text-[9px] font-bold rounded transition-all ${
+                                              (itemPayments[item.equipmentId].discountType || "one-time") === "one-time"
+                                                ? "bg-emerald-600 text-white shadow-xs"
+                                                : "text-muted-foreground hover:text-foreground"
+                                            }`}
+                                          >
+                                            One-Time
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleItemDiscountTypeChange(item.equipmentId, "permanent")}
+                                            className={`px-1.5 py-0.2 text-[9px] font-bold rounded transition-all ${
+                                              itemPayments[item.equipmentId].discountType === "permanent"
+                                                ? "bg-emerald-600 text-white shadow-xs"
+                                                : "text-muted-foreground hover:text-foreground"
+                                            }`}
+                                          >
+                                            Perm
+                                          </button>
+                                        </div>
+                                      </div>
                                       <Input
                                         type="number"
                                         placeholder="0"
@@ -784,7 +844,7 @@ function PayDialog({
                                         className="h-8 text-[12px] bg-background font-semibold border-emerald-500/30"
                                       />
                                     </div>
-                                    <div className="space-y-1">
+                                    <div className="sm:col-span-3 space-y-1">
                                       <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Method</Label>
                                       <Select
                                         value={itemPayments[item.equipmentId].mode}
