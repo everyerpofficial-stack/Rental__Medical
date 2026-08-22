@@ -2222,23 +2222,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           }}
                         />
                       </div>
-
-                      {/* Equipment Details Display Banner */}
-                      {(eqItem.equipmentId || eqItem.serial || eqItem.model) && (
-                        <div className="sm:col-span-6 flex flex-wrap items-center gap-x-4 gap-y-1.5 bg-muted/40 border border-border/60 rounded-md px-3 py-2 text-[12px] mt-1">
-                          <span className="text-muted-foreground">
-                            Model Number: <strong className="text-foreground font-mono bg-background px-1.5 py-0.5 rounded border border-border/50">{eqItem.model || equipmentList.find(e => e.id === eqItem.equipmentId)?.model || "Standard"}</strong>
-                          </span>
-                          <span className="text-muted-foreground">
-                            Series Number: <strong className="text-foreground font-mono bg-background px-1.5 py-0.5 rounded border border-border/50">{eqItem.serial || equipmentList.find(e => e.id === eqItem.equipmentId)?.serial || "—"}</strong>
-                          </span>
-                          {equipmentList.find(e => e.id === eqItem.equipmentId)?.owner && (
-                            <span className="text-muted-foreground">
-                              Owner: <strong className="text-foreground">{equipmentList.find(e => e.id === eqItem.equipmentId)?.owner}</strong>
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
                   );
                 })}

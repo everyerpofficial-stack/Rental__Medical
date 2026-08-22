@@ -274,12 +274,12 @@ export function formatEquipmentLabel(src: {
   const serial = String(src.serial || "").trim();
 
   let label = name || "Equipment";
+  if (serial) {
+    label += ` (S/N: ${serial})`;
+  }
   // Skip a model that merely repeats the name (some legacy rows duplicate it).
   if (model && model.toLowerCase() !== name.toLowerCase()) {
     label += ` - ${model}`;
-  }
-  if (serial) {
-    label += ` (S/N: ${serial})`;
   }
   return label;
 }
@@ -624,16 +624,25 @@ export function peekNextEquipmentNumber(category: string): string {
   return `EQ-${prefix}-${String(current + 1).padStart(4, "0")}`;
 }
 
-// Generic LocalStorage helpers
+// Generic LocalStorage helpers with in-memory parsed object cache
+const storageCache = new Map<string, { raw: string | null; parsed: any }>();
+
 function getStorageItem<T>(key: string, initialData: T): T {
   if (!isBrowser) return initialData;
-  const data = localStorage.getItem(key);
-  if (!data) {
+  const raw = localStorage.getItem(key);
+  if (raw === null) {
     localStorage.setItem(key, JSON.stringify(initialData));
+    storageCache.set(key, { raw: JSON.stringify(initialData), parsed: initialData });
     return initialData;
   }
+  const cached = storageCache.get(key);
+  if (cached && cached.raw === raw) {
+    return cached.parsed as T;
+  }
   try {
-    return JSON.parse(data) as T;
+    const parsed = JSON.parse(raw) as T;
+    storageCache.set(key, { raw, parsed });
+    return parsed;
   } catch {
     return initialData;
   }
@@ -642,7 +651,9 @@ function getStorageItem<T>(key: string, initialData: T): T {
 function setStorageItem<T>(key: string, data: T): void {
   if (isBrowser) {
     try {
-      localStorage.setItem(key, JSON.stringify(data));
+      const raw = JSON.stringify(data);
+      localStorage.setItem(key, raw);
+      storageCache.set(key, { raw, parsed: data });
     } catch (e) {
       // QuotaExceededError — localStorage is full (5-10MB browser limit).
       // This typically happens when base64 images/documents accumulate.
@@ -661,21 +672,8 @@ function setStorageItem<T>(key: string, data: T): void {
       throw e; // Re-throw so callers know the write failed
     }
     if (key !== "medirent-last-write-time" && key !== "medirent-gsheets-url") {
-      // BUG-1 FIX: notify so useDatabaseTrigger() on all pages reactively
-      // refreshes without a reload. This also enables cross-tab sync via the
-      // storage event listener.
-      //
-      // The timestamp is written synchronously and deliberately so:
-      // syncFromSheetsToLocalStorage() reads it to decide whether a local write
-      // beat an in-flight pull, and deferring it would open a window where a
-      // sync could overwrite data that had just been saved.
       localStorage.setItem("medirent-last-write-time", Date.now().toString());
-
-      // PERF: only the *notification* is coalesced (see below). A single user
-      // action performs many writes, and firing the event on each one made
-      // every subscribed page re-run getRentals() - which carries a self-healing
-      // repair pass and a status-correction sweep - once per write. Batching
-      // collapses that into one notification per action.
+      _invalidateAllCaches();
       scheduleDbUpdateNotification();
     }
   }
@@ -965,6 +963,13 @@ const initialOwners: OwnerItem[] = [
 ];
 
 export function getOwners(): OwnerItem[] {
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_ownersCache && _ownersCacheStamp === stamp) {
+      return _ownersCache;
+    }
+  }
+
   const list = getStorageItem("medirent-owners", initialOwners);
   const eqList = getStorageItem("medirent-equipment", initialEquipment);
   
@@ -983,12 +988,14 @@ export function getOwners(): OwnerItem[] {
   });
   
   if (changed) {
-    // PERF FIX: Use localStorage.setItem directly here to avoid dispatching
-    // medirent-db-updated event from a read/normalize path, which would cause
-    // infinite render loops and scroll-to-top on every data write.
     localStorage.setItem("medirent-owners", JSON.stringify(updatedList));
   }
-  return sortLatestFirst(updatedList) as OwnerItem[];
+  const result = sortLatestFirst(updatedList) as OwnerItem[];
+  if (isBrowser) {
+    _ownersCache = result;
+    _ownersCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 export function saveOwner(owner: OwnerItem) {
@@ -1114,6 +1121,13 @@ export async function getDocumentWithFile(doc: DocumentItem): Promise<DocumentIt
 const initialDocs: DocumentItem[] = [];
 
 export function getDocuments(): DocumentItem[] {
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_documentsCache && _documentsCacheStamp === stamp) {
+      return _documentsCache;
+    }
+  }
+
   let list = getStorageItem("medirent-documents", initialDocs);
   
   // Self-healing migration to delete the user's test QR_Code file
@@ -1163,7 +1177,12 @@ export function getDocuments(): DocumentItem[] {
     localStorage.setItem("medirent-documents", JSON.stringify(list));
   }
 
-  return sortLatestFirst(list, "date") as DocumentItem[];
+  const result = sortLatestFirst(list, "date") as DocumentItem[];
+  if (isBrowser) {
+    _documentsCache = result;
+    _documentsCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 const CHUNK_SIZE = 45000;
@@ -1319,25 +1338,50 @@ export function deleteDocument(id: string) {
 // re-use it as long as `medirent-last-write-time` hasn't moved.
 let _rentalsCache: any[] | null = null;
 let _rentalsCacheStamp = "";
+let _customersCache: any[] | null = null;
+let _customersCacheStamp = "";
+let _equipmentCache: any[] | null = null;
+let _equipmentCacheStamp = "";
+let _paymentsCache: any[] | null = null;
+let _paymentsCacheStamp = "";
+let _returnsCache: any[] | null = null;
+let _returnsCacheStamp = "";
+let _documentsCache: any[] | null = null;
+let _documentsCacheStamp = "";
+let _ownersCache: any[] | null = null;
+let _ownersCacheStamp = "";
+let _exchangesCache: any[] | null = null;
+let _exchangesCacheStamp = "";
+
 function _rentalsStamp() {
   return typeof window !== "undefined"
     ? (localStorage.getItem("medirent-last-write-time") ?? "")
     : "";
 }
-function _invalidateRentalsCache() {
+
+export function _invalidateAllCaches() {
   _rentalsCache = null;
   _rentalsCacheStamp = "";
   _customersCache = null;
   _customersCacheStamp = "";
   _equipmentCache = null;
   _equipmentCacheStamp = "";
+  _paymentsCache = null;
+  _paymentsCacheStamp = "";
+  _returnsCache = null;
+  _returnsCacheStamp = "";
+  _documentsCache = null;
+  _documentsCacheStamp = "";
+  _ownersCache = null;
+  _ownersCacheStamp = "";
+  _exchangesCache = null;
+  _exchangesCacheStamp = "";
+  storageCache.clear();
 }
 
-let _customersCache: any[] | null = null;
-let _customersCacheStamp = "";
-
-let _equipmentCache: any[] | null = null;
-let _equipmentCacheStamp = "";
+function _invalidateRentalsCache() {
+  _invalidateAllCaches();
+}
 
 /**
  * Rentals whose status getRentals() corrected and which still need pushing to
@@ -1480,11 +1524,22 @@ export function getRentals() {
   // Active unless a payment happened to be saved with a matching
   // `agreement` id on it).
   const paymentsForStatus = getPayments();
+  const paymentsByAgreement = new Map<string, any[]>();
+  for (let i = 0; i < paymentsForStatus.length; i++) {
+    const p = paymentsForStatus[i];
+    if (p.agreement) {
+      const existing = paymentsByAgreement.get(p.agreement);
+      if (existing) existing.push(p);
+      else paymentsByAgreement.set(p.agreement, [p]);
+    }
+  }
+
   const statusCorrections: any[] = [];
   const statusCorrectedList = repairedList.map((r: any) => {
     if (r.status !== "Active" && r.status !== "Overdue") return r;
 
-    const outstanding = getRentalOutstandingBalance(r, paymentsForStatus);
+    const agreementPayments = paymentsByAgreement.get(r.id) || [];
+    const outstanding = getRentalOutstandingBalance(r, agreementPayments);
     const newStatus = outstanding > 0 ? "Overdue" : "Active";
     if (newStatus === r.status) return r;
 
@@ -1708,9 +1763,21 @@ export function consolidatePayments(payments: any[]): any[] {
 }
 
 export function getPayments() {
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_paymentsCache && _paymentsCacheStamp === stamp) {
+      return _paymentsCache;
+    }
+  }
+
   const list = getStorageItem("medirent-payments", initialPayments);
   const consolidated = consolidatePayments(list);
-  return sortLatestFirst(consolidated, "date");
+  const result = sortLatestFirst(consolidated, "date");
+  if (isBrowser) {
+    _paymentsCache = result;
+    _paymentsCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 export function savePayment(payment: typeof initialPayments[number]) {
@@ -1769,6 +1836,13 @@ export function deletePayment(id: string) {
 
 // Returns Data Store
 export function getReturns() {
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_returnsCache && _returnsCacheStamp === stamp) {
+      return _returnsCache;
+    }
+  }
+
   const list = getStorageItem("medirent-returns", initialReturns);
   if (typeof window === "undefined") return sortLatestFirst(list, "date");
 
@@ -1796,7 +1870,12 @@ export function getReturns() {
     return ret;
   });
 
-  return sortLatestFirst(healedList, "date");
+  const result = sortLatestFirst(healedList, "date");
+  if (isBrowser) {
+    _returnsCache = result;
+    _returnsCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 /**
@@ -4899,9 +4978,20 @@ export interface ExchangeItem {
 const initialExchanges: ExchangeItem[] = [];
 
 export function getExchanges(): ExchangeItem[] {
+  if (isBrowser) {
+    const stamp = _rentalsStamp();
+    if (_exchangesCache && _exchangesCacheStamp === stamp) {
+      return _exchangesCache;
+    }
+  }
+
   const list = getStorageItem("medirent-exchanges", initialExchanges);
-  if (typeof window === "undefined") return sortLatestFirst(list, "exchangeDate") as ExchangeItem[];
-  return sortLatestFirst(list, "exchangeDate") as ExchangeItem[];
+  const result = sortLatestFirst(list, "exchangeDate") as ExchangeItem[];
+  if (isBrowser) {
+    _exchangesCache = result;
+    _exchangesCacheStamp = _rentalsStamp();
+  }
+  return result;
 }
 
 export function getNextExchangeNumber(): string {

@@ -102,7 +102,7 @@ export function Combobox({
         align="start"
         side="bottom"
         sideOffset={4}
-        style={{ width: "var(--radix-popover-trigger-width)" }}
+        style={{ width: "var(--radix-popover-trigger-width)", minWidth: "max(100%, 340px)" }}
       >
         <Command className="w-full" shouldFilter={false}>
           <CommandInput 
