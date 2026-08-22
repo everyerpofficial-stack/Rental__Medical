@@ -2080,13 +2080,36 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           placeholder="Select equipment"
                           searchPlaceholder="Search equipment by series number, name, owner..."
                           emptyText="No equipment found."
-                          options={itemsForSelect.map((e) => ({
-                            value: e.id,
-                            label: formatEquipmentLabel({ name: e.name || e.category, serial: e.serial, model: e.model }),
-                            searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
-                          }))}
+                          options={itemsForSelect.map((e) => {
+                            const serialStr = e.serial ? `S/N: ${e.serial}` : "";
+                            const modelStr = e.model ? `Model: ${e.model}` : "";
+                            const ownerStr = e.owner ? `Owner: ${e.owner}` : "";
+                            const subParts = [serialStr, modelStr, ownerStr].filter(Boolean);
+                            const subLabel = subParts.length > 0 ? subParts.join("  ·  ") : undefined;
+
+                            return {
+                              value: e.id,
+                              label: e.name || e.category || "Equipment",
+                              subLabel,
+                              searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
+                            };
+                          })}
                           className="h-9"
                         />
+                        {eqItem.equipmentId && (() => {
+                          const eq = equipmentList.find(e => e.id === eqItem.equipmentId);
+                          if (!eq) return null;
+                          const serialText = eq.serial ? `S/N: ${eq.serial}` : "";
+                          const modelText = eq.model ? `Model: ${eq.model}` : "";
+                          const ownerText = eq.owner ? `Owner: ${eq.owner}` : "";
+                          const details = [serialText, modelText, ownerText].filter(Boolean).join("  ·  ");
+                          if (!details) return null;
+                          return (
+                            <p className="text-[10.5px] text-muted-foreground/80 mt-1 font-medium leading-tight">
+                              {details}
+                            </p>
+                          );
+                        })()}
                       </div>
 
                       {/* Serial Number */}

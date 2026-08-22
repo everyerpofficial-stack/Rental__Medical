@@ -18,8 +18,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+interface ComboboxOption {
+  value: string;
+  label: string;
+  subLabel?: string;
+  searchTerms?: string;
+}
+
 interface ComboboxProps {
-  options: { value: string; label: string; searchTerms?: string }[];
+  options: ComboboxOption[];
   value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
@@ -72,7 +79,7 @@ export function Combobox({
     const tokens = q.split(/\s+/).filter(Boolean);
 
     return options.filter((option) => {
-      const haystack = `${option.label} ${option.value} ${option.searchTerms || ""}`.toLowerCase();
+      const haystack = `${option.label} ${option.subLabel || ""} ${option.value} ${option.searchTerms || ""}`.toLowerCase();
 
       return tokens.every((token) => {
         // If token consists of digits (e.g. phone number or agreement number), require exact digit substring match
@@ -97,7 +104,7 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           className={cn("w-full justify-between font-normal bg-background h-10 text-[13px] px-3 border-border/60 hover:bg-muted/10", className)}
-          title={selectedOption?.label || placeholder}
+          title={selectedOption ? `${selectedOption.label}${selectedOption.subLabel ? ` (${selectedOption.subLabel})` : ""}` : placeholder}
         >
           <span className="truncate">
             {selectedOption ? selectedOption.label : placeholder}
@@ -119,7 +126,7 @@ export function Combobox({
             placeholder={searchPlaceholder} 
             className="text-[13px] h-9 border-none focus:ring-0" 
           />
-          <CommandList className="max-h-[280px] overflow-y-auto w-full p-1">
+          <CommandList className="max-h-[300px] overflow-y-auto w-full p-1">
             {filteredOptions.length === 0 && (
               <CommandEmpty className="py-3.5 text-center text-[12.5px] text-muted-foreground">{emptyText}</CommandEmpty>
             )}
@@ -132,13 +139,18 @@ export function Combobox({
                     onValueChange(option.value === value ? "" : option.value);
                     setOpen(false);
                   }}
-                  title={option.label}
+                  title={option.subLabel ? `${option.label}\n${option.subLabel}` : option.label}
                   className="flex items-center justify-between text-[12.5px] px-2.5 py-2 cursor-pointer rounded-md hover:bg-accent hover:text-accent-foreground data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground transition-colors"
                 >
-                  <span className="flex-1 pr-2 break-words text-left leading-snug">{option.label}</span>
+                  <div className="flex-1 pr-2 min-w-0 text-left">
+                    <div className="font-semibold text-foreground text-[12.5px] leading-snug break-words">{option.label}</div>
+                    {option.subLabel && (
+                      <div className="text-[11px] text-muted-foreground/80 font-normal mt-0.5 leading-tight break-words">{option.subLabel}</div>
+                    )}
+                  </div>
                   <Check
                     className={cn(
-                      "h-4 w-4 shrink-0 opacity-70 ml-1",
+                      "h-4 w-4 shrink-0 opacity-70 ml-1 self-center",
                       value === option.value ? "opacity-100" : "opacity-0"
                     )}
                   />
