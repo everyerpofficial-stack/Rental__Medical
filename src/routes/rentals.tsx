@@ -21,7 +21,7 @@ import {
   Plus, Search, Download, FileText, Mail, CalendarDays, MessageCircle,
   MoreHorizontal, Edit, Trash2, XCircle, FileCheck2, Clock, AlertTriangle,
   ShieldCheck, Fingerprint, PenTool, Camera, FileUp, CheckCircle2, MapPin,
-  X, QrCode, Phone
+  X, QrCode, Phone, Info
 } from "lucide-react";
 import {
   getRentals,
@@ -2054,10 +2054,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                               const eq = equipmentList.find(e => e.id === val);
                               if (eq) {
                                 newEquipments[idx].serial = eq.serial || "";
-                                // ITEM-7: persist the model on the line item so the
-                                // agreement/receipt can print it without re-joining
-                                // against the equipment master later.
                                 newEquipments[idx].model = eq.model || "";
+                                newEquipments[idx].owner = eq.owner || "";
                                 newEquipments[idx].equipment = eq.name || eq.category || "";
                                 const cycle = newEquipments[idx].rentCycle || "Monthly";
                                 const defaultMonthly = (eq.monthlyRent || eq.rentRate || 0).toString();
@@ -2080,36 +2078,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           placeholder="Select equipment"
                           searchPlaceholder="Search equipment by series number, name, owner..."
                           emptyText="No equipment found."
-                          options={itemsForSelect.map((e) => {
-                            const serialStr = e.serial ? `S/N: ${e.serial}` : "";
-                            const modelStr = e.model ? `Model: ${e.model}` : "";
-                            const ownerStr = e.owner ? `Owner: ${e.owner}` : "";
-                            const subParts = [serialStr, modelStr, ownerStr].filter(Boolean);
-                            const subLabel = subParts.length > 0 ? subParts.join("  ·  ") : undefined;
-
-                            return {
-                              value: e.id,
-                              label: e.name || e.category || "Equipment",
-                              subLabel,
-                              searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
-                            };
-                          })}
+                          options={itemsForSelect.map((e) => ({
+                            value: e.id,
+                            label: formatEquipmentLabel({ name: e.name || e.category, serial: e.serial, model: e.model }),
+                            searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
+                          }))}
                           className="h-9"
                         />
-                        {eqItem.equipmentId && (() => {
-                          const eq = equipmentList.find(e => e.id === eqItem.equipmentId);
-                          if (!eq) return null;
-                          const serialText = eq.serial ? `S/N: ${eq.serial}` : "";
-                          const modelText = eq.model ? `Model: ${eq.model}` : "";
-                          const ownerText = eq.owner ? `Owner: ${eq.owner}` : "";
-                          const details = [serialText, modelText, ownerText].filter(Boolean).join("  ·  ");
-                          if (!details) return null;
-                          return (
-                            <p className="text-[10.5px] text-muted-foreground/80 mt-1 font-medium leading-tight">
-                              {details}
-                            </p>
-                          );
-                        })()}
                       </div>
 
                       {/* Serial Number */}
@@ -2138,6 +2113,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                       updated.equipmentId = eq.id;
                                       updated.serial = eq.serial;
                                       updated.model = eq.model || "";
+                                      updated.owner = eq.owner || "";
                                       updated.equipment = eq.name || eq.category || "";
                                     } else {
                                       toast.warning(`Equipment with serial "${val}" is currently "${eq.status}"`);
@@ -2245,6 +2221,35 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           }}
                         />
                       </div>
+
+                      {/* Selected Equipment Details Bar (Series Number, Model Number, Owner Name) */}
+                      {(() => {
+                        const selectedEq = equipmentList.find(e => e.id === eqItem.equipmentId || (e.serial && e.serial === eqItem.serial));
+                        const serialVal = eqItem.serial || selectedEq?.serial || "";
+                        const modelVal = eqItem.model || selectedEq?.model || "";
+                        const ownerVal = selectedEq?.owner || eqItem.owner || "";
+
+                        if (!eqItem.equipmentId && !serialVal && !modelVal && !ownerVal) return null;
+
+                        return (
+                          <div className="sm:col-span-6 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11.5px] bg-primary/5 border border-primary/15 rounded-lg px-3.5 py-2 mt-0.5 font-medium animate-[fade-in_0.2s_ease-out]">
+                            <div className="flex items-center gap-1.5 text-primary font-bold text-[11px] uppercase tracking-wider">
+                              <Info className="h-3.5 w-3.5" /> Equipment Details:
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                              <span className="text-foreground">
+                                <span className="text-muted-foreground font-semibold">Series / S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px]">{serialVal || "—"}</code>
+                              </span>
+                              <span className="text-foreground">
+                                <span className="text-muted-foreground font-semibold">Model Number:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{modelVal || "—"}</span>
+                              </span>
+                              <span className="text-foreground">
+                                <span className="text-muted-foreground font-semibold">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{ownerVal || "—"}</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
