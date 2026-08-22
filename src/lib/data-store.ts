@@ -4763,15 +4763,22 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   const totalRentalMonthlyRent = items.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
   const shareRatio = totalRentalMonthlyRent > 0 ? (currentItemRent / totalRentalMonthlyRent) : (1 / Math.max(1, items.length));
 
+  const isRentType = (type: any) => {
+    const s = String(type || "").toLowerCase();
+    return s.includes("rent");
+  };
+  const isMatchAgreement = (p: any) => p.agreement === rental.id || p.rentalId === rental.id || p.agreementId === rental.id;
+  const isPaidStatus = (status: any) => !status || status === "Paid" || status === "Completed";
+
   // 1. Direct payments for this specific equipment ID or notes mentioning this equipment
   const directPaid = paymentsList
-    .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
     .filter((p) => p.equipmentId === equipmentId || (p.equipmentId && String(p.equipmentId).split(",").includes(equipmentId)) || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
     .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
   // 2. Shared/Agreement-level payments (not matching this item nor any other item's serial / equipmentId)
   const sharedPaymentsPaid = paymentsList
-    .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
+    .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
     .filter((p) => {
       if (p.equipmentId) return false;
       if (p.notes) {
@@ -4784,13 +4791,6 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // 3. Initial advance collected when the agreement was created. It lives on the
   //    rental record rather than as a Payment row, so it has to be added in
   //    separately - but only where no Payment row already accounts for it.
-  //  - `rental.totalRent` used to sit in this fallback chain. It is the rent
-  //    *charged* over the term, not money received, so any agreement with a
-  //    blank rentPaidAmount reported its entire term's rent as already paid and
-  //    the return settlement showed nothing owing.
-  //  - A "Partial" agreement with no rentPaidAmount recorded evidences nothing
-  //    collected; it previously fell through to a full `monthlyRent`, again
-  //    erasing a genuine due. Only a "Paid" agreement implies the first cycle.
   const initialTotal = (() => {
     if (excludeInitial) return 0;
     const status = rental.rentalPaymentStatus;
@@ -4804,8 +4804,8 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // already represents that money - adding the upfront amount too would count
   // the same rupees twice.
   const isInitialAlreadyBooked = paymentsList.some((p) => {
-    if (p.agreement !== rental.id || p.status !== "Paid") return false;
-    if (p.type !== "Rent" && p.type !== "Rent Payment") return false;
+    if (!isMatchAgreement(p) || !isPaidStatus(p.status)) return false;
+    if (!isRentType(p.type)) return false;
 
     const pDate = parseLocalDate(p.date);
     const startDate = parseLocalDate(rental.start);

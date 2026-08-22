@@ -1186,8 +1186,8 @@ function DuesPage() {
     const dailyRent = monthlyRent / 30;
     const start = parseLocalDate(rental.start);
 
-    // Count paid amount from payment records using getPaidForEquipment helper, excluding initial advance payment
-    const grandTotalPaid = getPaidForEquipment(rental, eqId, paymentsList, true);
+    // Count paid amount from payment records using getPaidForEquipment helper, including initial advance payment
+    const grandTotalPaid = getPaidForEquipment(rental, eqId, paymentsList, false);
 
     let unpaidMonths = 0;
     let unpaidDays = 0;

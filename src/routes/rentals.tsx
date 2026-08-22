@@ -55,6 +55,8 @@ import {
   formatEquipmentLabel,
   getRentalEquipmentLabels,
   getRentalOutstandingBalance,
+  savePayment,
+  getNextPaymentNumber,
   getPaidForEquipment,
 } from "@/lib/data-store";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -1575,6 +1577,44 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     };
 
     saveRental(newRental);
+
+    // Save Payment records in paymentsList for initial collected amounts (Rent & Deposit)
+    // so they appear in Payments ledger, receipts, and revenue reports.
+    if (!rental) {
+      if (rentToAdd > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+          customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+          customerId: customerId,
+          agreement: finalAgreementId,
+          equipmentId: compiledIds,
+          amount: rentToAdd,
+          mode: paymentMode || "Cash",
+          type: "Rent Payment",
+          notes: `Advance rent payment collected at agreement creation (${finalAgreementId})`,
+          status: "Paid" as const,
+          collectedBy: paymentCollectedBy || "Admin",
+        });
+      }
+
+      if (depositToAdd > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+          customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+          customerId: customerId,
+          agreement: finalAgreementId,
+          equipmentId: compiledIds,
+          amount: depositToAdd,
+          mode: paymentMode || "Cash",
+          type: "Deposit",
+          notes: `Security deposit collected at agreement creation (${finalAgreementId})`,
+          status: "Paid" as const,
+          collectedBy: paymentCollectedBy || "Admin",
+        });
+      }
+    }
 
     // Save Signed Document if present — reuse the existing doc id when
     // replacing so it updates in place instead of leaving an orphaned record.
