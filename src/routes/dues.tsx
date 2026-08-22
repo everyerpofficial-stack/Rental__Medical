@@ -649,36 +649,36 @@ function PayDialog({
             <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-3xl p-0 gap-0 border-border/60 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] md:max-h-[90vh]">
           {/* Header Bar */}
-          <div className="py-2.5 px-4 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
-                <CreditCard className="h-4.5 w-4.5" />
+          <div className="py-3 px-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
+                <CreditCard className="h-5 w-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-[14px] font-bold text-foreground leading-tight">{rental.customer}</h3>
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-primary/10 text-primary border border-primary/20">
-                    {rental.id}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-[15px] font-bold text-foreground leading-snug">{rental.customer}</h3>
+                  <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                    {String(rental.id || "").replace(/^AGR-/i, "")}
                   </span>
                 </div>
-                <div className="text-[10.5px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  {customerInfo.id && (
-                    <span className="font-medium bg-muted/60 px-1.5 py-0.2 rounded text-foreground/80">
-                      ID: {customerInfo.id}
-                    </span>
-                  )}
+                <div className="text-[11.5px] text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   {customerInfo.phone && (
                     <span className="flex items-center gap-1 font-medium">
-                      • Contact: <span className="text-foreground/80 font-bold">{customerInfo.phone}</span>
+                      Contact: <span className="text-foreground/90 font-bold">{customerInfo.phone}</span>
+                    </span>
+                  )}
+                  {(rental.startDate || rental.rentStartDate || rental.agreementDate || rental.date) && (
+                    <span className="flex items-center gap-1 font-medium text-foreground/80">
+                      • Rent Date: <span className="font-bold text-foreground font-mono">{formatDateDDMMYYYY(rental.startDate || rental.rentStartDate || rental.agreementDate || rental.date)}</span>
                     </span>
                   )}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
-              <div className="px-2.5 py-1 rounded-lg bg-muted/40 border border-border/40 text-right">
-                <span className="text-[9px] text-muted-foreground uppercase font-semibold block leading-tight">Total Due</span>
-                <span className={`font-mono font-bold text-[13px] ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
+              <div className="px-3 py-1.5 rounded-xl bg-background border border-border/60 text-right shadow-2xs">
+                <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider block leading-tight">Total Due</span>
+                <span className={`font-mono font-bold text-[14px] ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
                   ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
                 </span>
               </div>
@@ -765,29 +765,29 @@ function PayDialog({
                                 </span>
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground mt-1">
+                              <div className="flex flex-wrap items-center gap-2 text-[11.5px] mt-1.5">
                                 {item.serial && (
-                                  <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded text-[10px] text-foreground font-medium">
+                                  <span className="font-mono bg-background px-2 py-0.5 rounded border border-border/70 text-[11px] text-foreground font-semibold">
                                     S/N: {item.serial}
                                   </span>
                                 )}
-                                <span>{details.rateText}</span>
-                                <span>•</span>
-                                <span>{item.returned ? "Returned" : details.unpaidText}</span>
-                                <span>•</span>
-                                <span className="text-emerald-600 font-medium">Paid: ₹{details.grandTotalPaid.toLocaleString("en-IN")}</span>
+                                <span className="font-semibold text-foreground/90">{details.rateText}</span>
+                                <span className="text-muted-foreground">•</span>
+                                <span className="font-medium text-muted-foreground">{item.returned ? "Returned" : details.unpaidText}</span>
+                                <span className="text-muted-foreground">•</span>
+                                <span className="text-emerald-600 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[11px]">Paid: ₹{details.grandTotalPaid.toLocaleString("en-IN")}</span>
                               </div>
 
-                              {/* Last Payment Details (Small Text) */}
-                              <div className="mt-1.5 flex items-center gap-1.5">
+                              {/* Last Payment Details */}
+                              <div className="mt-2 flex items-center">
                                 {lastPayment ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/40 px-2 py-0.5 rounded border border-blue-200/60 dark:border-blue-800/40">
-                                    <Clock className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-400" />
+                                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/50 px-2.5 py-1 rounded-md border border-blue-200/80 dark:border-blue-800/60 shadow-2xs">
+                                    <Clock className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
                                     Last Payment: <strong>₹{(cleanNum(lastPayment.amount) || 0).toLocaleString("en-IN")}</strong> on {formatDateDDMMYYYY(lastPayment.date)} ({lastPayment.mode || "Cash"})
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground/80 bg-muted/40 px-2 py-0.5 rounded">
-                                    <Clock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                                  <span className="inline-flex items-center gap-1.5 text-[10.5px] font-medium text-muted-foreground/80 bg-muted/40 px-2.5 py-0.5 rounded-md border border-border/40">
+                                    <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
                                     Last Payment: None recorded
                                   </span>
                                 )}
