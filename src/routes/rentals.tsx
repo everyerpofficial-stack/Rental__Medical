@@ -2222,7 +2222,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         />
                       </div>
 
-                      {/* Selected Equipment Details Bar (Series Number, Model Number, Owner Name) */}
+                      {/* Selected Equipment Details Bar (Model Number, S/N, Owner Name) */}
                       {(() => {
                         const selectedEq = equipmentList.find(e => e.id === eqItem.equipmentId || (e.serial && e.serial === eqItem.serial));
                         const serialVal = eqItem.serial || selectedEq?.serial || "";
@@ -2233,20 +2233,15 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
                         return (
                           <div className="sm:col-span-6 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11.5px] bg-primary/5 border border-primary/15 rounded-lg px-3.5 py-2 mt-0.5 font-medium animate-[fade-in_0.2s_ease-out]">
-                            <div className="flex items-center gap-1.5 text-primary font-bold text-[11px] uppercase tracking-wider">
-                              <Info className="h-3.5 w-3.5" /> Equipment Details:
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                              <span className="text-foreground">
-                                <span className="text-muted-foreground font-semibold">Series / S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px]">{serialVal || "—"}</code>
-                              </span>
-                              <span className="text-foreground">
-                                <span className="text-muted-foreground font-semibold">Model Number:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{modelVal || "—"}</span>
-                              </span>
-                              <span className="text-foreground">
-                                <span className="text-muted-foreground font-semibold">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{ownerVal || "—"}</span>
-                              </span>
-                            </div>
+                            <span className="text-foreground">
+                              <span className="text-muted-foreground font-semibold">Model Number:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{modelVal || "—"}</span>
+                            </span>
+                            <span className="text-foreground">
+                              <span className="text-muted-foreground font-semibold">S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px]">{serialVal || "—"}</code>
+                            </span>
+                            <span className="text-foreground">
+                              <span className="text-muted-foreground font-semibold">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{ownerVal || "—"}</span>
+                            </span>
                           </div>
                         );
                       })()}
