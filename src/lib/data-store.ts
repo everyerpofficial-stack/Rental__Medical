@@ -279,7 +279,7 @@ export function formatEquipmentLabel(src: {
     label += ` - ${model}`;
   }
   if (serial) {
-    label += ` (S/N: ${serial})`;
+    label += ` - S/N: ${serial}`;
   }
   return label;
 }

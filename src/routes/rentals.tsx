@@ -1717,14 +1717,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement Date (Rent Start Date)</Label>
                 <Input type="date" value={agreementDate} max={endDate} onChange={(e) => setAgreementDate(e.target.value)} />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Consulting Hospital Name</Label>
-                <Input placeholder="e.g. Apollo Hospitals" value={consultingHospital} onChange={(e) => setConsultingHospital(capitalizeWords(e.target.value))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Referred By</Label>
-                <Input placeholder="e.g. Dr. Sharma" value={referredBy} onChange={(e) => setReferredBy(capitalizeWords(e.target.value))} />
-              </div>
 
               {/* Customer Selection or Creation */}
               <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 mb-2">
@@ -2395,6 +2387,113 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 </div>
               </div>
 
+              {/* Commercial Payment Options (Global to Agreement) */}
+              <div className="sm:col-span-2 grid gap-4 sm:grid-cols-2 items-end rounded-xl border border-border/60 bg-muted/10 p-4 animate-in fade-in duration-200">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Payment Option</Label>
+                  <Select value={rentalPaymentStatus} onValueChange={handleRentalPaymentStatusChange}>
+                    <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                      <SelectValue placeholder="Select Option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Not Paid">Not Paid</SelectItem>
+                      <SelectItem value="Partial">Partial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Payment Option</Label>
+                  <Select value={depositPaymentStatus} onValueChange={handleDepositPaymentStatusChange}>
+                    <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                      <SelectValue placeholder="Select Option" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Not Paid">Not Paid</SelectItem>
+                      <SelectItem value="Partial">Partial</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Show rent paid amount only if status is Partial */}
+                {rentalPaymentStatus === "Partial" && (
+                  <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Paid Amount (₹)</Label>
+                    <Input type="number" placeholder="Enter amount" value={rentPaidAmount} onChange={(e) => handleRentPaidAmountChange(e.target.value)} className="bg-background h-10" />
+                  </div>
+                )}
+
+                {/* Show deposit paid amount only if status is Partial */}
+                {depositPaymentStatus === "Partial" && (
+                  <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Paid Amount (₹)</Label>
+                    <Input type="number" placeholder="Enter amount" value={depositPaidAmount} onChange={(e) => handleDepositPaidAmountChange(e.target.value)} className="bg-background h-10" />
+                  </div>
+                )}
+
+                {(rentalPaymentStatus === "Paid" || rentalPaymentStatus === "Partial" || Number(rentPaidAmount) > 0 || depositPaymentStatus === "Paid" || depositPaymentStatus === "Partial" || Number(depositPaidAmount) > 0) && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+                      <Select value={paymentMode} onValueChange={(val: any) => setPaymentMode(val)}>
+                        <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
+                          <SelectValue placeholder="Select Mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Cash">Cash</SelectItem>
+                          <SelectItem value="Bank">Bank</SelectItem>
+                          <SelectItem value="Cash+Bank">Cash+Bank</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {paymentMode === "Cash+Bank" && (
+                      <>
+                        <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Paid Amount (₹)</Label>
+                          <Input
+                            type="number"
+                            placeholder="Cash amount"
+                            value={cashPaidAmount}
+                            onChange={(e) => setCashPaidAmount(e.target.value)}
+                            className="bg-background h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bank/UPI Paid Amount (₹)</Label>
+                          <Input
+                            type="number"
+                            placeholder="Bank/UPI amount"
+                            value={bankUpiPaidAmount}
+                            onChange={(e) => setBankUpiPaidAmount(e.target.value)}
+                            className="bg-background h-10"
+                          />
+                        </div>
+                      </>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+                      <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="bg-background h-10" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label>
+                      <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(capitalizeWords(e.target.value))} className="bg-background h-10" />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Hospital Name & Referred By */}
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Consulting Hospital Name</Label>
+                <Input placeholder="e.g. Apollo Hospitals" value={consultingHospital} onChange={(e) => setConsultingHospital(capitalizeWords(e.target.value))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Referred By</Label>
+                <Input placeholder="e.g. Dr. Sharma" value={referredBy} onChange={(e) => setReferredBy(capitalizeWords(e.target.value))} />
+              </div>
+
               <div className="sm:col-span-2 space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
                 <Textarea
@@ -2677,105 +2776,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   These verification methods add a layer of security to the rental agreement. At least one method is recommended.
                 </p>
               </div>
-            </div>
-
-            {/* Commercial Payment Options (Global to Agreement) */}
-            <div className="grid gap-4 sm:grid-cols-2 items-end rounded-xl border border-border/60 bg-muted/10 p-4 mt-4 animate-in fade-in duration-200">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Payment Option</Label>
-                <Select value={rentalPaymentStatus} onValueChange={handleRentalPaymentStatusChange}>
-                  <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
-                    <SelectValue placeholder="Select Option" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Not Paid">Not Paid</SelectItem>
-                    <SelectItem value="Partial">Partial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Payment Option</Label>
-                <Select value={depositPaymentStatus} onValueChange={handleDepositPaymentStatusChange}>
-                  <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
-                    <SelectValue placeholder="Select Option" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Paid">Paid</SelectItem>
-                    <SelectItem value="Not Paid">Not Paid</SelectItem>
-                    <SelectItem value="Partial">Partial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-
-
-              {/* Show rent paid amount only if status is Partial */}
-              {rentalPaymentStatus === "Partial" && (
-                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Rent Paid Amount (₹)</Label>
-                  <Input type="number" placeholder="Enter amount" value={rentPaidAmount} onChange={(e) => handleRentPaidAmountChange(e.target.value)} className="bg-background h-10" />
-                </div>
-              )}
-
-              {/* Show deposit paid amount only if status is Partial */}
-              {depositPaymentStatus === "Partial" && (
-                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Deposit Paid Amount (₹)</Label>
-                  <Input type="number" placeholder="Enter amount" value={depositPaidAmount} onChange={(e) => handleDepositPaidAmountChange(e.target.value)} className="bg-background h-10" />
-                </div>
-              )}
-
-              {(rentalPaymentStatus === "Paid" || rentalPaymentStatus === "Partial" || Number(rentPaidAmount) > 0 || depositPaymentStatus === "Paid" || depositPaymentStatus === "Partial" || Number(depositPaidAmount) > 0) && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
-                    <Select value={paymentMode} onValueChange={(val: any) => setPaymentMode(val)}>
-                      <SelectTrigger className="bg-background h-10 text-[12.5px] border-border/50">
-                        <SelectValue placeholder="Select Mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Bank">Bank</SelectItem>
-                        <SelectItem value="Cash+Bank">Cash+Bank</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {paymentMode === "Cash+Bank" && (
-                    <>
-                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Cash Paid Amount (₹)</Label>
-                        <Input
-                          type="number"
-                          placeholder="Cash amount"
-                          value={cashPaidAmount}
-                          onChange={(e) => setCashPaidAmount(e.target.value)}
-                          className="bg-background h-10"
-                        />
-                      </div>
-                      <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bank/UPI Paid Amount (₹)</Label>
-                        <Input
-                          type="number"
-                          placeholder="Bank/UPI amount"
-                          value={bankUpiPaidAmount}
-                          onChange={(e) => setBankUpiPaidAmount(e.target.value)}
-                          className="bg-background h-10"
-                        />
-                      </div>
-                    </>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
-                    <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="bg-background h-10" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label>
-                    <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(capitalizeWords(e.target.value))} className="bg-background h-10" />
-                  </div>
-                </>
-              )}
             </div>
           </div>
 
