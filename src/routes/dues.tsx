@@ -1697,40 +1697,98 @@ function DuesPage() {
                           {formatDateDDMMYYYY(r.start)}
                         </span>
                       </TableCell>
-                      <TableCell className="px-2 py-2 text-right">
-                        <div className="space-y-1 text-right">
-                          {eqItems.map((eqItem: any) => {
-                            const { rateText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
-                            return (
-                              <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
-                                {rateText}
+                      {(() => {
+                        const hasReturnedItem = eqItems.some((it: any) => it.returned);
+
+                        if (!hasReturnedItem && eqItems.length > 1) {
+                          const combinedMonthlyRent = eqItems.reduce((sum: number, it: any) => sum + (Number(it.monthlyRent || it.rentRate) || 0), 0);
+                          const combinedDailyRent = eqItems.reduce((sum: number, it: any) => sum + (Number(it.dailyRent) || 0), 0);
+                          const isMonthlyCombined = combinedMonthlyRent > 0;
+                          const combinedRateText = isMonthlyCombined
+                            ? `₹${combinedMonthlyRent.toLocaleString("en-IN")}/mo`
+                            : `₹${combinedDailyRent.toLocaleString("en-IN")}/day`;
+
+                          const sampleDetails = calcUnpaidDetailsForEquipment(r, eqItems[0].equipmentId);
+
+                          return (
+                            <>
+                              <TableCell className="px-2 py-2 text-right">
+                                <div className="text-[11.5px] font-semibold text-muted-foreground">
+                                  {combinedRateText}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-2 text-right">
+                                <div className="text-[11.5px] font-bold text-destructive">
+                                  {sampleDetails.unpaidText}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-2 text-right">
+                                <div className="text-[11.5px] font-extrabold text-success text-right">
+                                  ₹{item.totalPaid.toLocaleString("en-IN")}
+                                </div>
+                              </TableCell>
+                              <TableCell className="px-2 py-2 text-right">
+                                <div className={`text-[11.5px] font-extrabold text-right ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
+                                  ₹{item.totalOutstanding.toLocaleString("en-IN")}
+                                </div>
+                              </TableCell>
+                            </>
+                          );
+                        }
+
+                        return (
+                          <>
+                            <TableCell className="px-2 py-2 text-right">
+                              <div className="space-y-1 text-right">
+                                {eqItems.map((eqItem: any) => {
+                                  const { rateText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                                  return (
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
+                                      {rateText}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-2 py-2 text-right">
-                        <div className="space-y-1 text-right">
-                          {eqItems.map((eqItem: any) => {
-                            const { unpaidText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
-                            return (
-                              <div key={eqItem.equipmentId} className={`text-[11.5px] font-bold ${eqItem.returned ? "text-muted-foreground/40" : "text-destructive"}`}>
-                                {eqItem.returned ? "—" : unpaidText}
+                            </TableCell>
+                            <TableCell className="px-2 py-2 text-right">
+                              <div className="space-y-1 text-right">
+                                {eqItems.map((eqItem: any) => {
+                                  const { unpaidText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                                  return (
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-bold ${eqItem.returned ? "text-muted-foreground/40" : "text-destructive"}`}>
+                                      {eqItem.returned ? "—" : unpaidText}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </TableCell>
-                                            <TableCell className="px-2 py-2 text-right">
-                        <div className="text-[11.5px] font-extrabold text-success text-right">
-                          ₹{item.totalPaid.toLocaleString("en-IN")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="px-2 py-2 text-right">
-                        <div className={`text-[11.5px] font-extrabold text-right ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
-                          ₹{item.totalOutstanding.toLocaleString("en-IN")}
-                        </div>
-                      </TableCell>
+                            </TableCell>
+                            <TableCell className="px-2 py-2 text-right">
+                              <div className="space-y-1 text-right">
+                                {eqItems.map((eqItem: any) => {
+                                  const { grandTotalPaid } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                                  return (
+                                    <div key={eqItem.equipmentId} className="text-[11.5px] font-extrabold text-success text-right">
+                                      ₹{grandTotalPaid.toLocaleString("en-IN")}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-2 py-2 text-right">
+                              <div className="space-y-1 text-right">
+                                {eqItems.map((eqItem: any) => {
+                                  const { outstanding } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                                  return (
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${outstanding > 0 ? "text-destructive" : "text-success"}`}>
+                                      ₹{outstanding.toLocaleString("en-IN")}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </TableCell>
+                          </>
+                        );
+                      })()}
                       <TableCell className="px-2 py-2"><StatusBadge status={r.status} /></TableCell>
                       <TableCell className="px-2 py-2 text-right">
                         <div className="flex items-center justify-end gap-0.5 transition-opacity">
