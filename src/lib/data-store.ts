@@ -1771,7 +1771,15 @@ export function getPayments() {
   }
 
   const list = getStorageItem("medirent-payments", initialPayments);
-  const consolidated = consolidatePayments(list);
+  // Guarantee seed payments (e.g. PAY-0264, PAY-0265, PAY-0266) present in initialPayments are merged if missing in localStorage
+  const mergedList = [...list];
+  initialPayments.forEach((initP) => {
+    if (!mergedList.some((p) => p.id === initP.id)) {
+      mergedList.push(initP);
+    }
+  });
+
+  const consolidated = consolidatePayments(mergedList);
   const result = sortLatestFirst(consolidated, "date");
   if (isBrowser) {
     _paymentsCache = result;

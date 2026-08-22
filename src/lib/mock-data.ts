@@ -52,6 +52,52 @@ export const pendingDuesData = [
 export const customers: any[] = [];
 export const equipment: any[] = [];
 export const rentals: any[] = [];
-export const payments: any[] = [];
+export const payments: any[] = [
+  {
+    id: "PAY-0264",
+    agreement: "AGR-2026-0099",
+    customer: "Cauvery Heart & Multispeciality Hospital",
+    customerId: "CUS-0102",
+    date: "15-08-2026",
+    type: "Rent",
+    amount: 21000,
+    discount: 0,
+    mode: "Bank",
+    bankPaid: 21000,
+    cashPaid: 0,
+    status: "Paid",
+    collectedBy: "Admin",
+  },
+  {
+    id: "PAY-0265",
+    agreement: "AGR-2026-0107",
+    customer: "Cauvery Heart & Multispeciality Hospital",
+    customerId: "CUS-0102",
+    date: "15-08-2026",
+    type: "Rent",
+    amount: 36000,
+    discount: 0,
+    mode: "Bank",
+    bankPaid: 36000,
+    cashPaid: 0,
+    status: "Paid",
+    collectedBy: "Admin",
+  },
+  {
+    id: "PAY-0266",
+    agreement: "AGR-2026-0108",
+    customer: "Cauvery Heart & Multispeciality Hospital",
+    customerId: "CUS-0102",
+    date: "15-08-2026",
+    type: "Rent",
+    amount: 36000,
+    discount: 0,
+    mode: "Bank",
+    bankPaid: 36000,
+    cashPaid: 0,
+    status: "Paid",
+    collectedBy: "Admin",
+  },
+];
 export const returns: any[] = [];
 export const activities: any[] = [];
