@@ -647,7 +647,7 @@ function PayDialog({
       </Button>
 
             <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl p-0 gap-0 border-border/60 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] md:max-h-[90vh]">
+        <DialogContent className="max-w-4xl lg:max-w-5xl w-[95vw] p-0 gap-0 border-border/60 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
           {/* Header Bar */}
           <div className="py-3 px-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3">
@@ -655,30 +655,23 @@ function PayDialog({
                 <CreditCard className="h-5 w-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-[15px] font-bold text-foreground leading-snug">{rental.customer}</h3>
-                  <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
-                    {String(rental.id || "").replace(/^AGR-/i, "")}
-                  </span>
-                </div>
-                <div className="text-[11.5px] text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <h3 className="text-base font-bold text-foreground leading-snug">{rental.customer}</h3>
+                <div className="text-[12px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5">
                   {customerInfo.phone && (
                     <span className="flex items-center gap-1 font-medium">
                       Contact: <span className="text-foreground/90 font-bold">{customerInfo.phone}</span>
                     </span>
                   )}
-                  {(rental.startDate || rental.rentStartDate || rental.agreementDate || rental.date) && (
-                    <span className="flex items-center gap-1 font-medium text-foreground/80">
-                      • Rent Date: <span className="font-bold text-foreground font-mono">{formatDateDDMMYYYY(rental.startDate || rental.rentStartDate || rental.agreementDate || rental.date)}</span>
-                    </span>
-                  )}
+                  <span className="flex items-center gap-1.5 font-medium text-foreground/90">
+                    <Calendar className="h-3.5 w-3.5 text-primary shrink-0" /> Rent Date: <span className="font-bold text-foreground font-mono bg-primary/10 px-2 py-0.5 rounded border border-primary/20">{formatDateDDMMYYYY(rental.start || rental.startDate || rental.rentStartDate || rental.agreementDate || rental.date)}</span>
+                  </span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-3 text-xs font-medium">
-              <div className="px-3 py-1.5 rounded-xl bg-background border border-border/60 text-right shadow-2xs">
+              <div className="px-3.5 py-1.5 rounded-xl bg-background border border-border/60 text-right shadow-2xs">
                 <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-wider block leading-tight">Total Due</span>
-                <span className={`font-mono font-bold text-[14px] ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
+                <span className={`font-mono font-bold text-[15px] ${selectedItemsDetails.outstanding > 0 ? "text-destructive" : "text-emerald-600"}`}>
                   ₹{selectedItemsDetails.outstanding.toLocaleString("en-IN")}
                 </span>
               </div>
