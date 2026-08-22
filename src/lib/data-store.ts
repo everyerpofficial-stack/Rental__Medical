@@ -274,12 +274,12 @@ export function formatEquipmentLabel(src: {
   const serial = String(src.serial || "").trim();
 
   let label = name || "Equipment";
-  if (serial) {
-    label += ` (S/N: ${serial})`;
-  }
   // Skip a model that merely repeats the name (some legacy rows duplicate it).
   if (model && model.toLowerCase() !== name.toLowerCase()) {
     label += ` - ${model}`;
+  }
+  if (serial) {
+    label += ` (S/N: ${serial})`;
   }
   return label;
 }

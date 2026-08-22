@@ -29,6 +29,7 @@ import {
   parseLocalDate,
   sortLatestFirst,
   extractIdNumber,
+  formatEquipmentLabel,
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/exchanges")({
@@ -64,7 +65,7 @@ function ExchangesPage() {
   const [newEquipmentName, setNewEquipmentName] = useState("");
   const [newEquipmentSerial, setNewEquipmentSerial] = useState("");
   const [exchangeDate, setExchangeDate] = useState("");
-  const [releaseCondition, setReleaseCondition] = useState<"Available" | "UnderMaintenance" | "Returned to Owner">("UnderMaintenance");
+  const [releaseCondition, setReleaseCondition] = useState<"Available" | "UnderMaintenance" | "Returned to Owner">("Available");
   const [reason, setReason] = useState("");
   const [exchangeStatus, setExchangeStatus] = useState<"Pending" | "Completed">("Completed");
   const [ownerName, setOwnerName] = useState("");
@@ -149,7 +150,7 @@ function ExchangesPage() {
       setNewEquipmentId("");
       setNewEquipmentName("");
       setNewEquipmentSerial("");
-      setReleaseCondition("UnderMaintenance");
+      setReleaseCondition("Available");
       setReason("");
       setExchangeStatus("Completed");
       setOwnerName("");
@@ -887,25 +888,32 @@ function ExchangesPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Current Equipment (To Return)</Label>
-                    <Select value={currentEquipmentId} onValueChange={setCurrentEquipmentId}>
-                      <SelectTrigger className="h-10 border-slate-200 bg-white text-[13px] rounded-lg w-full">
-                        <SelectValue placeholder="Select item to return" />
-                      </SelectTrigger>
-                      <SelectContent className="border border-border/60 bg-popover shadow-elevated rounded-lg">
-                        {agreementItems.map((item) => (
-                          <SelectItem key={item.equipmentId} value={item.equipmentId}>
-                            {item.name || getEquipmentNameFromInventory(item.equipmentId)} {item.serial ? `— ${item.serial}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Combobox
+                      options={agreementItems.map((item) => {
+                        const masterEq = equipmentList.find(e => e.id === item.equipmentId);
+                        const name = item.name || masterEq?.name || masterEq?.category || getEquipmentNameFromInventory(item.equipmentId);
+                        const model = item.model || masterEq?.model || "";
+                        const serial = item.serial || masterEq?.serial || "";
+                        const label = formatEquipmentLabel({ name, model, serial });
+                        return {
+                          value: item.equipmentId,
+                          label,
+                          searchTerms: `${name} ${model} ${serial}`,
+                        };
+                      })}
+                      value={currentEquipmentId}
+                      onValueChange={setCurrentEquipmentId}
+                      placeholder="Select item to return..."
+                      searchPlaceholder="Search item by name, model, serial..."
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">New Equipment (To Swap)</Label>
                     <Combobox
                       options={availableEquipment.map((e) => ({
                         value: e.id,
-                        label: e.serial ? `${e.name} — ${e.serial}` : e.name,
+                        label: formatEquipmentLabel({ name: e.name || e.category, model: e.model, serial: e.serial }),
+                        searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
                       }))}
                       value={newEquipmentId}
                       onValueChange={setNewEquipmentId}

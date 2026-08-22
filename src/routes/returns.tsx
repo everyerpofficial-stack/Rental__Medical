@@ -1606,7 +1606,7 @@ function ReturnsPage() {
                       return (
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
-                          {addr && <span className="truncate max-w-[200px]" title={addr}>Address: <span className="text-foreground/80">{addr}</span></span>}
+                          {addr && <span>Address: <span className="text-foreground/80 font-medium">{addr}</span></span>}
                           <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span></span>
                         </div>
                       );
@@ -1960,53 +1960,6 @@ function ReturnsPage() {
                       </div>
                     );
                   })()}
-                </div>
-
-                {/* Right Column: Payments Ledger, Due Payment Settlement, Remarks, WhatsApp (col-span-5) */}
-                <div className="lg:col-span-5 space-y-4 font-semibold">
-                  {/* Payment Ledger card (compact scrollable) */}
-                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
-                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
-                      <Receipt className="h-3.5 w-3.5 text-primary" />
-                      <div>
-                        <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
-                      </div>
-                    </div>
-                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
-                      {agreementPayments.length === 0 ? (
-                        <div className="py-6 text-center text-muted-foreground px-4">
-                          <p className="font-bold text-foreground/75">No payments found</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-border/40">
-                          {agreementPayments.map((p) => {
-                            const isDeposit = p.type?.toLowerCase().includes("deposit");
-                            return (
-                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
-                                <div className="space-y-0.5 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
-                                      isDeposit 
-                                        ? "bg-blue-50 text-blue-700 border border-blue-200" 
-                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    }`}>
-                                      {p.type || "Rent"}
-                                    </span>
-                                    <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
-                                    <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
-                                </div>
-                                <span className="font-bold text-foreground text-[11.5px]">
-                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </Card>
 
                   {/* Due Amount Payment Settlement Option */}
                   {netRefund < 0 && (() => {
@@ -2019,7 +1972,7 @@ function ReturnsPage() {
                     const remainingDueVal = Math.max(0, totalDueAmt - currentPaidVal);
 
                     return (
-                      <div className="rounded-xl border border-amber-500/20 bg-amber-50/10 dark:bg-amber-950/10 p-3 space-y-2.5">
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-50/10 dark:bg-amber-950/10 p-3.5 space-y-2.5">
                         <div className="flex items-center justify-between flex-wrap gap-1.5 border-b border-amber-500/20 pb-1.5">
                           <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wide flex items-center gap-1">
                             <CreditCard className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
@@ -2179,6 +2132,55 @@ function ReturnsPage() {
                       </div>
                     );
                   })()}
+                </div>
+
+                {/* Right Column: Payments Ledger, WhatsApp (col-span-5) */}
+                <div className="lg:col-span-5 space-y-4 font-semibold">
+                  {/* Payment Ledger card (compact scrollable) */}
+                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
+                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
+                      <Receipt className="h-3.5 w-3.5 text-primary" />
+                      <div>
+                        <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
+                      {agreementPayments.length === 0 ? (
+                        <div className="py-6 text-center text-muted-foreground px-4">
+                          <p className="font-bold text-foreground/75">No payments found</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/40">
+                          {agreementPayments.map((p) => {
+                            const isDeposit = p.type?.toLowerCase().includes("deposit");
+                            return (
+                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
+                                      isDeposit 
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200" 
+                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    }`}>
+                                      {p.type || "Rent"}
+                                    </span>
+                                    <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
+                                    <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
+                                </div>
+                                <span className="font-bold text-foreground text-[11.5px]">
+                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+
+
 
                   {/* WhatsApp Preview Box */}
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/10 p-3 space-y-2">
