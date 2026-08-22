@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -166,9 +166,18 @@ function CustomerFormDialog({
   const [state, setState] = useState(customer?.state || "Karnataka");
   const [pincode, setPincode] = useState(customer?.pincode || "");
   const [notes, setNotes] = useState(customer?.notes || "");
-  const [selectedFiles, setSelectedFiles] = useState<Array<{ id?: string; name: string; size: string; fileData?: string; isExisting?: boolean }>>([]);
-  const [removedDocIds, setRemovedDocIds] = useState<string[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Array<{ id?: string; name: string; size: string; fileData?: string; isExisting?: boolean; missing?: boolean }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ID proofs the user removed in this dialog. Held in a ref, not state: it is
+  // never rendered, and the async ID-proof loader below has to read the *live*
+  // value from inside a promise callback without a stale closure.
+  const removedDocIdsRef = useRef<Set<string>>(new Set());
+  // Bumped on every open so a slow load from a previous open can be discarded.
+  const docLoadTokenRef = useRef(0);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  // FileReader is async. Selecting a file and immediately hitting Save used to
+  // drop it silently, because it had not been read into `selectedFiles` yet.
+  const [pendingReads, setPendingReads] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -186,23 +195,66 @@ function CustomerFormDialog({
       setPincode(customer?.pincode || "");
       setNotes(customer?.notes || "");
       setSelectedFiles([]);
-      setRemovedDocIds([]);
+      removedDocIdsRef.current = new Set();
       setIsSubmitting(false);
+      setPendingReads(0);
+      setLoadingDocs(false);
 
+      // KYC-EDIT FIX: saved ID proofs load asynchronously, and for customers
+      // whose files are not cached in this browser's IndexedDB yet (i.e. every
+      // older record on a fresh device) getDocumentWithFile() has to pull the
+      // file chunks back from Google Sheets - seconds, sometimes longer while
+      // the 15s row sync and the background file backup are using the same
+      // Apps Script endpoint. The old code showed an *empty* upload zone for
+      // that whole window and then hard-replaced `selectedFiles` when the
+      // download landed, throwing away every file the user had attached or
+      // deleted in the meantime. That is why adding/removing KYC documents on
+      // older customers looked like it did nothing.
+      //
+      // Now: the dialog says it is still loading (so nothing looks empty), the
+      // arriving documents are *merged* instead of replacing the list, entries
+      // the user already deleted are not resurrected, and a response from a
+      // previous open is dropped via the token.
+      const loadToken = ++docLoadTokenRef.current;
       if (customer?.id) {
+        const custId = customer.id;
         try {
-          const docs = getDocuments().filter((d: any) => d.customerId === customer.id && d.type === "ID Proof");
-          Promise.all(docs.map((d: any) => getDocumentWithFile(d))).then((fullDocs) => {
-            setSelectedFiles(
-              fullDocs.map((d: any) => ({
-                id: d.id,
-                name: d.name,
-                size: d.size,
-                fileData: d.fileData !== "NOT_FOUND" ? d.fileData : undefined,
-                isExisting: true,
-              }))
-            );
-          });
+          const docs = getDocuments().filter((d: any) => d.customerId === custId && d.type === "ID Proof");
+          if (docs.length > 0) {
+            setLoadingDocs(true);
+            Promise.all(
+              docs.map((d: any) =>
+                // One unreadable file must not blank the whole list: fall back
+                // to metadata-only so it still renders (and can be deleted).
+                getDocumentWithFile(d).catch(() => ({ ...d, fileData: "NOT_FOUND" }))
+              )
+            )
+              .then((fullDocs) => {
+                if (docLoadTokenRef.current !== loadToken) return;
+                setSelectedFiles((prev) => {
+                  const alreadyListed = new Set(prev.map((f) => f.id).filter(Boolean) as string[]);
+                  const loaded = (fullDocs as any[])
+                    .filter((d) => !alreadyListed.has(d.id) && !removedDocIdsRef.current.has(d.id))
+                    .map((d) => ({
+                      id: d.id,
+                      name: d.name,
+                      size: d.size,
+                      fileData: d.fileData !== "NOT_FOUND" ? d.fileData : undefined,
+                      isExisting: true,
+                      missing: d.fileData === "NOT_FOUND",
+                    }));
+                  // Saved documents first, then anything attached while loading.
+                  return [...loaded, ...prev];
+                });
+              })
+              .catch((err) => {
+                console.error("[Customers] Failed to load saved ID proofs:", err);
+                toast.error("Could not load this customer's saved ID proofs. Check your connection before deleting or replacing them.");
+              })
+              .finally(() => {
+                if (docLoadTokenRef.current === loadToken) setLoadingDocs(false);
+              });
+          }
         } catch (_e) { /* ignore */ }
       }
     }
@@ -216,8 +268,22 @@ function CustomerFormDialog({
 
   const handleSave = () => {
     if (isSubmitting) return;
+
+    // KYC-EDIT FIX: FileReader had not finished yet, so the attachment is not
+    // in `selectedFiles`. Saving now would silently drop it.
+    if (pendingReads > 0) {
+      toast.info("Still reading the selected file(s) - please try again in a moment.");
+      return;
+    }
+    // Saving before the customer's saved ID proofs have loaded would let a
+    // half-known document list drive the delete/keep decisions below.
+    if (loadingDocs) {
+      toast.info("Still loading this customer's saved ID proofs - please wait a moment.");
+      return;
+    }
+
     setIsSubmitting(true);
-    
+
     if (!name.trim()) {
       toast.error("Please enter the customer's full name.");
       setIsSubmitting(false);
@@ -335,14 +401,19 @@ function CustomerFormDialog({
       return;
     }
 
-    // Remove ID proofs the user deleted from this dialog
-    removedDocIds.forEach((docId) => {
+    // Remove ID proofs the user deleted from this dialog. A failure here used
+    // to be console-only, so a delete that did not happen still reported
+    // "saved successfully" - it is counted and surfaced now.
+    let failedDeletes = 0;
+    removedDocIdsRef.current.forEach((docId) => {
       try {
         deleteDocument(docId);
       } catch (err) {
+        failedDeletes++;
         console.error("[Customers] Failed to remove ID proof", docId, err);
       }
     });
+    removedDocIdsRef.current = new Set();
 
     // Save newly uploaded ID proofs. A failure here must not roll back the
     // customer record that already saved - report it and keep the rest.
@@ -369,6 +440,8 @@ function CustomerFormDialog({
 
     if (failedUploads > 0) {
       toast.error(`Customer saved, but ${failedUploads} ID proof file(s) could not be stored. Storage may be full.`);
+    } else if (failedDeletes > 0) {
+      toast.error(`Customer saved, but ${failedDeletes} ID proof file(s) could not be deleted. Please try again.`);
     } else {
       toast.success(customer ? `Customer details for "${name}" saved successfully.` : "New customer created successfully.");
     }
@@ -380,11 +453,13 @@ function CustomerFormDialog({
   const handleFilesAdded = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files);
-    
+
+    setPendingReads((n) => n + fileArray.length);
+
     fileArray.forEach((file) => {
       const sizeKB = (file.size / 1024).toFixed(1);
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onload = () => {
         setSelectedFiles((prev) => [
           ...prev,
           {
@@ -395,6 +470,13 @@ function CustomerFormDialog({
           },
         ]);
       };
+      // A read that fails must not leave Save blocked forever on a pending
+      // counter that never comes back down.
+      reader.onerror = () => {
+        console.error("[Customers] Failed to read ID proof file", file.name, reader.error);
+        toast.error(`Could not read "${file.name}". Please try selecting it again.`);
+      };
+      reader.onloadend = () => setPendingReads((n) => Math.max(0, n - 1));
       reader.readAsDataURL(file);
     });
   };
@@ -402,7 +484,7 @@ function CustomerFormDialog({
   const removeFile = (index: number) => {
     const fileToRemove = selectedFiles[index];
     if (fileToRemove?.isExisting && fileToRemove.id) {
-      setRemovedDocIds((prev) => (prev.includes(fileToRemove.id!) ? prev : [...prev, fileToRemove.id!]));
+      removedDocIdsRef.current.add(fileToRemove.id);
     }
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
@@ -513,22 +595,32 @@ function CustomerFormDialog({
               <div className="flex items-center justify-between">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   ID Proof Uploads {selectedFiles.length > 0 && <span className="text-primary font-bold normal-case">({selectedFiles.length} file{selectedFiles.length === 1 ? "" : "s"})</span>}
+                  {loadingDocs && <span className="text-muted-foreground font-medium normal-case"> · loading saved files…</span>}
                 </Label>
-                {selectedFiles.length > 0 && (
+                {(selectedFiles.length > 0 || loadingDocs) && (
                   <label className="text-[11px] font-medium text-primary hover:underline cursor-pointer flex items-center gap-1">
                     <Plus className="h-3 w-3" /> Add More Files
+                    {/* Clearing the value is what makes re-picking the *same*
+                        file work: without it the input's value is unchanged so
+                        the browser never fires change again - deleting a
+                        document and re-uploading it did nothing at all. */}
                     <input
                       type="file"
                       multiple
                       accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
                       className="hidden"
-                      onChange={(e) => handleFilesAdded(e.target.files)}
+                      onChange={(e) => { handleFilesAdded(e.target.files); e.target.value = ""; }}
                     />
                   </label>
                 )}
               </div>
 
-              {selectedFiles.length > 0 ? (
+              {selectedFiles.length === 0 && loadingDocs ? (
+                <div className="flex items-center justify-center gap-2 w-full h-24 border-2 border-dashed border-border/70 rounded-xl bg-muted/20 text-muted-foreground">
+                  <Clock className="h-4 w-4 animate-pulse" />
+                  <p className="text-[12.5px] font-medium">Loading saved ID proofs…</p>
+                </div>
+              ) : selectedFiles.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto p-1 border border-border/40 rounded-xl bg-muted/10">
                   {selectedFiles.map((file, idx) => {
                     const isImage = file.fileData?.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
@@ -544,7 +636,11 @@ function CustomerFormDialog({
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="text-[12px] font-medium truncate text-foreground leading-tight" title={file.name}>{file.name}</p>
-                            <p className="text-[10px] text-muted-foreground">{file.size} {file.isExisting && "· Saved"}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {file.size}
+                              {file.isExisting && !file.missing && " · Saved"}
+                              {file.missing && <span className="text-destructive font-semibold"> · File unavailable</span>}
+                            </p>
                           </div>
                         </div>
                         <Button
@@ -577,7 +673,7 @@ function CustomerFormDialog({
                     multiple
                     accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/*"
                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    onChange={(e) => handleFilesAdded(e.target.files)}
+                    onChange={(e) => { handleFilesAdded(e.target.files); e.target.value = ""; }}
                   />
                 </label>
               )}
@@ -591,7 +687,9 @@ function CustomerFormDialog({
             <DialogClose asChild>
               <Button variant="outline" type="button">Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmitting}>Save Customer</Button>
+            <Button type="submit" disabled={isSubmitting || pendingReads > 0 || loadingDocs}>
+              {loadingDocs ? "Loading ID proofs…" : pendingReads > 0 ? "Reading files…" : "Save Customer"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

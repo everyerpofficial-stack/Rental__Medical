@@ -1642,9 +1642,75 @@ export function approveRental(id: string) {
 }
 
 // Payments Data Store
+/**
+ * Consolidates payments created at the same time for the same agreement,
+ * date, type, mode, and collector so multi-equipment payments paid together
+ * show as a single total payment (e.g. ₹6,000) instead of split records (₹3,000 + ₹3,000).
+ */
+export function consolidatePayments(payments: any[]): any[] {
+  if (!Array.isArray(payments) || payments.length <= 1) return payments || [];
+
+  const result: any[] = [];
+  const processed = new Set<string>();
+
+  for (let i = 0; i < payments.length; i++) {
+    const p = payments[i];
+    if (!p || processed.has(p.id)) continue;
+
+    const group = [p];
+    processed.add(p.id);
+
+    const pDate = getLocalYYYYMMDD(p.date || "");
+
+    for (let j = i + 1; j < payments.length; j++) {
+      const p2 = payments[j];
+      if (!p2 || processed.has(p2.id)) continue;
+
+      const p2Date = getLocalYYYYMMDD(p2.date || "");
+
+      const isSameAgreement = p.agreement && p.agreement === p2.agreement;
+      const isSameCustomer = p.customerId && p.customerId === p2.customerId;
+      const isSameDate = pDate && pDate === p2Date;
+      const isSameType = (p.type || "Rent") === (p2.type || "Rent");
+      const isSameMode = (p.mode || "Cash") === (p2.mode || "Cash");
+      const isSameCollector = (p.collectedBy || "") === (p2.collectedBy || "");
+      const isSameStatus = (p.status || "Paid") === (p2.status || "Paid");
+
+      const id1Num = extractIdNumber(p.id);
+      const id2Num = extractIdNumber(p2.id);
+      const isCloseId = Math.abs(id1Num - id2Num) <= 5;
+
+      if ((isSameAgreement || isSameCustomer) && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId) {
+        group.push(p2);
+        processed.add(p2.id);
+      }
+    }
+
+    if (group.length === 1) {
+      result.push(p);
+    } else {
+      const totalAmount = group.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      const totalDiscount = group.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+      const combinedNotes = Array.from(new Set(group.map((item) => item.notes || "").filter(Boolean))).join(" | ");
+      const combinedEqIds = Array.from(new Set(group.map((item) => item.equipmentId).filter(Boolean))).join(",");
+
+      result.push({
+        ...p,
+        amount: totalAmount,
+        discount: totalDiscount,
+        notes: combinedNotes || p.notes,
+        equipmentId: combinedEqIds || p.equipmentId,
+      });
+    }
+  }
+
+  return result;
+}
+
 export function getPayments() {
   const list = getStorageItem("medirent-payments", initialPayments);
-  return sortLatestFirst(list, "date");
+  const consolidated = consolidatePayments(list);
+  return sortLatestFirst(consolidated, "date");
 }
 
 export function savePayment(payment: typeof initialPayments[number]) {
@@ -4621,7 +4687,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // 1. Direct payments for this specific equipment ID or notes mentioning this equipment
   const directPaid = paymentsList
     .filter((p) => p.agreement === rental.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"))
-    .filter((p) => p.equipmentId === equipmentId || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
+    .filter((p) => p.equipmentId === equipmentId || (p.equipmentId && String(p.equipmentId).split(",").includes(equipmentId)) || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
     .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
   // 2. Shared/Agreement-level payments (not matching this item nor any other item's serial / equipmentId)

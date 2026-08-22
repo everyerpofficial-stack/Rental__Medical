@@ -18,9 +18,9 @@ import { toast } from "sonner";
 
 import {
   MessageCircle, Mail, Phone, Bell,
-  IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download,
+  IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
@@ -189,9 +189,9 @@ function PayDialog({
     }
   };
 
-  // ─── Per-item amount + payment method (used when 2+ equipment items are selected) ───
   interface ItemPaymentState {
     amount: string;
+    discount?: string;
     mode: "Cash" | "Bank" | "Cash+Bank";
     cashAmount: string;
     bankAmount: string;
@@ -221,6 +221,7 @@ function PayDialog({
         const cAmt = Math.round(defaultAmt / 2);
         next[eqId] = {
           amount: defaultAmt.toString(),
+          discount: "",
           mode: "Bank",
           cashAmount: cAmt.toString(),
           bankAmount: (defaultAmt - cAmt).toString(),
@@ -233,6 +234,10 @@ function PayDialog({
 
   const updateItemPayment = (eqId: string, patch: Partial<ItemPaymentState>) => {
     setItemPayments((prev) => ({ ...prev, [eqId]: { ...prev[eqId], ...patch } }));
+  };
+
+  const handleItemDiscountChange = (eqId: string, val: string) => {
+    updateItemPayment(eqId, { discount: val });
   };
 
   const handleItemAmountChange = (eqId: string, val: string) => {
@@ -350,61 +355,78 @@ function PayDialog({
         return;
       }
 
-      selectedEqIds.forEach((eqId) => {
-        const item = itemPayments[eqId];
-        if (!item) return;
-        const amt = Number(item.amount) || 0;
-        if (amt <= 0) return;
-        const eqName = getEquipmentName(eqId);
+      // Group items by payment mode to save consolidated payment per mode
+      const itemsToPay = selectedEqIds
+        .map((eqId) => ({ eqId, state: itemPayments[eqId] }))
+        .filter((it) => it.state && (Number(it.state.amount) > 0 || Number(it.state.discount) > 0));
 
-        if (item.mode === "Cash+Bank") {
-          const cAmt = Number(item.cashAmount) || 0;
-          const bAmt = Number(item.bankAmount) || 0;
-          if (cAmt > 0) {
-            savePayment({
-              id: getNextPaymentNumber(),
-              date: paymentDate,
-              customer: rental.customer,
-              customerId: rental.customerId,
-              agreement: rental.id,
-              equipmentId: eqId,
-              amount: cAmt,
-              mode: "Cash",
-              type: "Rent" as const,
-              notes: `${eqName}: Rent Payment (Cash portion of ₹${amt.toLocaleString("en-IN")})`,
-              status: "Paid" as const,
-            });
-          }
-          if (bAmt > 0) {
-            savePayment({
-              id: getNextPaymentNumber(),
-              date: paymentDate,
-              customer: rental.customer,
-              customerId: rental.customerId,
-              agreement: rental.id,
-              equipmentId: eqId,
-              amount: bAmt,
-              mode: "Bank",
-              type: "Rent" as const,
-              txRef: item.txRef,
-              notes: `${eqName}: Rent Payment (Bank portion of ₹${amt.toLocaleString("en-IN")})`,
-              status: "Paid" as const,
-            });
-          }
-        } else {
+      const standardItems = itemsToPay.filter((it) => it.state.mode !== "Cash+Bank");
+      const splitItems = itemsToPay.filter((it) => it.state.mode === "Cash+Bank");
+
+      const modes = Array.from(new Set(standardItems.map((it) => it.state.mode)));
+      modes.forEach((mode) => {
+        const modeItems = standardItems.filter((it) => it.state.mode === mode);
+        const totalModeAmt = modeItems.reduce((sum, it) => sum + (Number(it.state.amount) || 0), 0);
+        const totalModeDisc = modeItems.reduce((sum, it) => sum + (Number(it.state.discount) || 0), 0);
+        const eqNames = modeItems.map((it) => getEquipmentName(it.eqId)).join(", ");
+        const eqIds = modeItems.map((it) => it.eqId).join(",");
+        const txRefs = Array.from(new Set(modeItems.map((it) => it.state.txRef).filter(Boolean))).join(", ");
+
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate,
+          customer: rental.customer,
+          customerId: rental.customerId,
+          agreement: rental.id,
+          equipmentId: eqIds,
+          amount: totalModeAmt,
+          mode: mode as any,
+          type: "Rent" as const,
+          txRef: txRefs,
+          notes: `${eqNames}: Rent Payment${totalModeDisc > 0 ? ` [Discount of ₹${totalModeDisc} applied]` : ""}`,
+          status: "Paid" as const,
+          discount: totalModeDisc,
+        });
+      });
+
+      splitItems.forEach((it) => {
+        const amt = Number(it.state.amount) || 0;
+        const itemDisc = Number(it.state.discount) || 0;
+        const cAmt = Number(it.state.cashAmount) || 0;
+        const bAmt = Number(it.state.bankAmount) || 0;
+        const eqName = getEquipmentName(it.eqId);
+
+        if (cAmt > 0) {
           savePayment({
             id: getNextPaymentNumber(),
             date: paymentDate,
             customer: rental.customer,
             customerId: rental.customerId,
             agreement: rental.id,
-            equipmentId: eqId,
-            amount: amt,
-            mode: item.mode as any,
+            equipmentId: it.eqId,
+            amount: cAmt,
+            mode: "Cash",
             type: "Rent" as const,
-            txRef: item.txRef,
-            notes: `${eqName}: Rent Payment`,
+            notes: `${eqName}: Rent Payment (Cash portion of ₹${amt.toLocaleString("en-IN")})${itemDisc > 0 ? ` [Discount of ₹${itemDisc} applied]` : ""}`,
             status: "Paid" as const,
+            discount: itemDisc,
+          });
+        }
+        if (bAmt > 0) {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate,
+            customer: rental.customer,
+            customerId: rental.customerId,
+            agreement: rental.id,
+            equipmentId: it.eqId,
+            amount: bAmt,
+            mode: "Bank",
+            type: "Rent" as const,
+            txRef: it.state.txRef,
+            notes: `${eqName}: Rent Payment (Bank portion of ₹${amt.toLocaleString("en-IN")})${itemDisc > 0 ? ` [Discount of ₹${itemDisc} applied]` : ""}`,
+            status: "Paid" as const,
+            discount: cAmt > 0 ? 0 : itemDisc,
           });
         }
       });
@@ -656,11 +678,19 @@ function PayDialog({
                     )}
                   </div>
 
-                  <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                  <div className="space-y-2">
                     {eqItems.map((item: any) => {
                       const details = calcUnpaidDetailsForEquipment(rental, item.equipmentId);
                       const isReturned = !!item.returned;
                       const isChecked = !isReturned && selectedEqIds.includes(item.equipmentId);
+
+                      // Find last payment details for this equipment
+                      const itemPrevPayments = (paymentsList || []).filter((p: any) =>
+                        p.agreement === rental.id &&
+                        (p.equipmentId === item.equipmentId || (p.notes && String(p.notes).toLowerCase().includes(String(item.serial || item.equipmentId).toLowerCase())))
+                      );
+                      const lastPayment = itemPrevPayments.length > 0 ? itemPrevPayments[itemPrevPayments.length - 1] : null;
+
                       return (
                         <div
                           key={item.equipmentId}
@@ -714,12 +744,27 @@ function PayDialog({
                                 <span className="text-emerald-600 font-medium">Paid: ₹{details.grandTotalPaid.toLocaleString("en-IN")}</span>
                               </div>
 
+                              {/* Last Payment Details (Small Text) */}
+                              <div className="mt-1.5 flex items-center gap-1.5">
+                                {lastPayment ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/40 px-2 py-0.5 rounded border border-blue-200/60 dark:border-blue-800/40">
+                                    <Clock className="h-3 w-3 shrink-0 text-blue-600 dark:text-blue-400" />
+                                    Last Payment: <strong>₹{(cleanNum(lastPayment.amount) || 0).toLocaleString("en-IN")}</strong> on {formatDateDDMMYYYY(lastPayment.date)} ({lastPayment.mode || "Cash"})
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground/80 bg-muted/40 px-2 py-0.5 rounded">
+                                    <Clock className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+                                    Last Payment: None recorded
+                                  </span>
+                                )}
+                              </div>
+
                               {isMultiItem && isChecked && itemPayments[item.equipmentId] && (
                                 <div
                                   className="mt-3 pt-3 border-t border-border/40 space-y-2"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <div className="grid grid-cols-2 gap-2">
+                                  <div className="grid grid-cols-3 gap-2">
                                     <div className="space-y-1">
                                       <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
                                       <Input
@@ -727,6 +772,16 @@ function PayDialog({
                                         value={itemPayments[item.equipmentId].amount}
                                         onChange={(e) => handleItemAmountChange(item.equipmentId, e.target.value)}
                                         className="h-8 text-[12px] bg-background font-semibold"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Discount (₹)</Label>
+                                      <Input
+                                        type="number"
+                                        placeholder="0"
+                                        value={itemPayments[item.equipmentId].discount || ""}
+                                        onChange={(e) => handleItemDiscountChange(item.equipmentId, e.target.value)}
+                                        className="h-8 text-[12px] bg-background font-semibold border-emerald-500/30"
                                       />
                                     </div>
                                     <div className="space-y-1">

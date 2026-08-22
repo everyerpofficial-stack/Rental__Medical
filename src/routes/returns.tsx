@@ -1843,6 +1843,31 @@ function ReturnsPage() {
                     </div>
                   </div>
 
+                  {/* Remarks & Collector */}
+                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
+                      <div className="relative">
+                        <Input
+                          placeholder="Collector name"
+                          className="h-8 text-[11.5px] pl-7"
+                          value={collectedBy}
+                          onChange={(e) => setCollectedBy(e.target.value)}
+                        />
+                        <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
+                      <Input
+                        placeholder="Condition, accessories, etc."
+                        className="h-8 text-[11.5px]"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
                   {/* Reconciliation Ledger Details */}
                   {(() => {
                     const dmgCharges = dmg;
@@ -2154,31 +2179,6 @@ function ReturnsPage() {
                       </div>
                     );
                   })()}
-
-                  {/* Remarks & Collector */}
-                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
-                    <div className="space-y-1">
-                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
-                      <div className="relative">
-                        <Input
-                          placeholder="Collector name"
-                          className="h-8 text-[11.5px] pl-7"
-                          value={collectedBy}
-                          onChange={(e) => setCollectedBy(e.target.value)}
-                        />
-                        <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
-                      <Input
-                        placeholder="Condition, accessories, etc."
-                        className="h-8 text-[11.5px]"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                      />
-                    </div>
-                  </div>
 
                   {/* WhatsApp Preview Box */}
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/10 p-3 space-y-2">

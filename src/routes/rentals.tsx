@@ -1685,7 +1685,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         </Button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 mt-4">
+      <div className="flex flex-col lg:flex-row gap-6 mt-4 items-start relative">
         {/* Left Column: Scrollable Form */}
         <div className="flex-1 space-y-4">
             {hasDraft && (
@@ -2078,11 +2078,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             syncAdditionalItemsWithEquipments(newEquipments);
                           }}
                           placeholder="Select equipment"
-                          searchPlaceholder="Search equipment by name, serial, owner..."
+                          searchPlaceholder="Search equipment by series number, name, owner..."
                           emptyText="No equipment found."
                           options={itemsForSelect.map((e) => ({
                             value: e.id,
-                            label: formatEquipmentLabel({ name: e.name || e.category, model: e.model }),
+                            label: formatEquipmentLabel({ name: e.name || e.category, serial: e.serial, model: e.model }),
+                            searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
                           }))}
                           className="h-9"
                         />
@@ -2221,6 +2222,27 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           }}
                         />
                       </div>
+
+                      {/* Equipment Details Display Banner */}
+                      {(eqItem.equipmentId || eqItem.serial || eqItem.model) && (
+                        <div className="sm:col-span-6 flex flex-wrap items-center gap-x-4 gap-y-1.5 bg-muted/40 border border-border/60 rounded-md px-3 py-2 text-[12px] mt-1">
+                          <span className="font-semibold text-foreground flex items-center gap-1.5">
+                            <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                            Selected Equipment Details:
+                          </span>
+                          <span className="text-muted-foreground">
+                            Model Number: <strong className="text-foreground font-mono bg-background px-1.5 py-0.5 rounded border border-border/50">{eqItem.model || equipmentList.find(e => e.id === eqItem.equipmentId)?.model || "Standard"}</strong>
+                          </span>
+                          <span className="text-muted-foreground">
+                            Series Number: <strong className="text-foreground font-mono bg-background px-1.5 py-0.5 rounded border border-border/50">{eqItem.serial || equipmentList.find(e => e.id === eqItem.equipmentId)?.serial || "—"}</strong>
+                          </span>
+                          {equipmentList.find(e => e.id === eqItem.equipmentId)?.owner && (
+                            <span className="text-muted-foreground">
+                              Owner: <strong className="text-foreground">{equipmentList.find(e => e.id === eqItem.equipmentId)?.owner}</strong>
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2756,12 +2778,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           </div>
 
           {/* Right Column: Sticky Summary & Actions */}
-          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-h-0">
+          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-h-0 lg:sticky lg:top-4 lg:self-start">
             {/* ITEM-11: pin the breakdown to the top of the summary column. The
                 column scrolls independently (lg:overflow-y-auto), so once the
                 agreement had a few accessories the Total Collected row slid out
                 of view exactly when the operator needed to check it. */}
-            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden lg:sticky lg:top-0 lg:z-10 lg:bg-card">
+            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden lg:sticky lg:top-4 lg:z-10 lg:bg-card shadow-sm">
               <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Upfront Charges — Itemized Breakdown</span>
               </div>
