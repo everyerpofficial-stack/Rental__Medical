@@ -4763,20 +4763,48 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   const totalRentalMonthlyRent = items.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
   const shareRatio = totalRentalMonthlyRent > 0 ? (currentItemRent / totalRentalMonthlyRent) : (1 / Math.max(1, items.length));
 
+  const cleanId = (val: any) => String(val || "").trim().toUpperCase().replace(/^AGR-/i, "");
+
   const isRentType = (type: any) => {
     const s = String(type || "").toLowerCase();
     return s.includes("rent");
   };
-  const isMatchAgreement = (p: any) => p.agreement === rental.id || p.rentalId === rental.id || p.agreementId === rental.id;
+  const isMatchAgreement = (p: any) => {
+    const pAgr = cleanId(p.agreement || p.rentalId || p.agreementId);
+    const rAgr = cleanId(rental.id);
+    if (!pAgr || !rAgr) return false;
+    return pAgr === rAgr;
+  };
   const isPaidStatus = (status: any) => !status || status === "Paid" || status === "Completed";
 
-  // 1. Direct payments for this specific equipment ID or notes mentioning this equipment
+  // 3. Initial advance collected when the agreement was created.
+  const initialTotal = (() => {
+    if (excludeInitial) return 0;
+    const status = rental.rentalPaymentStatus;
+    if (status !== "Paid" && status !== "Partial") return 0;
+    const recorded = cleanNum(rental.rentPaidAmount);
+    if (recorded > 0) return recorded;
+    return status === "Paid" ? cleanNum(rental.monthlyRent) : 0;
+  })();
+
+  // If the agreement has only 1 equipment, all agreement rent payments belong to this item!
+  if (items.length === 1) {
+    const allAgreementPaid = paymentsList
+      .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
+      .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
+
+    const isInitialAlreadyBooked = paymentsList.some((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type));
+    const initialPaid = isInitialAlreadyBooked ? 0 : initialTotal;
+
+    return allAgreementPaid + initialPaid;
+  }
+
+  // Multi-equipment agreement handling
   const directPaid = paymentsList
     .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
     .filter((p) => p.equipmentId === equipmentId || (p.equipmentId && String(p.equipmentId).split(",").includes(equipmentId)) || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
     .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
-  // 2. Shared/Agreement-level payments (not matching this item nor any other item's serial / equipmentId)
   const sharedPaymentsPaid = paymentsList
     .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
     .filter((p) => {
@@ -4788,21 +4816,6 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     })
     .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
-  // 3. Initial advance collected when the agreement was created. It lives on the
-  //    rental record rather than as a Payment row, so it has to be added in
-  //    separately - but only where no Payment row already accounts for it.
-  const initialTotal = (() => {
-    if (excludeInitial) return 0;
-    const status = rental.rentalPaymentStatus;
-    if (status !== "Paid" && status !== "Partial") return 0;
-    const recorded = cleanNum(rental.rentPaidAmount);
-    if (recorded > 0) return recorded;
-    return status === "Paid" ? cleanNum(rental.monthlyRent) : 0;
-  })();
-
-  // A Payment row tagged to this item, or an untagged agreement-level payment,
-  // already represents that money - adding the upfront amount too would count
-  // the same rupees twice.
   const isInitialAlreadyBooked = paymentsList.some((p) => {
     if (!isMatchAgreement(p) || !isPaidStatus(p.status)) return false;
     if (!isRentType(p.type)) return false;
