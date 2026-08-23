@@ -82,19 +82,18 @@ const ID_PROOF_KEYWORDS = [
 ];
 const AGREEMENT_KEYWORDS = ["agreement", "contract", "rental", "rent", "lease", "signed", "terms"];
 
-const detectDocumentType = (fileName: string, mimeType: string): string | null => {
+const detectDocumentType = (fileName: string, mimeType: string): string => {
   const normalized = fileName.toLowerCase();
   const words = normalized.split(/[^a-z0-9]+/).filter(Boolean);
 
   if (words.some((w) => ID_PROOF_KEYWORDS.includes(w))) return "ID Proof";
   if (words.some((w) => AGREEMENT_KEYWORDS.includes(w))) return "Agreement";
+  if (normalized.includes("delivery") || normalized.includes("photo")) return "Delivery Photo";
 
-  // No keyword match — fall back to a sensible default by file type:
-  // KYC docs are usually photos/scans, agreements are usually PDFs.
   if (mimeType.startsWith("image/")) return "ID Proof";
-  if (mimeType === "application/pdf") return "Agreement";
+  if (mimeType.includes("pdf") || normalized.endsWith(".pdf")) return "Agreement";
 
-  return null;
+  return "Document";
 };
 
 function DocsPage() {
@@ -210,14 +209,15 @@ function DocsPage() {
   // Get dynamic file count inside each agreement folder
   // Only counts: Rental Agreement, Customer KYC (ID Proof), Location Tag, Return Agreement
   const getFolderFileCount = (rental: any) => {
-    // 1. Uploaded or Signed Agreement and Delivery Photo files for this rental
-    const agreementFiles = docsList.filter(d => d.rentalId === rental.id && (d.type === "Agreement" || d.type === "Signed Agreement" || d.type === "Delivery Photo")).length;
-    // 2. Customer KYC (ID Proofs) of the rental's customer
-    const kycFiles = docsList.filter(d => d.customerId === rental.customerId && d.type === "ID Proof").length;
+    // 1. All documents saved directly inside this rental folder
+    const rentalFilesCount = docsList.filter(d => d.rentalId === rental.id).length;
+    // 2. Customer KYC (ID Proofs) of the rental's customer not already linked by rentalId
+    const kycFilesCount = docsList.filter(d => d.customerId === rental.customerId && d.type === "ID Proof" && d.rentalId !== rental.id).length;
     
     let systemFiles = 0;
     // 3. Dynamic system agreement (only if no uploaded agreement exists)
-    if (agreementFiles === 0) systemFiles += 1;
+    const hasUploadedAgreement = docsList.some(d => d.rentalId === rental.id && (d.type === "Agreement" || d.type === "Signed Agreement"));
+    if (!hasUploadedAgreement) systemFiles += 1;
     
     // 4. Return agreement (if returned)
     const returnCount = returnsList.filter(ret => ret.agreement === rental.id).length;
@@ -227,7 +227,7 @@ function DocsPage() {
     const hasLocation = docsList.some(d => d.type === "Location Tag" && (d.rentalId === rental.id || d.name.includes(rental.id))) || ((rental as any).latitude && (rental as any).longitude);
     if (hasLocation) systemFiles += 1;
 
-    return agreementFiles + kycFiles + systemFiles;
+    return rentalFilesCount + kycFilesCount + systemFiles;
   };
 
   // Agreements search and filter
@@ -252,24 +252,21 @@ function DocsPage() {
   }, [rentalsList, customersList, searchQuery]);
 
   // Documents inside the currently opened folder.
-  // Only shows: Rental Agreement (type=Agreement/Signed Agreement), Customer KYC (type=ID Proof), and Delivery Photos.
-  // Location Tag and Return Agreement are shown as separate system cards.
-  // Exchange Slips, Invoices, Receipts are intentionally excluded from this view.
+  // Shows all documents attached to this rental binder (or customer KYC ID proofs).
   const folderDocuments = useMemo(() => {
     if (!selectedFolderId) return [];
 
     if (selectedFolderId === "general") {
-      return docsList.filter(d => !d.rentalId && (d.type === "Agreement" || d.type === "Signed Agreement" || d.type === "ID Proof" || d.type === "Delivery Photo"));
+      return docsList.filter(d => !d.rentalId);
     }
 
     const rental = rentalsList.find(r => r.id === selectedFolderId);
     if (!rental) return [];
 
-    // Only include: uploaded/signed Agreement or Delivery Photo files for this rental + customer KYC ID Proofs
     return docsList.filter(d => {
-      const isUploadedAgreement = d.rentalId === selectedFolderId && (d.type === "Agreement" || d.type === "Signed Agreement" || d.type === "Delivery Photo");
-      const isKYC = d.customerId === rental.customerId && d.type === "ID Proof";
-      return isUploadedAgreement || isKYC;
+      const isRentalDoc = d.rentalId === selectedFolderId;
+      const isCustomerKYC = Boolean(rental.customerId && d.customerId === rental.customerId && d.type === "ID Proof");
+      return isRentalDoc || isCustomerKYC;
     });
   }, [selectedFolderId, docsList, rentalsList]);
 
@@ -482,7 +479,11 @@ function DocsPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Agreement">Rental Agreement Doc</SelectItem>
+                          <SelectItem value="Signed Agreement">Signed Agreement</SelectItem>
                           <SelectItem value="ID Proof">KYC ID Proof (Aadhaar / PAN / Photo)</SelectItem>
+                          <SelectItem value="Delivery Photo">Delivery Photo / Slip</SelectItem>
+                          <SelectItem value="Invoice">Invoice / Receipt</SelectItem>
+                          <SelectItem value="Document">Other Document</SelectItem>
                         </SelectContent>
                       </Select>
                       {typeAutoDetected && (
@@ -509,7 +510,7 @@ function DocsPage() {
                             if (detectedType) {
                               setNewDocType(detectedType);
                               setTypeAutoDetected(true);
-                              toast.info(`Auto-scanned file — detected type: ${detectedType === "ID Proof" ? "KYC ID Proof" : "Rental Agreement"}`);
+                              toast.info(`Auto-scanned file — detected type: ${detectedType}`);
                             } else {
                               setTypeAutoDetected(false);
                             }
@@ -518,6 +519,7 @@ function DocsPage() {
                             reader.onloadend = () => setNewDocFileData(reader.result as string);
                             reader.readAsDataURL(file);
                           }
+                          e.target.value = "";
                         }}
                       />
                     </div>
@@ -875,7 +877,10 @@ function DocsPage() {
                     <div className="h-10 w-10 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
                     <p className="text-[13px] text-muted-foreground font-medium">Loading document preview…</p>
                   </div>
-                ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && (previewDoc.fileData.startsWith("data:image/") || (previewDoc.fileData.startsWith("data:") && previewDoc.name.toLowerCase().match(/\.(png|jpe?g|gif|webp|svg)$/))) ? (
+                ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && (
+                    previewDoc.fileData.startsWith("data:image/") ||
+                    (previewDoc.fileData.startsWith("data:") && previewDoc.name.toLowerCase().match(/\.(png|jpe?g|gif|webp|svg)$/i))
+                  ) ? (
                   <div className="flex items-center justify-center w-full h-full p-2 bg-white">
                     <img
                       src={previewDoc.fileData}
@@ -883,9 +888,14 @@ function DocsPage() {
                       alt={previewDoc.name}
                     />
                   </div>
-                ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:application/pdf") ? (
+                ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && (
+                    previewDoc.fileData.startsWith("data:application/pdf") ||
+                    previewDoc.fileData.startsWith("data:application/x-pdf") ||
+                    previewDoc.fileData.startsWith("data:application/octet-stream") ||
+                    previewDoc.name.toLowerCase().endsWith(".pdf")
+                  ) ? (
                   <iframe
-                    src={previewDoc.fileData}
+                    src={previewDoc.fileData.startsWith("data:") ? previewDoc.fileData : `data:application/pdf;base64,${previewDoc.fileData}`}
                     className="w-full h-full border-0 bg-white"
                     title={previewDoc.name}
                   />

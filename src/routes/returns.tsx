@@ -1743,16 +1743,22 @@ function ReturnsPage() {
                     </div>
                     
                     <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 bg-muted/20 p-3 rounded-xl border border-border/40">
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between">
-                        <FieldLabel>Duration</FieldLabel>
-                        <div className="text-[12px] font-bold text-foreground h-7 flex items-center">
+                      {/* Duration */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Duration</Label>
+                        </div>
+                        <div className="text-[11.5px] font-bold text-foreground h-7 flex items-center px-2 bg-muted/30 rounded border border-border/50 truncate">
                           {selectedRental ? formatRentalDuration(selectedRental.start, returnDate, rentalEquipments[0]?.rentCycle) : "0 Days"}
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
-                        <FieldLabel>Total Rent Payable</FieldLabel>
-                        <div className="relative mt-0.5">
+                      {/* Total Rent Payable */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Payable</Label>
+                        </div>
+                        <div className="relative">
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
@@ -1769,9 +1775,12 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
-                        <FieldLabel>Total Rent Paid</FieldLabel>
-                        <div className="relative mt-0.5">
+                      {/* Total Rent Paid */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
+                        </div>
+                        <div className="relative">
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
@@ -1788,9 +1797,12 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
-                        <FieldLabel>Outstanding Rent Due</FieldLabel>
-                        <div className="relative mt-0.5">
+                      {/* Outstanding Rent Due */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent Due</Label>
+                        </div>
+                        <div className="relative">
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
@@ -1801,9 +1813,12 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
-                        <FieldLabel>Damage Charges</FieldLabel>
-                        <div className="relative mt-0.5">
+                      {/* Damage Charges */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Damage Charges</Label>
+                        </div>
+                        <div className="relative">
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
@@ -1814,9 +1829,12 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border">
-                        <FieldLabel>Return Discount</FieldLabel>
-                        <div className="relative mt-0.5">
+                      {/* Return Discount */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Return Discount</Label>
+                        </div>
+                        <div className="relative">
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
@@ -1827,55 +1845,36 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between min-h-[52px]">
-                        <FieldLabel>Unpaid Accessories</FieldLabel>
-                        <div className="text-[10px] font-semibold text-foreground leading-tight">
+                      {/* Unpaid Accessories */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
+                        </div>
+                        <div className="h-7 flex items-center px-2 bg-muted/30 rounded border border-border/50 overflow-hidden">
                           {unpaidItems.length > 0 ? (
-                            <div className="max-h-[30px] overflow-y-auto space-y-0.5">
+                            <div className="w-full max-h-7 overflow-y-auto space-y-0.5">
                               {unpaidItems.map((item: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-rose-600 text-[9px]">
+                                <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
                                   <span className="truncate max-w-[70px]">{item.name}</span>
                                   <span>₹{cleanNum(item.amount)}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">₹0</span>
+                            <span className="text-[11px] font-semibold text-muted-foreground">₹0</span>
                           )}
                         </div>
                       </div>
 
-                      <div className="space-y-1 bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between">
-                        <FieldLabel>Security Deposit</FieldLabel>
-                        <div className="text-[12px] font-bold text-blue-600 h-7 flex items-center">
+                      {/* Security Deposit */}
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
+                        <div className="h-6 flex items-center">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</Label>
+                        </div>
+                        <div className="text-[11.5px] font-bold text-blue-600 h-7 flex items-center px-2 bg-blue-50/20 rounded border border-blue-200/60 truncate">
                           ₹{deposit.toLocaleString("en-IN")}
                         </div>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Remarks & Collector */}
-                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
-                    <div className="space-y-1">
-                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
-                      <div className="relative">
-                        <Input
-                          placeholder="Collector name"
-                          className="h-8 text-[11.5px] pl-7"
-                          value={collectedBy}
-                          onChange={(e) => setCollectedBy(e.target.value)}
-                        />
-                        <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
-                      <Input
-                        placeholder="Condition, accessories, etc."
-                        className="h-8 text-[11.5px]"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                      />
                     </div>
                   </div>
 
@@ -2143,6 +2142,31 @@ function ReturnsPage() {
                       </div>
                     );
                   })()}
+
+                  {/* Remarks & Collector */}
+                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
+                      <div className="relative">
+                        <Input
+                          placeholder="Collector name"
+                          className="h-8 text-[11.5px] pl-7"
+                          value={collectedBy}
+                          onChange={(e) => setCollectedBy(e.target.value)}
+                        />
+                        <User className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground/60" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</Label>
+                      <Input
+                        placeholder="Condition, accessories, etc."
+                        className="h-8 text-[11.5px]"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Right Column: WhatsApp Message & Payment Ledger (col-span-5) */}

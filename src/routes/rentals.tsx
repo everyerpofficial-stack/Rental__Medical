@@ -2662,7 +2662,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         <div className="border-2 border-dashed border-border/60 bg-background rounded-lg h-24 overflow-hidden relative hover:bg-muted/10 transition-colors cursor-pointer">
                           {signedDocUrl ? (
                             <div className="relative w-full h-full group bg-muted/20 flex items-center justify-center">
-                              {signedDocUrl.startsWith("data:application/pdf") || signedDocUrl === "PDF" ? (
+                              {signedDocUrl.startsWith("data:application/pdf") ||
+                              signedDocUrl.startsWith("data:application/x-pdf") ||
+                              signedDocUrl.startsWith("data:application/octet-stream") ||
+                              signedDocUrl === "PDF" ||
+                              (signedDocName && signedDocName.toLowerCase().endsWith(".pdf")) ? (
                                 <div className="flex flex-col items-center justify-center w-full h-full p-2">
                                   <FileText className="h-8 w-8 text-primary mb-1" />
                                   <span className="text-[10px] font-bold text-primary truncate max-w-full px-2">{signedDocName || "PDF Uploaded"}</span>
@@ -3697,6 +3701,7 @@ function SignedDocumentCaptureDialog({ trigger, onSave }: { trigger: React.React
         setIsOpen(false);
       };
       reader.readAsDataURL(file);
+      e.target.value = "";
     }
   };
 

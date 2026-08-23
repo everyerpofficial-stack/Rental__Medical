@@ -711,12 +711,19 @@ function PayDialog({
                       const isReturned = !!item.returned;
                       const isChecked = !isReturned && selectedEqIds.includes(item.equipmentId);
 
-                      // Find last payment details for this equipment
-                      const itemPrevPayments = (paymentsList || []).filter((p: any) =>
-                        p.agreement === rental.id &&
-                        (p.equipmentId === item.equipmentId || (p.notes && String(p.notes).toLowerCase().includes(String(item.serial || item.equipmentId).toLowerCase())))
-                      );
-                      const lastPayment = itemPrevPayments.length > 0 ? itemPrevPayments[itemPrevPayments.length - 1] : null;
+                      // Find last payment details for this equipment (sorted latest first)
+                      const itemPrevPayments = (paymentsList || []).filter((p: any) => {
+                        if (p.agreement !== rental.id || p.status === "Cancelled" || p.status === "Void") return false;
+                        if (eqItems.length === 1) return true;
+                        return !p.equipmentId || p.equipmentId === item.equipmentId || (p.notes && String(p.notes).toLowerCase().includes(String(item.serial || item.equipmentId).toLowerCase()));
+                      });
+                      const sortedPrevPayments = [...itemPrevPayments].sort((a: any, b: any) => {
+                        const tA = new Date(a.date).getTime() || 0;
+                        const tB = new Date(b.date).getTime() || 0;
+                        if (tB !== tA) return tB - tA;
+                        return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
+                      });
+                      const lastPayment = sortedPrevPayments.length > 0 ? sortedPrevPayments[0] : null;
 
                       return (
                         <div
