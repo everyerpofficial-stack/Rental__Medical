@@ -1619,16 +1619,17 @@ function DuesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="px-2.5 py-2 text-[10.5px]">Customer</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px]">Agreement</TableHead>
-                  <TableHead className="px-2.5 py-2 text-[10.5px]">Equipment</TableHead>
-
-                  <TableHead className="px-2 py-2 text-[10.5px]">Start Date</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right">Rate</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right">Unpaid Duration</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-success">Total Paid Amount</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-destructive">Remaining Balance</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px]">Status</TableHead>
+                  {/* Rent due history layout to match spreadsheet exactly */}
+                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer name with contact numbers</TableHead>
+                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer full address</TableHead>
+                  <TableHead className="px-2.5 py-2 text-[10.5px]">Equipment name with model</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] w-[100px]">Rent Date</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Rent amount</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Deposit</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Unpaid Duration</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-success w-[110px]">Total Paid Amount</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-destructive w-[110px]">Remaining Balance</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] w-[90px]">Status</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-28">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1643,8 +1644,11 @@ function DuesPage() {
                       returned: false
                     }
                   ];
+                  const custObj = customersById.get(r.customerId);
+                  const fullAddress = custObj?.address || r.address || "No address provided";
                   return (
                     <TableRow key={item.id} className="group">
+                      {/* 1. Customer name with contact numbers */}
                       <TableCell className="px-2.5 py-2">
                         <p className="font-semibold text-[12px] leading-tight">{r.customer}</p>
                         <p className="text-[9.5px] font-mono text-muted-foreground/70">{r.customerId}</p>
@@ -1657,12 +1661,15 @@ function DuesPage() {
                             ))}
                           </div>
                         )}
+                        <div className="mt-1 font-mono text-[9.5px] text-muted-foreground">Agr: {r.id}</div>
                       </TableCell>
-                      <TableCell className="px-2 py-2">
-                        <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[10.5px] font-bold text-primary">
-                          {r.id}
-                        </span>
+
+                      {/* 2. Customer full address */}
+                      <TableCell className="px-2.5 py-2 text-[12px] text-foreground/80 max-w-[200px] leading-normal">
+                        {fullAddress}
                       </TableCell>
+
+                      {/* 3. Equipment name with model */}
                       <TableCell className="px-2.5 py-2">
                         <div className="space-y-1">
                           {eqItems.map((eqItem: any) => {
@@ -1670,9 +1677,7 @@ function DuesPage() {
                             return (
                               <div key={eqItem.equipmentId} className="flex items-center gap-1 text-[11.5px]">
                                 <span className={isReturned ? "line-through text-muted-foreground/50" : "text-foreground/80 font-medium"}>
-                                  {/* ITEM-17/ITEM-7: name, model and serial, so the
-                                      row says which physical unit is on rent. */}
-                                                                    {formatEquipmentLabel({
+                                  {formatEquipmentLabel({
                                     name: eqItem.name || getEquipmentName(eqItem.equipmentId),
                                     model: eqItem.model || equipmentById.get(eqItem.equipmentId)?.model,
                                     serial: "",
@@ -1692,8 +1697,10 @@ function DuesPage() {
                           })}
                         </div>
                       </TableCell>
+
+                      {/* 4. Rent Date */}
                       <TableCell className="px-2 py-2">
-                        <span className="text-[11px] font-mono text-muted-foreground">
+                        <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
                           {formatDateDDMMYYYY(r.start)}
                         </span>
                       </TableCell>
@@ -1708,25 +1715,37 @@ function DuesPage() {
                             ? `₹${combinedMonthlyRent.toLocaleString("en-IN")}/mo`
                             : `₹${combinedDailyRent.toLocaleString("en-IN")}/day`;
 
+                          const combinedDeposit = eqItems.reduce((sum: number, it: any) => sum + (Number(it.deposit) || 0), 0) || Number(r.deposit) || 0;
+
                           const sampleDetails = calcUnpaidDetailsForEquipment(r, eqItems[0].equipmentId);
 
                           return (
                             <>
+                              {/* 5. Rent amount */}
                               <TableCell className="px-2 py-2 text-right">
                                 <div className="text-[11.5px] font-semibold text-muted-foreground">
                                   {combinedRateText}
                                 </div>
                               </TableCell>
+                              {/* 6. Deposit */}
+                              <TableCell className="px-2 py-2 text-right">
+                                <div className="text-[11.5px] font-semibold text-muted-foreground">
+                                  ₹{combinedDeposit.toLocaleString("en-IN")}
+                                </div>
+                              </TableCell>
+                              {/* 7. Unpaid Duration */}
                               <TableCell className="px-2 py-2 text-right">
                                 <div className="text-[11.5px] font-bold text-destructive">
                                   {sampleDetails.unpaidText}
                                 </div>
                               </TableCell>
+                              {/* 8. Total Paid Amount */}
                               <TableCell className="px-2 py-2 text-right">
                                 <div className="text-[11.5px] font-extrabold text-success text-right">
                                   ₹{item.totalPaid.toLocaleString("en-IN")}
                                 </div>
                               </TableCell>
+                              {/* 9. Remaining Balance */}
                               <TableCell className="px-2 py-2 text-right">
                                 <div className={`text-[11.5px] font-extrabold text-right ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
                                   ₹{item.totalOutstanding.toLocaleString("en-IN")}
@@ -1738,6 +1757,7 @@ function DuesPage() {
 
                         return (
                           <>
+                            {/* 5. Rent amount */}
                             <TableCell className="px-2 py-2 text-right">
                               <div className="space-y-1 text-right">
                                 {eqItems.map((eqItem: any) => {
@@ -1750,6 +1770,20 @@ function DuesPage() {
                                 })}
                               </div>
                             </TableCell>
+                            {/* 6. Deposit */}
+                            <TableCell className="px-2 py-2 text-right">
+                              <div className="space-y-1 text-right">
+                                {eqItems.map((eqItem: any) => {
+                                  const depVal = Number(eqItem.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
+                                  return (
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
+                                      ₹{depVal.toLocaleString("en-IN")}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </TableCell>
+                            {/* 7. Unpaid Duration */}
                             <TableCell className="px-2 py-2 text-right">
                               <div className="space-y-1 text-right">
                                 {eqItems.map((eqItem: any) => {
@@ -1762,6 +1796,7 @@ function DuesPage() {
                                 })}
                               </div>
                             </TableCell>
+                            {/* 8. Total Paid Amount */}
                             <TableCell className="px-2 py-2 text-right">
                               <div className="space-y-1 text-right">
                                 {eqItems.map((eqItem: any) => {
@@ -1774,6 +1809,7 @@ function DuesPage() {
                                 })}
                               </div>
                             </TableCell>
+                            {/* 9. Remaining Balance */}
                             <TableCell className="px-2 py-2 text-right">
                               <div className="space-y-1 text-right">
                                 {eqItems.map((eqItem: any) => {
@@ -1789,7 +1825,9 @@ function DuesPage() {
                           </>
                         );
                       })()}
+                      {/* 10. Status */}
                       <TableCell className="px-2 py-2"><StatusBadge status={r.status} /></TableCell>
+                      {/* 11. Actions */}
                       <TableCell className="px-2 py-2 text-right">
                         <div className="flex items-center justify-end gap-0.5 transition-opacity">
                           <PayDialog
@@ -1816,7 +1854,7 @@ function DuesPage() {
                 })}
                 {filteredRentals.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="py-10 text-center text-[13px] text-muted-foreground">
+                    <TableCell colSpan={11} className="py-10 text-center text-[13px] text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <CheckCircle2 className="h-8 w-8 text-success/50" />
                         <p>No pending dues found matching this filter.</p>

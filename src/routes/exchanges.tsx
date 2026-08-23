@@ -42,6 +42,7 @@ function ExchangesPage() {
   const [exchanges, setExchanges] = useState(() => getExchanges());
   const [rentals, setRentals] = useState(() => getRentals());
   const [equipmentList, setEquipmentList] = useState(() => getEquipment());
+  const [customersList] = useState(() => getCustomers());
   
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -717,11 +718,11 @@ function ExchangesPage() {
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-transparent border-b border-border/40">
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange ID</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Date</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Agreement No</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned Item (Serial)</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item (Serial)</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange Date</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer name with contact numbers</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Rent Date</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned item(equipment, model &amp; sl.no)</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item (Equipment, Model &amp; sl.no)</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Reason</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Status</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px] text-right">Actions</TableHead>
@@ -735,52 +736,87 @@ function ExchangesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredExchanges.map((exc) => (
-                    <TableRow key={exc.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
-                      <TableCell className="font-semibold text-foreground text-[13px]"><code>{exc.id}</code></TableCell>
-                      <TableCell className="text-[13px] text-slate-600">{formatDateDDMMYYYY(exc.exchangeDate)}</TableCell>
-                      <TableCell className="text-[13px] font-medium text-primary"><code>{exc.agreementId}</code></TableCell>
-                      <TableCell className="text-[13px] font-semibold text-slate-800">{exc.customer}</TableCell>
-                      <TableCell className="text-[13px] text-slate-600">
-                        <div>{exc.currentEquipment}</div>
-                        <code className="text-[11px] text-muted-foreground">{exc.currentEquipmentSerial}</code>
-                      </TableCell>
-                      <TableCell className="text-[13px] text-slate-600">
-                        {exc.newEquipment ? (
-                          <>
-                            <div>{exc.newEquipment}</div>
-                            <code className="text-[11px] text-muted-foreground">{exc.newEquipmentSerial}</code>
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground italic text-[12px]">Pending swap</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-[13px] text-slate-500 max-w-[200px] truncate" title={exc.reason}>{exc.reason}</TableCell>
-                      <TableCell className="text-[13px]"><StatusBadge status={exc.status} /></TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-slate-100 rounded-md"
-                            onClick={() => setSelectedExchange(exc)}
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4 text-slate-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 hover:bg-slate-100 rounded-md"
-                            onClick={() => printExchangeSlip(exc)}
-                            title="Print Exchange Slip"
-                          >
-                            <Printer className="h-4 w-4 text-slate-600" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredExchanges.map((exc) => {
+                    const cust = customersList.find((c: any) => c.id === exc.customerId || c.name === exc.customer);
+                    const contactNo = cust ? [cust.phone, cust.altPhone].filter(Boolean).join(" / ") : "";
+                    const rental = rentals.find((r: any) => r.id === exc.agreementId);
+                    const rentDate = rental?.start ? formatDateDDMMYYYY(rental.start) : "—";
+                    const oldEq = equipmentList.find((e: any) => e.id === exc.currentEquipmentId);
+                    const newEq = equipmentList.find((e: any) => e.id === exc.newEquipmentId);
+                    return (
+                      <TableRow key={exc.id} className="hover:bg-muted/10 border-b border-border/40 transition-colors">
+                        {/* 1. Exchange ID */}
+                        <TableCell className="font-semibold text-foreground text-[13px]"><code>{exc.id}</code></TableCell>
+                        
+                        {/* 2. Exchange Date */}
+                        <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{formatDateDDMMYYYY(exc.exchangeDate)}</TableCell>
+                        
+                        {/* 3. Customer name with contact numbers */}
+                        <TableCell className="text-[13px] font-semibold text-slate-800">
+                          <div>{exc.customer}</div>
+                          {contactNo && (
+                            <div className="text-[11.5px] text-muted-foreground font-normal mt-0.5">{contactNo}</div>
+                          )}
+                          <div className="text-[9.5px] font-mono text-muted-foreground/60 mt-0.5">Agr: {exc.agreementId}</div>
+                        </TableCell>
+                        
+                        {/* 4. Rent Date */}
+                        <TableCell className="text-[13px] text-slate-600 whitespace-nowrap">{rentDate}</TableCell>
+                        
+                        {/* 5. Returned item(equipment, model & sl.no) */}
+                        <TableCell className="text-[13px] text-slate-600 max-w-[220px] leading-tight">
+                          {formatEquipmentLabel({
+                            name: exc.currentEquipment,
+                            model: oldEq?.model || "",
+                            serial: exc.currentEquipmentSerial
+                          })}
+                        </TableCell>
+                        
+                        {/* 6. New Item (Equipment, Model & sl.no) */}
+                        <TableCell className="text-[13px] text-slate-600 max-w-[220px] leading-tight">
+                          {exc.newEquipment ? (
+                            formatEquipmentLabel({
+                              name: exc.newEquipment,
+                              model: newEq?.model || "",
+                              serial: exc.newEquipmentSerial
+                            })
+                          ) : (
+                            <span className="text-muted-foreground italic text-[12px]">Pending swap</span>
+                          )}
+                        </TableCell>
+                        
+                        {/* 7. Reason */}
+                        <TableCell className="text-[13px] text-slate-500 max-w-[150px] truncate" title={exc.reason}>{exc.reason}</TableCell>
+                        
+                        {/* 8. Status */}
+                        <TableCell className="text-[13px]"><StatusBadge status={exc.status} /></TableCell>
+                        
+                        {/* 9. Actions */}
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-slate-100 rounded-md"
+                              onClick={() => setSelectedExchange(exc)}
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4 text-slate-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-slate-100 rounded-md"
+                              onClick={() => printExchangeSlip(exc)}
+                              title="Print Exchange Slip"
+                            >
+                              <Printer className="h-4 w-4 text-slate-600" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

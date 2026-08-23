@@ -4637,18 +4637,27 @@ function RentalsPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                const headers = ["Agreement ID", "Customer", "Equipment", "Serial", "Period", "Monthly Rent", "Deposit", "Status"];
-                const rows = rentalsList.map(r => [
-                  r.id,
-                  r.customer,
-                  r.equipment,
-                  r.serial,
-                  `${formatDateDDMMYYYY(r.start)} to ${r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}`,
-                  (r.monthlyRent ?? 0).toString(),
-                  (r.deposit ?? 0).toString(),
-                  r.status
-                ]);
-                downloadExcel("rental_agreements_export.xls", headers, rows, [120, 200, 250, 150, 200, 110, 110, 100]);
+                const headers = ["Customer", "Customer full address", "Equipment name with model", "Rent Date", "Rent rate", "Deposit", "Return date", "Status"];
+                const rows = rentalsList.map(r => {
+                  const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                  const fullAddress = cust ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ") : "—";
+                  const eqNameWithModel = getRentalEquipmentLabels(r).join(" | ");
+                  const rentRateDisplay = (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0)
+                    ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day`
+                    : `₹${(r.monthlyRent ?? 0).toLocaleString("en-IN")}/mo`;
+
+                  return [
+                    `${r.customer} (${r.id})`,
+                    fullAddress || "—",
+                    eqNameWithModel || r.equipment,
+                    formatDateDDMMYYYY(r.start),
+                    rentRateDisplay,
+                    (r.deposit ?? 0).toString(),
+                    r.end ? formatDateDDMMYYYY(r.end) : "Ongoing",
+                    r.status
+                  ];
+                });
+                downloadExcel("rental_agreements_export.xls", headers, rows, [200, 250, 250, 100, 110, 100, 100, 100]);
                 toast.success("Rental agreements log exported successfully.");
               }}
             >
@@ -4763,12 +4772,13 @@ function RentalsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Agreement</TableHead>
                   <TableHead>Customer</TableHead>
-                  <TableHead>Equipment</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead className="text-right">Rent Rate</TableHead>
+                  <TableHead>Customer full address</TableHead>
+                  <TableHead>Equipment name with model</TableHead>
+                  <TableHead>Rent Date</TableHead>
+                  <TableHead className="text-right">Rent rate</TableHead>
                   <TableHead className="text-right">Deposit</TableHead>
+                  <TableHead>Return date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-40 text-right">Actions</TableHead>
                 </TableRow>
@@ -4776,7 +4786,7 @@ function RentalsPage() {
               <TableBody>
                 {filteredRentals.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
+                    <TableCell colSpan={9} className="py-12 text-center text-[13px] text-muted-foreground">
                       No agreements match your search or filter.
                     </TableCell>
                   </TableRow>
@@ -4784,47 +4794,58 @@ function RentalsPage() {
                 {visibleRentals.map((r) => (
                   <TableRow key={r.id} className="group">
                     <TableCell>
-                      <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-2 py-0.5 font-mono text-[11px] font-bold text-primary">
-                        {r.id}
-                      </span>
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-2 py-0.5 font-mono text-[11px] font-bold text-primary mb-1">
+                          {r.id}
+                        </span>
+                        <p className="font-semibold text-[13px]">{r.customer}</p>
+                        {(() => {
+                          const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                          const p1 = r.phone || cust?.phone || "";
+                          const p2 = r.altPhone || cust?.altPhone || "";
+                          const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
+                          return (
+                            <div className="space-y-0.5 mt-0.5 max-w-[200px]">
+                              <p className="text-[10px] font-mono text-muted-foreground">{r.customerId}</p>
+                              {(p1 || p2 || p3) && (
+                                <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                                  {p1 && (
+                                    <span className="flex items-center gap-0.5 text-foreground font-medium">
+                                      <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
+                                      <a href={`tel:${p1}`} className="hover:underline hover:text-primary">{p1}</a>
+                                    </span>
+                                  )}
+                                  {p2 && (
+                                    <span className="text-[10px]">
+                                      Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary">{p2}</a>
+                                    </span>
+                                  )}
+                                  {p3 && (
+                                    <span className="text-[10px]">
+                                      Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary">{p3}</a>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <p className="font-semibold text-[13px]">{r.customer}</p>
                       {(() => {
                         const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
-                        const p1 = r.phone || cust?.phone || "";
-                        const p2 = r.altPhone || cust?.altPhone || "";
-                        const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
-                        return (
-                          <div className="space-y-0.5 mt-0.5 max-w-[200px]">
-                            <p className="text-[10px] font-mono text-muted-foreground">{r.customerId}</p>
-                            {(p1 || p2 || p3) && (
-                              <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
-                                {p1 && (
-                                  <span className="flex items-center gap-0.5 text-foreground font-medium">
-                                    <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
-                                    <a href={`tel:${p1}`} className="hover:underline hover:text-primary">{p1}</a>
-                                  </span>
-                                )}
-                                {p2 && (
-                                  <span className="text-[10px]">
-                                    Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary">{p2}</a>
-                                  </span>
-                                )}
-                                {p3 && (
-                                  <span className="text-[10px]">
-                                    Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary">{p3}</a>
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
+                        if (!cust) return <span className="text-muted-foreground text-[12px]">—</span>;
+                        const fullAddress = [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ");
+                        return <p className="text-[12px] text-foreground/80 max-w-[180px] break-words whitespace-normal leading-normal">{fullAddress || "—"}</p>;
                       })()}
                     </TableCell>
                     <TableCell>
-                      <p className="text-[13px] text-foreground/80">{r.equipment}</p>
-                      <p className="text-[10px] font-mono text-muted-foreground">{r.serial}</p>
+                      <div className="space-y-1 max-w-[200px]">
+                        {getRentalEquipmentLabels(r).map((label, idx) => (
+                          <p key={idx} className="text-[12.5px] text-foreground/80 leading-normal font-medium">{label}</p>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
@@ -4841,6 +4862,11 @@ function RentalsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-[12px] font-semibold text-muted-foreground">
+                        {r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}
+                      </span>
                     </TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
                     <TableCell className="text-right">

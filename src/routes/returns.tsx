@@ -2364,18 +2364,17 @@ function ReturnsPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/10">
-                    {/* ITEM-18: Return Date, Customer, Equipment & S/N, Condition,
-                        Rent Collected, Deposit Refunded, then Actions. */}
-                    <TableHead className="w-[110px]">Return ID</TableHead>
-                    <TableHead className="w-[100px]">Return Date</TableHead>
-                    <TableHead className="w-[180px]">Customer</TableHead>
-                    <TableHead>Equipment &amp; S/N</TableHead>
-                    <TableHead className="w-[110px]">Condition</TableHead>
-                    <TableHead className="text-right w-[120px]">Rent Collected</TableHead>
-                    <TableHead className="text-right w-[120px]">Deposit Refunded</TableHead>
-                    <TableHead className="text-right w-[110px]">Damages/Dues</TableHead>
-                    <TableHead className="text-right w-[110px]">Final Settlement</TableHead>
-                    <TableHead className="w-[120px] text-center">Status</TableHead>
+                    {/* Return history table matching the requested spreadsheet layout */}
+                    <TableHead className="w-[180px]">Customer name with contact numbers</TableHead>
+                    <TableHead className="w-[200px]">Customer full address</TableHead>
+                    <TableHead>Equipment name</TableHead>
+                    <TableHead className="w-[105px]">Rent Date</TableHead>
+                    <TableHead className="text-right w-[110px]">Rent amount</TableHead>
+                    <TableHead className="text-right w-[110px]">Deposit</TableHead>
+                    <TableHead className="text-right w-[110px]">Due</TableHead>
+                    <TableHead className="w-[105px]">Return date</TableHead>
+                    <TableHead className="text-right w-[140px]">Final settlement</TableHead>
+                    <TableHead className="w-[110px] text-center">Status</TableHead>
                     <TableHead className="w-[120px] text-right pr-6">Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2391,20 +2390,29 @@ function ReturnsPage() {
                   ) : (
                     visibleReturns.map((ret) => {
                       const info = getReturnOwnerAndCategory(ret);
+                      const rental = rentals.find((r) => r.id === ret.agreement);
+                      const cust = customers.find((c) => c.id === ret.customerId || c.name === ret.customer || c.id === rental?.customerId);
+                      const fullAddress = cust?.address || rental?.address || "No address provided";
                       return (
                         <TableRow key={ret.id} className="group hover:bg-muted/15 transition-colors">
-                          <TableCell className="font-mono text-[11.5px] font-black text-primary">{ret.id}</TableCell>
-                          <TableCell className="text-[11.5px] text-muted-foreground">{formatDateDDMMYYYY(ret.date)}</TableCell>
-                          
+                          {/* 1. Customer name with contact numbers */}
                           <TableCell>
-                            <div className="font-semibold text-[13px] text-foreground">{ret.customer}</div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">Agr: {ret.agreement}</div>
+                            <div className="font-bold text-[13px] text-foreground">{ret.customer}</div>
+                            {cust && (cust.phone || cust.altPhone) && (
+                              <div className="text-[11px] text-muted-foreground mt-0.5 font-medium">
+                                {[cust.phone, cust.altPhone].filter(Boolean).join(" / ")}
+                              </div>
+                            )}
+                            <div className="text-[9.5px] text-muted-foreground font-mono mt-0.5">Agr: {ret.agreement}</div>
                           </TableCell>
 
+                          {/* 2. Customer full address */}
+                          <TableCell className="max-w-[200px] text-[12px] text-foreground/80 leading-normal">
+                            {fullAddress}
+                          </TableCell>
+
+                          {/* 3. Equipment name */}
                           <TableCell className="text-[12.5px] text-foreground/80">
-                            {/* ITEM-18/ITEM-7: identify the physical unit, not just
-                                the category - a return record names which serial
-                                actually came back. */}
                             {(() => {
                               const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
                               const labels = ids
@@ -2442,73 +2450,44 @@ function ReturnsPage() {
                             </p>
                           </TableCell>
 
-                          <TableCell>
-                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10.5px] font-bold border ${
-                              (() => {
-                                const c = (ret.condition || "").toLowerCase();
-                                if (c.includes("good") || c.includes("available")) {
-                                  return "bg-emerald-50 text-emerald-700 border-emerald-200/50";
-                                } else if (c.includes("maint") || c.includes("fair")) {
-                                  return "bg-amber-50 text-amber-700 border-amber-200/50";
-                                }
-                                return "bg-rose-50 text-rose-700 border-rose-200/50";
-                              })()
-                            }`}>
-                              {ret.condition}
-                            </span>
+                          {/* 4. Rent Date */}
+                          <TableCell className="text-[11.5px] text-muted-foreground whitespace-nowrap">
+                            {rental?.start ? formatDateDDMMYYYY(rental.start) : "—"}
                           </TableCell>
 
-                          {/* ITEM-18: rent actually recovered on this return, and
-                              what the customer got back from their deposit. */}
+                          {/* 5. Rent amount */}
+                          <TableCell className="text-right text-[12.5px] font-semibold">
+                            ₹{cleanNum(ret.finalRent).toLocaleString("en-IN")}
+                          </TableCell>
+
+                          {/* 6. Deposit */}
+                          <TableCell className="text-right text-[12.5px] font-semibold text-muted-foreground">
+                            ₹{cleanNum(ret.deposit).toLocaleString("en-IN")}
+                          </TableCell>
+
+                          {/* 7. Due */}
                           <TableCell className="text-right text-[12.5px]">
                             {(() => {
-                              const rentCharged = cleanNum(ret.finalRent);
-                              const stillOwed = cleanNum(ret.pendingBalance);
-                              const collected = Math.max(0, rentCharged - stillOwed);
+                              const totalDue = cleanNum(ret.pendingBalance) + cleanNum(ret.damageCharges) + cleanNum(ret.unpaidAccessoryTotal);
+                              if (totalDue === 0) return <span className="text-muted-foreground">—</span>;
                               return (
                                 <div>
-                                  <p className="font-bold text-emerald-600">₹{collected.toLocaleString("en-IN")}</p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    of ₹{rentCharged.toLocaleString("en-IN")} rent
+                                  <p className="font-bold text-rose-600">₹{totalDue.toLocaleString("en-IN")}</p>
+                                  <p className="text-[9.5px] text-muted-foreground mt-0.5 leading-tight">
+                                    {[
+                                      ret.pendingBalance > 0 && `Rent: ₹${ret.pendingBalance}`,
+                                      ret.damageCharges > 0 && `Dmg: ₹${ret.damageCharges}`,
+                                      ret.unpaidAccessoryTotal > 0 && `Acc: ₹${ret.unpaidAccessoryTotal}`
+                                    ].filter(Boolean).join(", ")}
                                   </p>
                                 </div>
                               );
                             })()}
                           </TableCell>
 
-                          <TableCell className="text-right text-[12.5px]">
-                            {(() => {
-                              const depositHeld = cleanNum(ret.deposit);
-                              // A positive settlement is money handed back; a
-                              // negative one means the deposit was consumed by
-                              // dues and nothing was refunded.
-                              const refunded = cleanNum(ret.refund) > 0 ? Math.min(cleanNum(ret.refund), depositHeld) : 0;
-                              return (
-                                <div>
-                                  <p className={`font-bold ${refunded > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                                    ₹{refunded.toLocaleString("en-IN")}
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                                    of ₹{depositHeld.toLocaleString("en-IN")} held
-                                  </p>
-                                </div>
-                              );
-                            })()}
-                          </TableCell>
-                          
-                          <TableCell className="text-right text-[12px] space-y-0.5">
-                            {ret.damageCharges > 0 && (
-                              <p className="text-rose-600 font-semibold">Dmg: ₹{ret.damageCharges.toLocaleString("en-IN")}</p>
-                            )}
-                            {ret.pendingBalance > 0 && (
-                              <p className="text-amber-600 font-semibold">Dues: ₹{ret.pendingBalance.toLocaleString("en-IN")}</p>
-                            )}
-                            {ret.unpaidAccessoryTotal > 0 && (
-                              <p className="text-amber-500 font-semibold">Acc: ₹{ret.unpaidAccessoryTotal.toLocaleString("en-IN")}</p>
-                            )}
-                            {ret.damageCharges === 0 && ret.pendingBalance === 0 && (ret.unpaidAccessoryTotal || 0) === 0 && (
-                              <span className="text-muted-foreground">—</span>
-                            )}
+                          {/* 8. Return date */}
+                          <TableCell className="text-[11.5px] text-muted-foreground whitespace-nowrap">
+                            {formatDateDDMMYYYY(ret.date)}
                           </TableCell>
 
                           <TableCell className="text-right font-bold text-[12.5px] whitespace-nowrap">
