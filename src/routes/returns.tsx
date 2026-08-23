@@ -880,7 +880,9 @@ function ReturnsPage() {
   const selectedRental = rentals.find((r) => r.id === selectedAgreement);
   const selectedCustomer = useMemo(() => {
     if (!selectedRental) return null;
-    return customers.find((c) => c.id === selectedRental.customerId);
+    return customers.find(
+      (c) => c.id === selectedRental.customerId || (c.name && selectedRental.customer && c.name.toLowerCase() === selectedRental.customer.toLowerCase())
+    );
   }, [selectedRental, customers]);
   // PERF FIX: Memoize equipment inventory — previously called getEquipment() on every render
   // which internally reads all rentals and equipment from localStorage on each cycle.
@@ -1599,10 +1601,19 @@ function ReturnsPage() {
                     {(() => {
                       const p1 = selectedCustomer?.phone || (selectedRental as any)?.phone || "";
                       const p2 = selectedCustomer?.altPhone || (selectedRental as any)?.altPhone || "";
-                      const phones = [p1, p2].filter(Boolean).join(", ");
+                      const p3 = selectedCustomer?.contactNumber3 || (selectedRental as any)?.contactNumber3 || "";
+                      const phones = [p1, p2, p3].filter(Boolean).join(", ");
                       const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
                       const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";
-                      const addr = [custAddr, custArea].filter(Boolean).join(", ");
+                      const custCity = selectedCustomer?.city || (selectedRental as any)?.city || "";
+                      const custState = selectedCustomer?.state || (selectedRental as any)?.state || "";
+                      const custPincode = selectedCustomer?.pincode || (selectedRental as any)?.pincode || "";
+
+                      const addrParts = [custAddr, custArea, custCity, custState].filter(Boolean);
+                      let addr = addrParts.join(", ");
+                      if (custPincode) {
+                        addr = addr ? `${addr} - ${custPincode}` : custPincode;
+                      }
                       return (
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
