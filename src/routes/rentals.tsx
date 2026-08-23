@@ -221,7 +221,11 @@ interface AdditionalItem {
 function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, onSave, inline, onClose }: {
   trigger?: React.ReactNode; title?: string; rental?: Rental; onSave?: () => void; inline?: boolean; onClose?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // BUG FIX: In inline mode the component is already visible, so `open` must
+  // start as `true` — otherwise the useEffect that loads existing documents
+  // (delivery photos, signed docs, location tag) never fires, leaving the
+  // Security & Verification section blank when editing an agreement.
+  const [open, setOpen] = useState(!!inline);
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
   const [equipmentList, setEquipmentList] = useState(() => getEquipment());
   // BUG-FIX: customersList used to be recomputed via a bare getCustomers() call
@@ -634,6 +638,31 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           }
           if (existingLocationDoc) {
             setExistingLocationDocId(existingLocationDoc.id);
+          }
+
+          // BUG FIX: If signatureUrl/thumbprintUrl are missing from the rental
+          // object (e.g. truncated by Google Sheets cell-size limits during sync),
+          // fall back to loading them from the Documents collection where they may
+          // have been separately persisted.
+          if (!rental.signatureUrl) {
+            const sigDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Digital Signature");
+            if (sigDoc) {
+              getDocumentWithFile(sigDoc).then((fullDoc: any) => {
+                if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
+                  setSignatureUrl(fullDoc.fileData);
+                }
+              });
+            }
+          }
+          if (!rental.thumbprintUrl) {
+            const tpDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Thumbprint Scan");
+            if (tpDoc) {
+              getDocumentWithFile(tpDoc).then((fullDoc: any) => {
+                if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
+                  setThumbprintUrl(fullDoc.fileData);
+                }
+              });
+            }
           }
         } catch (err) {
           console.warn("Failed to load existing files for editing agreement:", err);
@@ -1683,6 +1712,41 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         size: `${(locationText.length / 1024).toFixed(2)} KB`,
         date: agreementDate,
         fileData: locationFileData,
+      });
+    }
+
+    // Persist Digital Signature as a document so it survives Google Sheets
+    // sync truncation of the rental object's inline signatureUrl field.
+    if (signatureUrl) {
+      const existingDocs = getDocuments();
+      const existingSigDoc = existingDocs.find((d: any) => d.rentalId === finalAgreementId && d.type === "Digital Signature");
+      const sigDocId = existingSigDoc?.id || getNextDocumentNumber();
+      saveDocument({
+        id: sigDocId,
+        customerId: customerId,
+        rentalId: finalAgreementId,
+        name: `Signature_${finalAgreementId}.png`,
+        type: "Digital Signature",
+        size: `${(signatureUrl.length / 1024 * 0.75).toFixed(1)} KB`,
+        date: agreementDate,
+        fileData: signatureUrl,
+      });
+    }
+
+    // Persist Thumbprint Scan as a document (same resilience rationale).
+    if (thumbprintUrl) {
+      const existingDocs = getDocuments();
+      const existingTpDoc = existingDocs.find((d: any) => d.rentalId === finalAgreementId && d.type === "Thumbprint Scan");
+      const tpDocId = existingTpDoc?.id || getNextDocumentNumber();
+      saveDocument({
+        id: tpDocId,
+        customerId: customerId,
+        rentalId: finalAgreementId,
+        name: `Thumbprint_${finalAgreementId}.png`,
+        type: "Thumbprint Scan",
+        size: `${(thumbprintUrl.length / 1024 * 0.75).toFixed(1)} KB`,
+        date: agreementDate,
+        fileData: thumbprintUrl,
       });
     }
 
