@@ -1735,7 +1735,12 @@ export function consolidatePayments(payments: any[]): any[] {
       const id2Num = extractIdNumber(p2.id);
       const isCloseId = Math.abs(id1Num - id2Num) <= 5;
 
-      if ((isSameAgreement || isSameCustomer) && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId) {
+      // BUGFIX: Never merge payments that belong to different agreements, even if same customer/date.
+      // Merging across agreements caused all payments for a customer made on the same day to be
+      // collapsed into the first agreement, leaving other agreements with ₹0 paid on the Rent Dues page.
+      const isBothAgreementSet = !!(p.agreement && p2.agreement);
+      const hasDifferentAgreement = isBothAgreementSet && !isSameAgreement;
+      if (!hasDifferentAgreement && (isSameAgreement || isSameCustomer) && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId) {
         group.push(p2);
         processed.add(p2.id);
       }
