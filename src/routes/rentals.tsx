@@ -4637,7 +4637,7 @@ function RentalsPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                const headers = ["Customer", "Customer full address", "Equipment name with model", "Rent Date", "Rent rate", "Deposit", "Return date", "Status"];
+                const headers = ["Customer", "Address", "Equipment", "Rent Date", "Rent Rate", "Deposit", "Return Date", "Status"];
                 const rows = rentalsList.map(r => {
                   const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
                   const fullAddress = cust ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ") : "—";
@@ -4773,12 +4773,12 @@ function RentalsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Customer</TableHead>
-                  <TableHead>Customer full address</TableHead>
-                  <TableHead>Equipment name with model</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Equipment</TableHead>
                   <TableHead>Rent Date</TableHead>
-                  <TableHead className="text-right">Rent rate</TableHead>
+                  <TableHead className="text-right">Rent Rate</TableHead>
                   <TableHead className="text-right">Deposit</TableHead>
-                  <TableHead>Return date</TableHead>
+                  <TableHead>Return Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-40 text-right">Actions</TableHead>
                 </TableRow>

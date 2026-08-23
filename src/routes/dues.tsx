@@ -1620,14 +1620,14 @@ function DuesPage() {
               <TableHeader>
                 <TableRow>
                   {/* Rent due history layout to match spreadsheet exactly */}
-                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer name with contact numbers</TableHead>
-                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer full address</TableHead>
-                  <TableHead className="px-2.5 py-2 text-[10.5px]">Equipment name with model</TableHead>
+                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer</TableHead>
+                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Address</TableHead>
+                  <TableHead className="px-2.5 py-2 text-[10.5px]">Equipment</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] w-[100px]">Rent Date</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Rent amount</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Rent Amount</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Deposit</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Unpaid Duration</TableHead>
-                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-success w-[110px]">Total Paid Amount</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] text-right text-success w-[110px]">Total Paid</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right text-destructive w-[110px]">Remaining Balance</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] w-[90px]">Status</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-28">Actions</TableHead>

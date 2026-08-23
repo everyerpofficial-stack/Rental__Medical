@@ -4589,6 +4589,7 @@ export async function syncFromSheetsToLocalStorage(force = false) {
         continue;
       } else if (entity.key === "medirent-documents") {
         const localDocs = getStorageItem<any[]>("medirent-documents", []);
+        const remoteIds = new Set(mergedData.map((item: any) => String(item.id)));
         const mergedDocs = mergedData.map((item: any) => {
           const localDoc = localDocs.find((ld) => ld.id === item.id);
           if (localDoc && localDoc.fileData) {
@@ -4596,6 +4597,15 @@ export async function syncFromSheetsToLocalStorage(force = false) {
           }
           return item;
         });
+        // Preserve local-only documents (e.g. newly uploaded KYC files that
+        // haven't synced to Google Sheets yet) so they aren't silently dropped
+        // when the background sync replaces localStorage with remote data.
+        const localOnly = localDocs.filter(
+          (ld) => !remoteIds.has(String(ld.id)) && !deletedIds.has(String(ld.id))
+        );
+        if (localOnly.length > 0) {
+          mergedDocs.push(...localOnly);
+        }
         localStorage.setItem(entity.key, JSON.stringify(mergedDocs));
       } else {
         localStorage.setItem(entity.key, JSON.stringify(mergedData));

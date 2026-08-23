@@ -2134,54 +2134,8 @@ function ReturnsPage() {
                   })()}
                 </div>
 
-                {/* Right Column: Payments Ledger, WhatsApp (col-span-5) */}
+                {/* Right Column: WhatsApp Message & Payment Ledger (col-span-5) */}
                 <div className="lg:col-span-5 space-y-4 font-semibold">
-                  {/* Payment Ledger card (compact scrollable) */}
-                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
-                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
-                      <Receipt className="h-3.5 w-3.5 text-primary" />
-                      <div>
-                        <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
-                      </div>
-                    </div>
-                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
-                      {agreementPayments.length === 0 ? (
-                        <div className="py-6 text-center text-muted-foreground px-4">
-                          <p className="font-bold text-foreground/75">No payments found</p>
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-border/40">
-                          {agreementPayments.map((p) => {
-                            const isDeposit = p.type?.toLowerCase().includes("deposit");
-                            return (
-                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
-                                <div className="space-y-0.5 min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
-                                      isDeposit 
-                                        ? "bg-blue-50 text-blue-700 border border-blue-200" 
-                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    }`}>
-                                      {p.type || "Rent"}
-                                    </span>
-                                    <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
-                                    <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
-                                </div>
-                                <span className="font-bold text-foreground text-[11.5px]">
-                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-
-
-
                   {/* WhatsApp Preview Box */}
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/10 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2 border-b border-emerald-500/20 pb-1.5">
@@ -2287,6 +2241,50 @@ function ReturnsPage() {
                       );
                     })()}
                   </div>
+
+                  {/* Payment Ledger card (compact scrollable) */}
+                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
+                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
+                      <Receipt className="h-3.5 w-3.5 text-primary" />
+                      <div>
+                        <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
+                      {agreementPayments.length === 0 ? (
+                        <div className="py-6 text-center text-muted-foreground px-4">
+                          <p className="font-bold text-foreground/75">No payments found</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/40">
+                          {agreementPayments.map((p) => {
+                            const isDeposit = p.type?.toLowerCase().includes("deposit");
+                            return (
+                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
+                                      isDeposit 
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200" 
+                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    }`}>
+                                      {p.type || "Rent"}
+                                    </span>
+                                    <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
+                                    <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
+                                </div>
+                                <span className="font-bold text-foreground text-[11.5px]">
+                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
                 </div>
               </div>
             )}
@@ -2365,15 +2363,15 @@ function ReturnsPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/10">
                     {/* Return history table matching the requested spreadsheet layout */}
-                    <TableHead className="w-[180px]">Customer name with contact numbers</TableHead>
-                    <TableHead className="w-[200px]">Customer full address</TableHead>
-                    <TableHead>Equipment name</TableHead>
+                    <TableHead className="w-[180px]">Customer</TableHead>
+                    <TableHead className="w-[200px]">Address</TableHead>
+                    <TableHead>Equipment</TableHead>
                     <TableHead className="w-[105px]">Rent Date</TableHead>
-                    <TableHead className="text-right w-[110px]">Rent amount</TableHead>
+                    <TableHead className="text-right w-[110px]">Rent Amount</TableHead>
                     <TableHead className="text-right w-[110px]">Deposit</TableHead>
                     <TableHead className="text-right w-[110px]">Due</TableHead>
-                    <TableHead className="w-[105px]">Return date</TableHead>
-                    <TableHead className="text-right w-[140px]">Final settlement</TableHead>
+                    <TableHead className="w-[105px]">Return Date</TableHead>
+                    <TableHead className="text-right w-[140px]">Final Settlement</TableHead>
                     <TableHead className="w-[110px] text-center">Status</TableHead>
                     <TableHead className="w-[120px] text-right pr-6">Action</TableHead>
                   </TableRow>

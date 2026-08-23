@@ -719,10 +719,10 @@ function ExchangesPage() {
                 <TableRow className="hover:bg-transparent border-b border-border/40">
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange ID</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Exchange Date</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer name with contact numbers</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Customer</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Rent Date</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned item(equipment, model &amp; sl.no)</TableHead>
-                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item (Equipment, Model &amp; sl.no)</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Returned Item</TableHead>
+                  <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">New Item</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Reason</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px]">Status</TableHead>
                   <TableHead className="font-semibold text-muted-foreground/80 h-11 text-[12.5px] text-right">Actions</TableHead>
