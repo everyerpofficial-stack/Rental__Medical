@@ -49,6 +49,7 @@ import {
   downloadFile,
   printReturnReceipt,
   formatDateDDMMYYYY,
+  formatDateDDMMYY,
   getReturnCalculatedRentPerItem,
   cleanNum,
   getRentPaidForAgreement,
@@ -2425,7 +2426,9 @@ function ReturnsPage() {
                       const info = getReturnOwnerAndCategory(ret);
                       const rental = rentals.find((r) => r.id === ret.agreement);
                       const cust = customers.find((c) => c.id === ret.customerId || c.name === ret.customer || c.id === rental?.customerId);
-                      const fullAddress = cust?.address || rental?.address || "No address provided";
+                      const fullAddress = cust
+                        ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ")
+                        : rental?.address || "No address provided";
                       return (
                         <TableRow key={ret.id} className="group hover:bg-muted/15 transition-colors">
                           {/* 1. Customer name with contact numbers */}
@@ -2485,12 +2488,40 @@ function ReturnsPage() {
 
                           {/* 4. Rent Date */}
                           <TableCell className="text-[11.5px] text-muted-foreground whitespace-nowrap">
-                            {rental?.start ? formatDateDDMMYYYY(rental.start) : "—"}
+                            {rental?.start ? formatDateDDMMYY(rental.start) : "—"}
                           </TableCell>
 
                           {/* 5. Rent amount */}
-                          <TableCell className="text-right text-[12.5px] font-semibold">
-                            ₹{cleanNum(ret.finalRent).toLocaleString("en-IN")}
+                          <TableCell className="text-right text-[12.5px] font-semibold whitespace-nowrap">
+                            {(() => {
+                              if (rental) {
+                                const ids = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                                const eqItems = rental.equipmentItems || [];
+                                let monthlyRentSum = 0;
+                                let dailyRentSum = 0;
+                                let hasDaily = false;
+                                
+                                ids.forEach((id: string) => {
+                                  const item = eqItems.find((it: any) => it.equipmentId === id);
+                                  if (item) {
+                                    if (item.rentCycle === "Daily") {
+                                      dailyRentSum += Number(item.rentRate || item.dailyRent) || 0;
+                                      hasDaily = true;
+                                    } else {
+                                      monthlyRentSum += Number(item.rentRate || item.monthlyRent) || 0;
+                                    }
+                                  }
+                                });
+                                
+                                if (monthlyRentSum > 0 || dailyRentSum > 0) {
+                                  if (hasDaily && dailyRentSum > 0) {
+                                    return `₹${dailyRentSum.toLocaleString("en-IN")}/day`;
+                                  }
+                                  return `₹${monthlyRentSum.toLocaleString("en-IN")}/mo`;
+                                }
+                              }
+                              return `₹${cleanNum(ret.finalRent).toLocaleString("en-IN")}`;
+                            })()}
                           </TableCell>
 
                           {/* 6. Deposit */}
@@ -2520,7 +2551,7 @@ function ReturnsPage() {
 
                           {/* 8. Return date */}
                           <TableCell className="text-[11.5px] text-muted-foreground whitespace-nowrap">
-                            {formatDateDDMMYYYY(ret.date)}
+                            {formatDateDDMMYY(ret.date)}
                           </TableCell>
 
                           <TableCell className="text-right font-bold text-[12.5px] whitespace-nowrap">

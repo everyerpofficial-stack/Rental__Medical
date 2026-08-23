@@ -616,6 +616,7 @@ function ReportsPage() {
           owner: item.owner || "—",
           category: item.category || "—",
           serial: item.serial || "—",
+          model: item.model || "—",
           dateTaken: calc.dateTaken,
           periodSelected: calc.periodSelected,
           retDate: calc.retDate,
@@ -636,7 +637,7 @@ function ReportsPage() {
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.srNo}</td>
             <td style="border: 0.5pt solid #cbd5e1;">${r.owner}</td>
             <td style="border: 0.5pt solid #cbd5e1;">${r.category}</td>
-            <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.serial}</td>
+            <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.model && r.model !== "Standard" && r.model !== "—" ? `${r.model} - ` : ""}${r.serial}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.dateTaken}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.periodSelected}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.retDate}</td>
@@ -727,7 +728,7 @@ function ReportsPage() {
             <td style="text-align: center;">${r.srNo}</td>
             <td>${r.owner}</td>
             <td>${r.category}</td>
-            <td style="text-align: center;">${r.serial}</td>
+            <td style="text-align: center;">${r.model && r.model !== "Standard" && r.model !== "—" ? `<div style="font-size: 8.5px; color: #64748b; line-height: 1; margin-bottom: 2px;">${r.model}</div>` : ""}<span style="font-family: monospace; font-size: 11px; font-weight: bold;">${r.serial}</span></td>
             <td style="text-align: center;">${r.dateTaken}</td>
             <td style="text-align: center;">${r.periodSelected}</td>
             <td style="text-align: center;">${r.retDate}</td>
@@ -1287,7 +1288,12 @@ function ReportsPage() {
               <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 text-center font-medium text-muted-foreground">{index + 1}</TableCell>
               <TableCell className="font-semibold text-slate-800">{item.owner || "—"}</TableCell>
               <TableCell>{item.category || "—"}</TableCell>
-              <TableCell className="text-center font-mono font-semibold">{item.serial || "—"}</TableCell>
+              <TableCell className="text-center font-semibold">
+                {item.model && item.model !== "Standard" && item.model !== "—" && (
+                  <span className="text-[11px] text-muted-foreground block font-sans leading-none mb-0.5">{item.model}</span>
+                )}
+                <span className="font-mono text-[12.5px]">{item.serial || "—"}</span>
+              </TableCell>
               <TableCell className="text-center font-mono text-muted-foreground">{calc.dateTaken}</TableCell>
               <TableCell className="text-[12px]">{calc.periodSelected}</TableCell>
               <TableCell className="text-center font-mono">

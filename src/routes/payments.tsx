@@ -856,6 +856,99 @@ function AgreementPaymentHistoryModal({
     toast.success(`Payment statement for ${agreementId} exported successfully.`);
   };
 
+  const handleExportStatementPDF = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Popup blocked! Please allow popups to print.");
+      return;
+    }
+
+    const tableRowsHtml = agreementPayments.map(p => `
+      <tr>
+        <td style="font-family: monospace; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${p.id}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${formatDateDDMMYYYY(p.date)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px;">${p.type}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${p.mode}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px;">${p.collectedBy || "Admin"}</td>
+        <td style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">₹${p.amount.toLocaleString("en-IN")}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">
+          <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold; border-radius: 4px; border: 1px solid ${p.status === "Paid" ? "#bbf7d0; background-color: #f0fdf4; color: #15803d;" : "#fecaca; background-color: #fef2f2; color: #b91c1c;"}">
+            ${p.status}
+          </span>
+        </td>
+      </tr>
+    `).join("");
+
+    const htmlContent = `
+      <html>
+      <head>
+        <title>Payment Statement - ${agreementId}</title>
+        <style>
+          body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 30px; color: #1e293b; }
+          .header-title { font-size: 22px; font-weight: bold; color: #1e3a8a; text-align: center; padding: 15px; background-color: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 8px; margin-bottom: 20px; }
+          .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; }
+          .meta-item { display: flex; flex-direction: column; }
+          .meta-label { font-weight: bold; color: #64748b; font-size: 11px; text-transform: uppercase; tracking-wider: 0.05em; }
+          .meta-val { font-weight: 600; color: #0f172a; margin-top: 2px; }
+          .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+          .data-table th { background-color: #3b82f6; color: white; padding: 10px 8px; font-size: 12px; font-weight: bold; border: 1px solid #cbd5e1; text-align: left; }
+          .data-table td { padding: 10px 8px; font-size: 11.5px; border: 1px solid #e2e8f0; color: #334155; }
+          .data-table tr:nth-child(even) { background-color: #f8fafc; }
+          .totals-row { font-weight: bold; background-color: #f1f5f9 !important; }
+          .totals-row td { border-top: 2px solid #94a3b8; font-size: 12.5px; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px; }
+          @media print {
+            body { padding: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header-title">Rental Agreement Payment Statement</div>
+        <div class="meta-grid">
+          <div class="meta-item"><span class="meta-label">Agreement ID</span><span class="meta-val" style="font-family: monospace; font-weight: bold;">${agreementId}</span></div>
+          <div class="meta-item"><span class="meta-label">Customer Name</span><span class="meta-val">${customerName}</span></div>
+          <div class="meta-item"><span class="meta-label">Equipment</span><span class="meta-val">${equipmentName}</span></div>
+          <div class="meta-item"><span class="meta-label">Monthly Rent</span><span class="meta-val">₹${monthlyRent.toLocaleString("en-IN")}</span></div>
+          <div class="meta-item"><span class="meta-label">Security Deposit</span><span class="meta-val">₹${deposit.toLocaleString("en-IN")}</span></div>
+          <div class="meta-item"><span class="meta-label">Total Collected</span><span class="meta-val" style="color: #15803d; font-weight: bold;">₹${totalPaid.toLocaleString("en-IN")}</span></div>
+        </div>
+        
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Receipt ID</th>
+              <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Date</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Payment Type</th>
+              <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Mode</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Collected By</th>
+              <th style="width: 120px; text-align: right; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Amount</th>
+              <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+            <tr class="totals-row">
+              <td colspan="5" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">Total Paid:</td>
+              <td style="text-align: right; color: #15803d; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">₹${totalPaid.toLocaleString("en-IN")}</td>
+              <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0">
@@ -876,8 +969,11 @@ function AgreementPaymentHistoryModal({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 text-[12px]" onClick={handleExportStatement}>
-                <Download className="mr-1.5 h-3.5 w-3.5" /> Export Statement
+              <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatement}>
+                <Download className="h-3.5 w-3.5" /> Excel Statement
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatementPDF}>
+                <Printer className="h-3.5 w-3.5" /> PDF Statement
               </Button>
             </div>
           </div>

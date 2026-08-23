@@ -138,6 +138,17 @@ export function formatDateDDMMYYYY(dateStr: string | undefined | null): string {
 }
 
 /**
+ * Formats a date string to short DD-MM-YY (e.g. 23-08-26).
+ */
+export function formatDateDDMMYY(dateStr: string | undefined | null): string {
+  if (!dateStr) return "—";
+  const formatted = formatDateDDMMYYYY(dateStr);
+  if (!formatted || formatted === "—") return formatted;
+  // Convert 4-digit year to 2-digit year (e.g. 23-08-2026 -> 23-08-26)
+  return formatted.replace(/(\d{2}-\d{2}-)\d{2}(\d{2})$/, "$1$2");
+}
+
+/**
  * Returns a date formatted as YYYY-MM-DD in the local timezone.
  */
 export function getLocalYYYYMMDD(dateInput: Date | string = new Date()): string {
@@ -262,12 +273,15 @@ export function escapeRecordForHtml<T>(value: T, depth = 0): T {
  * Renders as `Name - Model (S/N: Serial)`, dropping any part that is missing so
  * a record without a model never produces `Name - undefined`.
  */
-export function formatEquipmentLabel(src: {
-  name?: string;
-  category?: string;
-  model?: string;
-  serial?: string;
-} | null | undefined): string {
+export function formatEquipmentLabel(
+  src: {
+    name?: string;
+    category?: string;
+    model?: string;
+    serial?: string;
+  } | null | undefined,
+  includeSerial = true
+): string {
   if (!src) return "Equipment";
   const name = String(src.name || src.category || "").trim();
   const model = String(src.model || "").trim();
@@ -278,7 +292,7 @@ export function formatEquipmentLabel(src: {
   if (model && model.toLowerCase() !== name.toLowerCase()) {
     label += ` - ${model}`;
   }
-  if (serial) {
+  if (includeSerial && serial) {
     label += ` - S/N: ${serial}`;
   }
   return label;
@@ -290,7 +304,7 @@ export function formatEquipmentLabel(src: {
  * enriched with the model from the equipment master where the rental line item
  * does not carry one.
  */
-export function getRentalEquipmentLabels(rental: any, equipmentList?: any[]): string[] {
+export function getRentalEquipmentLabels(rental: any, equipmentList?: any[], includeSerial = true): string[] {
   if (!rental) return [];
   const master = equipmentList || (isBrowser ? getEquipment() : []);
   const byId = new Map<string, any>(master.map((e: any) => [e.id, e]));
@@ -310,7 +324,7 @@ export function getRentalEquipmentLabels(rental: any, equipmentList?: any[]): st
       name: rental.equipment,
       model: rental.model,
       serial: rental.serial,
-    });
+    }, includeSerial);
     return label === "Equipment" && !rental.equipment ? [] : [label];
   }
 
@@ -322,7 +336,7 @@ export function getRentalEquipmentLabels(rental: any, equipmentList?: any[]): st
       name: item.equipment || item.name || eq?.name || eq?.category || rental.equipment,
       model: item.model || eq?.model,
       serial: item.serial || eq?.serial,
-    });
+    }, includeSerial);
   });
 }
 

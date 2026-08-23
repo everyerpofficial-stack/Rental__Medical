@@ -24,6 +24,7 @@ import {
   peekNextExchangeNumber,
   saveExchange,
   formatDateDDMMYYYY,
+  formatDateDDMMYY,
   useDatabaseTrigger,
   getLocalYYYYMMDD,
   parseLocalDate,
@@ -901,8 +902,8 @@ function ExchangesPage() {
                       const displayPhone = phone1 ? ` · ${phone1}` : "";
                       return {
                         value: r.id,
-                        label: `${r.customer}${displayPhone}`,
-                        searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""}`,
+                        label: `${r.customer}${displayPhone} (Rent: ${formatDateDDMMYY(r.start)})`,
+                        searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${formatDateDDMMYY(r.start)}`,
                       };
                     })}
                   value={selectedAgreementId}
@@ -999,12 +1000,11 @@ function ExchangesPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reason for Exchange</Label>
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Reason for Exchange (Optional)</Label>
               <Textarea
                 placeholder="Describe why this exchange is needed (e.g., compressor issue, low purity level, upgrading device model)..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                required
                 rows={3}
                 className="border-slate-200 text-slate-700 text-[13px] rounded-lg resize-none focus-visible:ring-1 focus-visible:ring-primary/45"
               />

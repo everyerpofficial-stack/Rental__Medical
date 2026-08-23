@@ -41,6 +41,7 @@ import {
   getNextAgreementNumber,
   peekNextAgreementNumber,
   formatDateDDMMYYYY,
+  formatDateDDMMYY,
   getReturnCalculatedRentPerItem,
   useDatabaseTrigger,
   saveDocument,
@@ -2177,6 +2178,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           options={itemsForSelect.map((e) => ({
                             value: e.id,
                             label: formatEquipmentLabel({ name: e.name || e.category, serial: e.serial, model: e.model }),
+                            selectedLabel: e.name || e.category,
                             searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
                           }))}
                           className="h-9"
@@ -2843,9 +2845,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             </div>
 
                             <div className="space-y-2">
-                              <Label className="text-[11px] font-bold text-muted-foreground">Google Maps URL / Coordinates / Address</Label>
+                              <Label className="text-[11px] font-bold text-muted-foreground">Coordinates / Address</Label>
                               <Textarea 
-                                placeholder="Paste Google Maps URL (e.g. https://maps.app.goo.gl/...), raw lat/long coordinates (e.g. 12.9716,77.5946), or address..." 
+                                placeholder="Enter coordinates or address..." 
                                 value={manualLocationInput}
                                 onChange={(e) => setManualLocationInput(e.target.value)}
                                 className="text-[12px] min-h-[70px] bg-background border-border/70"
@@ -4911,15 +4913,15 @@ function RentalsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="space-y-1 max-w-[200px]">
-                        {getRentalEquipmentLabels(r).map((label, idx) => (
+                        {getRentalEquipmentLabels(r, undefined, false).map((label, idx) => (
                           <p key={idx} className="text-[12.5px] text-foreground/80 leading-normal font-medium">{label}</p>
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                        <CalendarDays className="h-3.5 w-3.5 text-muted-foreground/60" />
-                        {formatDateDDMMYYYY(r.start)}
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                        <CalendarDays className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                        {formatDateDDMMYY(r.start)}
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
@@ -4932,9 +4934,9 @@ function RentalsPage() {
                     <TableCell className="text-right">
                       <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
                     </TableCell>
-                    <TableCell>
-                      <span className="text-[12px] font-semibold text-muted-foreground">
-                        {r.end ? formatDateDDMMYYYY(r.end) : "Ongoing"}
+                    <TableCell className="whitespace-nowrap">
+                      <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                        {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
                       </span>
                     </TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
@@ -5075,11 +5077,13 @@ function RentalsPage() {
                       </div>
                       <StatusBadge status={r.status} />
                     </div>
-                    <p className="text-[12px] text-muted-foreground truncate mb-2">{r.equipment}</p>
+                    <p className="text-[12px] text-muted-foreground truncate mb-2">
+                      {getRentalEquipmentLabels(r, undefined, false).join(" | ") || r.equipment}
+                    </p>
                     <div className="flex items-center gap-3">
-                      <span className="info-row">
+                      <span className="info-row whitespace-nowrap">
                         <CalendarDays className="h-3 w-3 shrink-0" />
-                        {formatDateDDMMYYYY(r.start)}
+                        {formatDateDDMMYY(r.start)}
                       </span>
                       <span className="info-row font-semibold text-foreground">
                         {(r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0) ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day` : `₹${r.monthlyRent.toLocaleString("en-IN")}/mo`}

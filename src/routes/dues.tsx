@@ -20,7 +20,7 @@ import {
   MessageCircle, Mail, Phone, Bell,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
@@ -1122,6 +1122,7 @@ function DuesPage() {
   // Re-read from localStorage whenever refreshKey or dbVersion changes (after payments recorded)
   const rentalsList = useMemo(() => getRentals(), [refreshKey, dbVersion]);
   const paymentsList = useMemo(() => getPayments(), [refreshKey, dbVersion]);
+  const returnsList = useMemo(() => getReturns(), [dbVersion]);
 
   const formatRupee = (val: number) => `₹${val.toLocaleString("en-IN")}`;
 
@@ -1652,7 +1653,9 @@ function DuesPage() {
                     }
                   ];
                   const custObj = customersById.get(r.customerId);
-                  const fullAddress = custObj?.address || r.address || "No address provided";
+                  const fullAddress = custObj
+                    ? [custObj.address, custObj.area, custObj.city, custObj.state, custObj.pincode].filter(Boolean).join(", ")
+                    : r.address || "No address provided";
                   return (
                     <TableRow key={item.id} className="group">
                       {/* 1. Customer name with contact numbers */}
@@ -1672,7 +1675,7 @@ function DuesPage() {
                       </TableCell>
 
                       {/* 2. Customer full address */}
-                      <TableCell className="px-2.5 py-2 text-[12px] text-foreground/80 max-w-[200px] leading-normal">
+                      <TableCell className="px-2.5 py-2 text-[12px] text-foreground/80 max-w-[200px] leading-normal whitespace-normal break-words">
                         {fullAddress}
                       </TableCell>
 
@@ -1691,10 +1694,16 @@ function DuesPage() {
                                   })}
                                 </span>
                                 {isReturned && (() => {
-                                  const retDateRaw = eqItem.returnedDate || eqItem.returnDate || r.end;
-                                  const formattedRetDate = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
+                                  let retDateRaw = eqItem.returnedDate || eqItem.returnDate;
+                                  if (!retDateRaw) {
+                                    const ret = returnsList.find(
+                                      (retItem: any) => retItem.agreement === r.id && retItem.returnedEquipmentIds?.includes(eqItem.equipmentId)
+                                    );
+                                    retDateRaw = ret?.date || r.end;
+                                  }
+                                  const formattedRetDate = retDateRaw ? formatDateDDMMYY(retDateRaw) : "";
                                   return (
-                                    <span className="inline-flex items-center rounded-md bg-success/8 px-1 py-0.2 text-[9.5px] font-bold text-success border border-success/15 shrink-0">
+                                    <span className="inline-flex items-center rounded-md bg-success/8 px-1 py-0.5 text-[9.5px] font-bold text-success border border-success/15 shrink-0">
                                       Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
                                     </span>
                                   );
@@ -1706,9 +1715,9 @@ function DuesPage() {
                       </TableCell>
 
                       {/* 4. Rent Date */}
-                      <TableCell className="px-2 py-2">
+                      <TableCell className="px-2 py-2 whitespace-nowrap">
                         <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                          {formatDateDDMMYYYY(r.start)}
+                          {formatDateDDMMYY(r.start)}
                         </span>
                       </TableCell>
                       {(() => {
@@ -1922,9 +1931,21 @@ function DuesPage() {
                                 <span className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-slate-800 font-semibold"}>
                                   {getEquipmentName(eqItem.equipmentId)}
                                 </span>
-                                {eqItem.returned ? (
-                                  <span className="inline-flex items-center rounded bg-success/8 px-1.5 py-0.5 text-[9px] font-bold text-success border border-success/15 shrink-0">Returned</span>
-                                ) : (
+                                {eqItem.returned ? (() => {
+                                  let retDateRaw = eqItem.returnedDate || eqItem.returnDate;
+                                  if (!retDateRaw) {
+                                    const ret = returnsList.find(
+                                      (retItem: any) => retItem.agreement === r.id && retItem.returnedEquipmentIds?.includes(eqItem.equipmentId)
+                                    );
+                                    retDateRaw = ret?.date || r.end;
+                                  }
+                                  const formattedRetDate = retDateRaw ? formatDateDDMMYY(retDateRaw) : "";
+                                  return (
+                                    <span className="inline-flex items-center rounded bg-success/8 px-1.5 py-0.5 text-[9px] font-bold text-success border border-success/15 shrink-0 whitespace-nowrap">
+                                      Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
+                                    </span>
+                                  );
+                                })() : (
                                   <span className="inline-flex items-center rounded bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary border border-primary/15 shrink-0">Active</span>
                                 )}
                               </div>

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 
 interface ComboboxProps {
-  options: { value: string; label: string; searchTerms?: string }[];
+  options: { value: string; label: string; selectedLabel?: string; searchTerms?: string }[];
   value?: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
@@ -100,7 +100,7 @@ export function Combobox({
           title={selectedOption?.label || placeholder}
         >
           <span className="truncate">
-            {selectedOption ? selectedOption.label : placeholder}
+            {selectedOption ? (selectedOption.selectedLabel || selectedOption.label) : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
