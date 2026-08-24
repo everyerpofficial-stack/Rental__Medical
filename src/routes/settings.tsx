@@ -644,7 +644,7 @@ function applyHeaderFormat(sh) {
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Apps Script Code (Copy → Paste into Script Editor)
               </Label>
-              <Button variant="outline" size="sm" className="h-7 text-[12px] self-start sm:self-auto" onClick={copyScript}>
+              <Button variant="outline" size="sm" className="h-9 text-[12px] self-start sm:self-auto" onClick={copyScript}>
                 <Copy className="h-3 w-3 mr-1.5" /> Copy Code
               </Button>
             </div>
@@ -726,12 +726,12 @@ function applyHeaderFormat(sh) {
           </div>
 
           {/* Test + Sync */}
-          <div className="flex flex-wrap gap-3 border-t border-border/50 pt-4">
+          <div className="flex flex-col gap-3 border-t border-border/50 pt-4 md:flex-row md:flex-wrap">
             <Button
               variant="outline"
               onClick={handleTestConnection}
               disabled={testStatus === "testing" || !sheetsUrl}
-              className="h-9 text-[13px]"
+              className="h-10 w-full text-[13px] md:h-9 md:w-auto"
             >
               {testStatus === "testing" ? (
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -748,7 +748,7 @@ function applyHeaderFormat(sh) {
             <Button
               onClick={handleSyncAll}
               disabled={isSyncing || isPulling || !isGSheetsEnabled()}
-              className="h-9 text-[13px]"
+              className="h-10 w-full text-[13px] md:h-9 md:w-auto"
             >
               {isSyncing ? (
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -762,7 +762,7 @@ function applyHeaderFormat(sh) {
               variant="outline"
               onClick={handlePullAll}
               disabled={isSyncing || isPulling || !isGSheetsEnabled()}
-              className="h-9 text-[13px]"
+              className="h-10 w-full text-[13px] md:h-9 md:w-auto"
             >
               {isPulling ? (
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -776,7 +776,7 @@ function applyHeaderFormat(sh) {
               variant="outline"
               onClick={handleSyncMissingFiles}
               disabled={isSyncingFiles || isSyncing || isPulling || !isGSheetsEnabled()}
-              className="h-9 text-[13px]"
+              className="h-10 w-full text-[13px] md:h-9 md:w-auto"
               title="Push document files stored on this device that never made it to Google Sheets, so they become downloadable/previewable on every device"
             >
               {isSyncingFiles ? (

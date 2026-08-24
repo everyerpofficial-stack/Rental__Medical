@@ -429,11 +429,13 @@ function Dashboard() {
       }
     >
       <Tabs defaultValue="overview" className="space-y-5">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="financial">Financial</TabsTrigger>
-          <TabsTrigger value="operations">Operations</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="flex-nowrap">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="financial">Financial</TabsTrigger>
+            <TabsTrigger value="operations">Operations</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ── Overview Tab ── */}
         <TabsContent value="overview" className="space-y-5">
@@ -644,16 +646,12 @@ function Dashboard() {
                   </span>
                 </div>
                 {/* Type filter */}
-                <div className="flex flex-wrap gap-1 pb-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-3">
                   {activityTypes.map((t) => (
                     <button
                       key={t}
                       onClick={() => setActiveActivity(t)}
-                      className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold transition-all ${
-                        t === activeActivity
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-                      }`}
+                      className={`mobile-chip shrink-0 ${t === activeActivity ? "active" : ""}`}
                     >
                       {t}
                     </button>

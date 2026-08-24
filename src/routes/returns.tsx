@@ -448,7 +448,7 @@ function WhatsAppReturnMessageModal({
             />
           </div>
 
-          <DialogFooter className="flex-row items-center justify-between sm:justify-between gap-2">
+          <DialogFooter className="flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
             <Button
               type="button"
               variant="outline"
@@ -696,14 +696,14 @@ function PayReturnDueDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Amount Collected (₹)</Label>
                 <Input
                   type="number"
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
-                  className="h-9 font-bold text-foreground"
+                  className="h-10 font-bold text-foreground"
                 />
               </div>
               <div className="space-y-1.5">
@@ -712,7 +712,7 @@ function PayReturnDueDialog({
                   type="date"
                   value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className="h-9"
+                  className="h-10"
                 />
               </div>
             </div>
@@ -1763,7 +1763,7 @@ function ReturnsPage() {
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-7 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-9 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={finalRent}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1785,7 +1785,7 @@ function ReturnsPage() {
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-7 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-9 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={totalPaidAmount}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1807,7 +1807,7 @@ function ReturnsPage() {
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className={`h-7 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
+                            className={`h-9 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
                             value={pendingBalance}
                             onChange={(e) => setPendingBalance(e.target.value)}
                           />
@@ -1823,7 +1823,7 @@ function ReturnsPage() {
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-7 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
+                            className="h-9 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
                             value={damageCharges}
                             onChange={(e) => setDamageCharges(e.target.value)}
                           />
@@ -1839,7 +1839,7 @@ function ReturnsPage() {
                           <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-7 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
+                            className="h-9 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
                             value={discount}
                             onChange={(e) => setDiscount(e.target.value)}
                           />
@@ -1897,7 +1897,7 @@ function ReturnsPage() {
                           </span>
                         </div>
                         
-                        <div className="p-0">
+                        <div className="p-0 hidden md:block overflow-x-auto">
                           <Table>
                             <TableHeader className="bg-muted/10">
                               <TableRow className="h-8">
@@ -1968,6 +1968,80 @@ function ReturnsPage() {
                             </TableBody>
                           </Table>
                         </div>
+
+                        {/* Mobile Card List — visible only on mobile */}
+                        <div className="md:hidden divide-y divide-border/60">
+                          <div className="flex items-start justify-between gap-3 px-3.5 py-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-[11.5px] text-foreground">Total Due</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
+                                Remaining Rent Dues (₹{remainingRentDues.toLocaleString("en-IN")})
+                                {dmgCharges > 0 && ` + Damage (₹${dmgCharges})`}
+                                {unpaidAccessoriesTotal > 0 && ` + Accessories (₹${unpaidAccessoriesTotal})`}
+                              </p>
+                            </div>
+                            <p className="text-right font-bold text-[11.5px] shrink-0">
+                              ₹{totalDueVal.toLocaleString("en-IN")}
+                            </p>
+                          </div>
+
+                          {rentOverpaid > 0 && (
+                            <div className="flex items-start justify-between gap-3 px-3.5 py-3 bg-blue-50/10">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-[11.5px] text-blue-700">Advance Credit</p>
+                                <p className="text-[10px] text-blue-600 mt-0.5">Customer paid ₹{rentOverpaid} extra</p>
+                              </div>
+                              <p className="text-right font-bold text-blue-600 text-[11.5px] shrink-0">
+                                + ₹{rentOverpaid.toLocaleString("en-IN")}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex items-start justify-between gap-3 px-3.5 py-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-[11.5px] text-foreground">Return Discount</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Discount applied on return</p>
+                            </div>
+                            <p className="text-right font-bold text-emerald-600 text-[11.5px] shrink-0">
+                              - ₹{returnDiscountVal.toLocaleString("en-IN")}
+                            </p>
+                          </div>
+
+                          <div className="flex items-start justify-between gap-3 px-3.5 py-3 bg-muted/5">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-[11.5px] text-foreground">After Discount Due</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Total Due - Return Discount</p>
+                            </div>
+                            <p className="text-right font-bold text-[11.5px] shrink-0">
+                              ₹{afterDiscountTotalDueVal.toLocaleString("en-IN")}
+                            </p>
+                          </div>
+
+                          <div className="flex items-start justify-between gap-3 px-3.5 py-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-[11.5px] text-foreground">Deposit Offset</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">Security deposit paid</p>
+                            </div>
+                            <p className="text-right font-bold text-blue-600 text-[11.5px] shrink-0">
+                              ₹{totalDepositVal.toLocaleString("en-IN")}
+                            </p>
+                          </div>
+
+                          <div className={`flex items-start justify-between gap-3 px-3.5 py-3.5 font-black ${netRefund >= 0 ? "bg-emerald-50/20 text-emerald-700 border-t border-emerald-500/20" : "bg-rose-50/20 text-rose-700 border-t border-rose-500/20"}`}>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-[12.5px]">Final Settlement</p>
+                              <p className="text-[10px] font-medium mt-0.5">
+                                {netRefund >= 0 ? "Refundable to Customer" : "Collect from Customer"}
+                              </p>
+                            </div>
+                            <p className="text-right font-extrabold text-[12.5px] shrink-0">
+                              {netRefund >= 0
+                                ? `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Refund)`
+                                : `₹${Math.abs(netRefund).toLocaleString("en-IN")} (Collect)`
+                              }
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     );
                   })()}
@@ -1999,7 +2073,7 @@ function ReturnsPage() {
                         <div className="space-y-2">
                           <div className="space-y-1">
                             <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Due Payment Status</Label>
-                            <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-lg border border-border h-8">
+                            <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-lg border border-border h-10">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2373,7 +2447,7 @@ function ReturnsPage() {
                 </div>
 
                 <Select value={historyOwnerFilter} onValueChange={setHistoryOwnerFilter}>
-                  <SelectTrigger className="w-[140px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Owner" /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[140px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Owner" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all-owners">All Owners</SelectItem>
                     {activeOwners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -2381,7 +2455,7 @@ function ReturnsPage() {
                 </Select>
 
                 <Select value={historyCategoryFilter} onValueChange={setHistoryCategoryFilter}>
-                  <SelectTrigger className="w-[150px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[150px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all-categories">All Categories</SelectItem>
                     {activeCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -2394,7 +2468,7 @@ function ReturnsPage() {
 
           <CardContent className="p-0">
             {/* Desktop Table — hidden on mobile */}
-            <div className="hidden sm:block overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/10">
@@ -2663,7 +2737,7 @@ function ReturnsPage() {
             </div>
 
             {/* Mobile Card List — visible only on mobile */}
-            <div className="sm:hidden">
+            <div className="md:hidden">
               {filteredReturns.length === 0 ? (
                 <div className="py-14 text-center text-[13px] text-muted-foreground">
                   <RotateCcw className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />

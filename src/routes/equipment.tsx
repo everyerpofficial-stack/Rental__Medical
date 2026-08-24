@@ -339,7 +339,7 @@ function QrCodeDialog({ eq }: { eq: Equipment }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="QR Code">
+        <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" title="QR Code">
           <QrCode className="h-3.5 w-3.5" />
         </Button>
       </DialogTrigger>
@@ -1054,13 +1054,13 @@ function EquipmentPage() {
       }
     >
       <div className="mb-5 flex flex-col gap-3 border-b border-border/60 pb-5">
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
             <Input placeholder="Search by name, serial, model…" className="pl-9 h-9 text-[13px]" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[150px] sm:w-[180px] h-9 text-[12px] shrink-0"><SelectValue placeholder="All Categories" /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-[150px] md:w-[180px] h-9 text-[12px] sm:shrink-0"><SelectValue placeholder="All Categories" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all-cat">All Categories</SelectItem>
               {activeCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
@@ -1255,7 +1255,7 @@ function EquipmentPage() {
                                 eq={item}
                                 onSave={refresh}
                                 trigger={
-                                  <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                                  <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
                                     <Edit className="h-3.5 w-3.5" />
                                   </Button>
                                 }
@@ -1264,7 +1264,7 @@ function EquipmentPage() {
                                 eq={item}
                                 onDelete={refresh}
                                 trigger={
-                                  <Button variant="outline" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                                  <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 }

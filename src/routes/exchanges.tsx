@@ -714,7 +714,7 @@ function ExchangesPage() {
 
         <Card className="border border-border/50 shadow-soft overflow-hidden">
           {/* Desktop Table — hidden on mobile */}
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow className="hover:bg-transparent border-b border-border/40">
@@ -824,7 +824,7 @@ function ExchangesPage() {
           </div>
 
           {/* Mobile Card List — visible only on mobile */}
-          <div className="sm:hidden">
+          <div className="md:hidden">
             {filteredExchanges.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
                 No exchange requests found.
@@ -1057,27 +1057,44 @@ function ExchangesPage() {
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Equipment Info</h4>
                 <div className="border border-slate-100 rounded-xl overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-slate-50/50">
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Role</TableHead>
-                        <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Equipment</TableHead>
-                        <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Serial</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell className="font-semibold text-red-600 text-[12px] py-2.5">Returned (Old)</TableCell>
-                        <TableCell className="text-[12px] text-slate-700 py-2.5">{selectedExchange.currentEquipment}</TableCell>
-                        <TableCell className="text-[12px] py-2.5"><code>{selectedExchange.currentEquipmentSerial}</code></TableCell>
-                      </TableRow>
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell className="font-semibold text-success text-[12px] py-2.5">Assigned (New)</TableCell>
-                        <TableCell className="text-[12px] text-slate-700 py-2.5">{selectedExchange.newEquipment || "—"}</TableCell>
-                        <TableCell className="text-[12px] py-2.5"><code>{selectedExchange.newEquipmentSerial || "—"}</code></TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
+                  {/* Desktop Table — hidden on mobile */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader className="bg-slate-50/50">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Role</TableHead>
+                          <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Equipment</TableHead>
+                          <TableHead className="font-semibold text-slate-500 h-9 text-[11px]">Serial</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell className="font-semibold text-red-600 text-[12px] py-2.5">Returned (Old)</TableCell>
+                          <TableCell className="text-[12px] text-slate-700 py-2.5">{selectedExchange.currentEquipment}</TableCell>
+                          <TableCell className="text-[12px] py-2.5"><code>{selectedExchange.currentEquipmentSerial}</code></TableCell>
+                        </TableRow>
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell className="font-semibold text-success text-[12px] py-2.5">Assigned (New)</TableCell>
+                          <TableCell className="text-[12px] text-slate-700 py-2.5">{selectedExchange.newEquipment || "—"}</TableCell>
+                          <TableCell className="text-[12px] py-2.5"><code>{selectedExchange.newEquipmentSerial || "—"}</code></TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile Card List — visible only on mobile */}
+                  <div className="md:hidden divide-y divide-slate-100">
+                    <div className="p-3 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-red-600">Returned (Old)</p>
+                      <p className="info-row text-slate-700">{selectedExchange.currentEquipment}</p>
+                      <p className="info-row">Serial: <code>{selectedExchange.currentEquipmentSerial}</code></p>
+                    </div>
+                    <div className="p-3 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-success">Assigned (New)</p>
+                      <p className="info-row text-slate-700">{selectedExchange.newEquipment || "—"}</p>
+                      <p className="info-row">Serial: <code>{selectedExchange.newEquipmentSerial || "—"}</code></p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

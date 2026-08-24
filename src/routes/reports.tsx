@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1335,6 +1335,199 @@ function ReportsPage() {
     return rows;
   };
 
+  // Mobile card fallback for the Statement Viewer table — mirrors renderTableRows
+  // but renders each record as a `.mobile-card-item` instead of a `<TableRow>`.
+  const renderMobileCards = (data: any[]) => {
+    if (data.length === 0) {
+      return (
+        <div className="py-12 text-center text-[13px] text-muted-foreground">
+          No matching statement records found.
+        </div>
+      );
+    }
+
+    const cards = data.map((item, index) => {
+      switch (activeStatement) {
+        case "Rentals Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.customer}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">{item.equipment} · <span className="font-mono">{item.serial}</span></div>
+                  <div className="info-row">{formatDateDDMMYYYY(item.start)} → {formatDateDDMMYYYY(item.end)}</div>
+                  <div className="info-row">Deposit: ₹{item.deposit?.toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+              <div className="shrink-0 flex flex-col items-end gap-1.5">
+                <p className="font-semibold text-[13px]">
+                  ₹{item.monthlyRent?.toLocaleString("en-IN")}<span className="text-[10px] font-normal text-muted-foreground">/mo</span>
+                </p>
+                <StatusBadge status={item.status} />
+              </div>
+            </div>
+          );
+        case "Exchanges Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.customer}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id} · {item.agreementId}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">Old: {item.currentEquipment} ({item.currentEquipmentSerial})</div>
+                  <div className="info-row">New: {item.newEquipment} ({item.newEquipmentSerial})</div>
+                  <div className="info-row">Reason: {item.reason || "—"}</div>
+                </div>
+              </div>
+              <p className="shrink-0 text-right text-[12px] text-muted-foreground">
+                {formatDateDDMMYYYY(item.exchangeDate || item.date)}
+              </p>
+            </div>
+          );
+        case "Customers Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.name}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">{item.phone}{item.email ? ` · ${item.email}` : ""}</div>
+                  <div className="info-row">{item.city}{item.state ? `, ${item.state}` : ""}</div>
+                  <div className="info-row">Active Rentals: {item.rentals || 0}</div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <StatusBadge status={item.status} />
+              </div>
+            </div>
+          );
+        case "Equipment Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.category}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id} · {item.serial}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">{item.model} · {item.manufacturer}</div>
+                  <div className="info-row">Owner: {item.owner}</div>
+                  <div className="info-row">Purchased: {formatDateDDMMYYYY(item.purchaseDate)}</div>
+                  <div className="info-row">Daily Rate: ₹{(item.ownerDailyRate || 0).toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                <StatusBadge status={item.status} />
+              </div>
+            </div>
+          );
+        case "Payments Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.customer}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id} · {formatDateDDMMYYYY(item.date)}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">Agreement: {item.agreement}</div>
+                  <div className="info-row">{item.type} · {item.mode}</div>
+                  <div className="info-row">Ref: {item.txRef || "—"}</div>
+                </div>
+              </div>
+              <div className="shrink-0 flex flex-col items-end gap-1.5">
+                <p className="font-semibold text-[13px]">₹{item.amount?.toLocaleString("en-IN")}</p>
+                <StatusBadge status={item.status} />
+              </div>
+            </div>
+          );
+        case "Rent Dues Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.customer}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">{item.equipment}</div>
+                  <div className="info-row">Start: {formatDateDDMMYYYY(item.start)}</div>
+                  <div className="info-row">Rate: {item.rentDisplay} · Paid: ₹{item.grandTotalPaid?.toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+              <div className="shrink-0 flex flex-col items-end gap-1.5">
+                <p className="font-bold text-[13px] text-destructive">₹{item.remainingDue?.toLocaleString("en-IN")}</p>
+                <StatusBadge status={item.status} />
+              </div>
+            </div>
+          );
+        case "Return Statement":
+          return (
+            <div key={item.id || index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.customer}</p>
+                <p className="text-[10px] font-mono text-muted-foreground mt-0.5">{item.id} · {formatDateDDMMYYYY(item.date)}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">{item.equipment} · {item.condition}</div>
+                  <div className="info-row">Agreement: {item.agreement}</div>
+                  <div className="info-row">Deposit ₹{item.deposit?.toLocaleString("en-IN")} · Damage ₹{item.damageCharges?.toLocaleString("en-IN")}</div>
+                  <div className="info-row">Final Rent: ₹{item.finalRent?.toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+              <p className="shrink-0 text-right font-bold text-[13px] text-success">
+                ₹{item.refund?.toLocaleString("en-IN")}
+              </p>
+            </div>
+          );
+        case "Owner Statement": {
+          const calc = getOwnerStatementRowCalc(item);
+          return (
+            <div key={index} className="mobile-card-item">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[13px] truncate">{item.owner || "—"}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{item.category || "—"}</p>
+                <div className="mt-1.5 space-y-0.5">
+                  <div className="info-row">
+                    {item.model && item.model !== "Standard" && item.model !== "—" ? `${item.model} · ` : ""}
+                    <span className="font-mono">{item.serial || "—"}</span>
+                  </div>
+                  <div className="info-row">Taken: {calc.dateTaken} · {calc.periodSelected}</div>
+                  <div className="info-row">
+                    Returned: <span className={calc.retDate === "Not return" ? "text-destructive font-semibold" : ""}>{calc.retDate}</span> · {calc.daysUsed} days
+                  </div>
+                  <div className="info-row">Per Day: ₹{calc.perDayAmount.toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+              <p className="shrink-0 text-right font-bold text-[13px] text-primary">
+                ₹{calc.rowTotal.toLocaleString("en-IN")}
+              </p>
+            </div>
+          );
+        }
+        default:
+          return null;
+      }
+    });
+
+    if (activeStatement === "Owner Statement") {
+      let totalDays = 0;
+      let grandTotal = 0;
+      data.forEach(item => {
+        const calc = getOwnerStatementRowCalc(item);
+        totalDays += calc.daysUsed;
+        grandTotal += calc.rowTotal;
+      });
+
+      cards.push(
+        <div key="totals-summary" className="mobile-card-item bg-muted/15 border-slate-200">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold text-slate-700">Total Days: {totalDays}</p>
+          </div>
+          <p className="shrink-0 text-right font-bold text-[13px] text-primary">
+            Grand Total: ₹{grandTotal.toLocaleString("en-IN")}
+          </p>
+        </div>
+      );
+    }
+
+    return cards;
+  };
+
   // Dynamic FY calculations based on current date
   const getFYList = () => {
     const list = [];
@@ -1540,28 +1733,33 @@ function ReportsPage() {
             <p className="mt-0.5 text-[12px] text-muted-foreground">Live utilization rates across all equipment types</p>
           </CardHeader>
           <CardContent className="pt-4">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={dynamicUtilizationData} barCategoryGap="35%">
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} opacity={0.6} />
-                <XAxis
-                  dataKey="name"
-                  fontSize={11}
-                  stroke="var(--color-muted-foreground)"
-                  tickLine={false}
-                  axisLine={false}
-                  interval={0}
-                  angle={-12}
-                  textAnchor="end"
-                  height={56}
-                />
-                <YAxis fontSize={11} stroke="var(--color-muted-foreground)" tickLine={false} axisLine={false} unit="%" />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(v: number) => [`${v}%`, "Utilization"]}
-                />
-                <Bar dataKey="value" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {/* Horizontally-scrollable on narrow screens so category ticks don't compress into an unreadable smear */}
+            <div className="overflow-x-auto">
+              <div style={{ minWidth: `${Math.max(dynamicUtilizationData.length * 60, 300)}px` }}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={dynamicUtilizationData} barCategoryGap="35%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} opacity={0.6} />
+                    <XAxis
+                      dataKey="name"
+                      fontSize={11}
+                      stroke="var(--color-muted-foreground)"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      angle={-12}
+                      textAnchor="end"
+                      height={56}
+                    />
+                    <YAxis fontSize={11} stroke="var(--color-muted-foreground)" tickLine={false} axisLine={false} unit="%" />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      formatter={(v: number) => [`${v}%`, "Utilization"]}
+                    />
+                    <Bar dataKey="value" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -1578,7 +1776,7 @@ function ReportsPage() {
           </CardHeader>
           <CardContent className="p-0 flex-grow">
             {/* Desktop Table — hidden on mobile */}
-            <div className="hidden sm:block">
+            <div className="hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1618,7 +1816,7 @@ function ReportsPage() {
             </div>
 
             {/* Mobile List — visible only on mobile */}
-            <div className="sm:hidden">
+            <div className="md:hidden">
               {dynamicTopCustomers.length === 0 ? (
                 <div className="py-12 text-center text-[13px] text-muted-foreground">
                   No billing history found.
@@ -1694,10 +1892,10 @@ function ReportsPage() {
                 </p>
               </div>
 
-              {/* Filters Toolbar */}
-              <div className="flex flex-wrap items-center gap-3">
+              {/* Filters Toolbar — scrolls as one row on mobile, wraps normally from md: up */}
+              <div className="flex flex-nowrap items-center gap-3 overflow-x-auto pb-1 -mx-1 px-1 md:flex-wrap md:overflow-visible md:pb-0 md:mx-0 md:px-0">
                 {/* Search */}
-                <div className="relative min-w-[150px] flex-1 sm:flex-initial">
+                <div className="relative min-w-[150px] flex-1 shrink-0 sm:flex-initial">
                   <Input
                     placeholder="Search statement records..."
                     value={search}
@@ -1709,7 +1907,7 @@ function ReportsPage() {
                 {/* Owner filter dropdown (Specific to Owner Statement) */}
                 {activeStatement === "Owner Statement" && (
                   <Select value={selectedOwnerFilter} onValueChange={setSelectedOwnerFilter}>
-                    <SelectTrigger className="h-8.5 w-[150px] text-[12px] bg-background">
+                    <SelectTrigger className="h-8.5 w-[150px] text-[12px] bg-background shrink-0">
                       <SelectValue placeholder="All Owners" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1724,7 +1922,7 @@ function ReportsPage() {
                 {/* Category filter dropdown (Specific to Owner Statement) */}
                 {activeStatement === "Owner Statement" && (
                   <Select value={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter}>
-                    <SelectTrigger className="h-8.5 w-[160px] text-[12px] bg-background">
+                    <SelectTrigger className="h-8.5 w-[160px] text-[12px] bg-background shrink-0">
                       <SelectValue placeholder="All Categories" />
                     </SelectTrigger>
                     <SelectContent className="border border-border/60 bg-popover shadow-elevated rounded-lg">
@@ -1739,7 +1937,7 @@ function ReportsPage() {
                 {/* Date Type selection */}
                 {DATE_TYPE_OPTIONS[activeStatement] && DATE_TYPE_OPTIONS[activeStatement][0].value !== "none" && (
                   <Select value={dateType} onValueChange={setDateType}>
-                    <SelectTrigger className="h-8.5 w-[150px] text-[12px] bg-background">
+                    <SelectTrigger className="h-8.5 w-[150px] text-[12px] bg-background shrink-0">
                       <SelectValue placeholder="Date Type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1755,7 +1953,7 @@ function ReportsPage() {
                 {/* Date Preset Filter */}
                 {dateType !== "none" && (
                   <Select value={preset} onValueChange={handlePresetChange}>
-                    <SelectTrigger className="h-8.5 w-[140px] text-[12px] bg-background">
+                    <SelectTrigger className="h-8.5 w-[140px] text-[12px] bg-background shrink-0">
                       <SelectValue placeholder="Date Filter" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1773,7 +1971,7 @@ function ReportsPage() {
 
                 {/* Date range inputs */}
                 {dateType !== "none" && (preset !== "all" || startDate || endDate) && (
-                  <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background p-1 h-8.5 shrink-0">
+                  <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background p-1 h-auto shrink-0">
                     <Input
                       type="date"
                       value={startDate}
@@ -1781,7 +1979,7 @@ function ReportsPage() {
                         setStartDate(e.target.value);
                         setPreset("custom");
                       }}
-                      className="h-6.5 w-[130px] text-[11px] px-1.5 py-0 border-transparent bg-transparent shadow-none focus-visible:ring-0 cursor-pointer"
+                      className="h-9 w-[130px] text-[11px] px-1.5 py-0 border-transparent bg-transparent shadow-none focus-visible:ring-0 cursor-pointer"
                     />
                     <span className="text-[9px] text-muted-foreground font-bold px-0.5 shrink-0">TO</span>
                     <Input
@@ -1791,13 +1989,13 @@ function ReportsPage() {
                         setEndDate(e.target.value);
                         setPreset("custom");
                       }}
-                      className="h-6.5 w-[130px] text-[11px] px-1.5 py-0 border-transparent bg-transparent shadow-none focus-visible:ring-0 cursor-pointer"
+                      className="h-9 w-[130px] text-[11px] px-1.5 py-0 border-transparent bg-transparent shadow-none focus-visible:ring-0 cursor-pointer"
                     />
                   </div>
                 )}
 
                 {/* Action exports */}
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1818,18 +2016,23 @@ function ReportsPage() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-0 overflow-x-auto max-h-[500px] overflow-y-auto">
-            <p className="sm:hidden px-4 pt-2.5 pb-1 text-[11px] text-muted-foreground">
-              Swipe to see all columns →
-            </p>
-            <Table>
-              <TableHeader className="bg-muted/10 sticky top-0 z-10">
-                {renderTableHeader()}
-              </TableHeader>
-              <TableBody>
-                {renderTableRows(filteredData)}
-              </TableBody>
-            </Table>
+          <CardContent className="p-0 max-h-none md:max-h-[500px] overflow-y-auto">
+            {/* Desktop table — hidden on mobile */}
+            <div className="hidden md:block overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-muted/10 sticky top-0 z-10">
+                  {renderTableHeader()}
+                </TableHeader>
+                <TableBody>
+                  {renderTableRows(filteredData)}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile card list — visible only on mobile */}
+            <div className="md:hidden space-y-2 p-3">
+              {renderMobileCards(filteredData)}
+            </div>
           </CardContent>
         </Card>
       </div>

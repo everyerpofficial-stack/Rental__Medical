@@ -647,7 +647,7 @@ function CustomerFormDialog({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full shrink-0"
+                          className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full shrink-0"
                           onClick={() => removeFile(idx)}
                           title="Remove file"
                         >
@@ -852,12 +852,12 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
 
         {/* Content Tabs */}
         <Tabs defaultValue="overview" className="w-full flex flex-col">
-          <div className="border-b border-border/50 bg-muted/15 px-6">
-            <TabsList className="bg-transparent border-0 gap-2 h-11 p-0 justify-start">
-              <TabsTrigger value="overview" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Overview & KYC</TabsTrigger>
-              <TabsTrigger value="rentals" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Rentals ({custRentals.length})</TabsTrigger>
-              <TabsTrigger value="payments" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Payments & Dues ({custPayments.length})</TabsTrigger>
-              <TabsTrigger value="documents" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold">Documents ({custKYCDocs.length})</TabsTrigger>
+          <div className="border-b border-border/50 bg-muted/15 px-6 overflow-x-auto">
+            <TabsList className="bg-transparent border-0 gap-2 h-11 p-0 justify-start flex-nowrap w-max min-w-full">
+              <TabsTrigger value="overview" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Overview & KYC</TabsTrigger>
+              <TabsTrigger value="rentals" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Rentals ({custRentals.length})</TabsTrigger>
+              <TabsTrigger value="payments" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Payments & Dues ({custPayments.length})</TabsTrigger>
+              <TabsTrigger value="documents" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Documents ({custKYCDocs.length})</TabsTrigger>
             </TabsList>
           </div>
 
@@ -926,7 +926,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
+                                  className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md"
                                   onClick={() => {
                                     if (window.confirm(`Are you sure you want to delete "${d.name}"?`)) {
                                       deleteDocument(d.id);
@@ -1100,48 +1100,85 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                   {custPayments.length === 0 ? (
                     <p className="text-[12.5px] text-muted-foreground text-center py-8">No payments recorded.</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader className="bg-muted/5">
-                          <TableRow>
-                            <TableHead className="text-[11.5px] h-9">Date</TableHead>
-                            <TableHead className="text-[11.5px] h-9">Transaction ID</TableHead>
-                            <TableHead className="text-[11.5px] h-9">Agreement</TableHead>
-                            <TableHead className="text-[11.5px] h-9">Type</TableHead>
-                            <TableHead className="text-[11.5px] h-9">Mode</TableHead>
-                            <TableHead className="text-[11.5px] h-9 text-right">Amount</TableHead>
-                            <TableHead className="text-[11.5px] h-9">Status</TableHead>
-                            <TableHead className="text-[11.5px] h-9 text-right">Invoice</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {custPayments.map((p) => (
-                            <TableRow key={p.id} className="text-[12.5px]">
-                              <TableCell className="py-2.5 font-medium">{formatDateDDMMYYYY(p.date)}</TableCell>
-                              <TableCell className="py-2.5 font-mono text-[11px] text-muted-foreground">{p.id}</TableCell>
-                              <TableCell className="py-2.5 font-mono text-[11px] text-primary">{p.agreement}</TableCell>
-                              <TableCell className="py-2.5">{p.type}</TableCell>
-                              <TableCell className="py-2.5 text-muted-foreground">{p.mode} {p.txRef ? `(${p.txRef})` : ""}</TableCell>
-                              <TableCell className="py-2.5 text-right font-bold">₹{p.amount.toLocaleString("en-IN")}</TableCell>
-                              <TableCell className="py-2.5"><StatusBadge status={p.status} /></TableCell>
-                              <TableCell className="py-2.5 text-right">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6.5 text-[10px] px-1.5 rounded"
-                                  onClick={() => {
-                                    printReceipt(p, customer.name);
-                                    toast.success(`Receipt PDF for ${p.id} generated successfully.`);
-                                  }}
-                                >
-                                  Download
-                                </Button>
-                              </TableCell>
+                    <>
+                      {/* Desktop table — hidden on mobile */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <Table>
+                          <TableHeader className="bg-muted/5">
+                            <TableRow>
+                              <TableHead className="text-[11.5px] h-9">Date</TableHead>
+                              <TableHead className="text-[11.5px] h-9">Transaction ID</TableHead>
+                              <TableHead className="text-[11.5px] h-9">Agreement</TableHead>
+                              <TableHead className="text-[11.5px] h-9">Type</TableHead>
+                              <TableHead className="text-[11.5px] h-9">Mode</TableHead>
+                              <TableHead className="text-[11.5px] h-9 text-right">Amount</TableHead>
+                              <TableHead className="text-[11.5px] h-9">Status</TableHead>
+                              <TableHead className="text-[11.5px] h-9 text-right">Invoice</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {custPayments.map((p) => (
+                              <TableRow key={p.id} className="text-[12.5px]">
+                                <TableCell className="py-2.5 font-medium">{formatDateDDMMYYYY(p.date)}</TableCell>
+                                <TableCell className="py-2.5 font-mono text-[11px] text-muted-foreground">{p.id}</TableCell>
+                                <TableCell className="py-2.5 font-mono text-[11px] text-primary">{p.agreement}</TableCell>
+                                <TableCell className="py-2.5">{p.type}</TableCell>
+                                <TableCell className="py-2.5 text-muted-foreground">{p.mode} {p.txRef ? `(${p.txRef})` : ""}</TableCell>
+                                <TableCell className="py-2.5 text-right font-bold">₹{p.amount.toLocaleString("en-IN")}</TableCell>
+                                <TableCell className="py-2.5"><StatusBadge status={p.status} /></TableCell>
+                                <TableCell className="py-2.5 text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6.5 text-[10px] px-1.5 rounded"
+                                    onClick={() => {
+                                      printReceipt(p, customer.name);
+                                      toast.success(`Receipt PDF for ${p.id} generated successfully.`);
+                                    }}
+                                  >
+                                    Download
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      {/* Mobile card list — visible only on mobile */}
+                      <div className="md:hidden p-2 space-y-2">
+                        {custPayments.map((p) => (
+                          <div
+                            key={p.id}
+                            className="mobile-card-item cursor-pointer"
+                            onClick={() => {
+                              printReceipt(p, customer.name);
+                              toast.success(`Receipt PDF for ${p.id} generated successfully.`);
+                            }}
+                          >
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-bold text-[14px] text-foreground">₹{p.amount.toLocaleString("en-IN")}</p>
+                                <StatusBadge status={p.status} />
+                              </div>
+                              <div className="info-row">
+                                <Clock className="h-3 w-3 shrink-0" />
+                                <span>{formatDateDDMMYYYY(p.date)}</span>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span>{p.type} · {p.mode}{p.txRef ? ` (${p.txRef})` : ""}</span>
+                              </div>
+                              <div className="info-row">
+                                <Receipt className="h-3 w-3 shrink-0" />
+                                <span className="font-mono text-primary">{p.agreement}</span>
+                                <span className="text-muted-foreground/40">·</span>
+                                <span className="font-mono">{p.id}</span>
+                              </div>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -1825,7 +1862,7 @@ function CustomersPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 sm:pb-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground shrink-0">
                 <Users className="h-3.5 w-3.5" />
                 <span><strong className="text-foreground">{filteredCustomers.length}</strong> customers</span>
@@ -1860,7 +1897,7 @@ function CustomersPage() {
           </div>
 
           {/* Desktop Table — hidden on mobile */}
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1971,7 +2008,7 @@ function CustomersPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
                           onClick={() => { setProfileCustomer(c); setProfileOpen(true); }}
                           title="View Profile"
                         >
@@ -1984,7 +2021,7 @@ function CustomersPage() {
                               customer={c}
                               onSave={refresh}
                               trigger={
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
                                   <Edit className="h-3.5 w-3.5" />
                                 </Button>
                               }
@@ -1993,7 +2030,7 @@ function CustomersPage() {
                               customer={c}
                               onDelete={refresh}
                               trigger={
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               }
@@ -2009,7 +2046,7 @@ function CustomersPage() {
           </div>
 
           {/* Mobile Card List — visible only on mobile */}
-          <div className="sm:hidden divide-y divide-border/60">
+          <div className="md:hidden divide-y divide-border/60">
             {filteredCustomers.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
                 No customers match your search or filter.

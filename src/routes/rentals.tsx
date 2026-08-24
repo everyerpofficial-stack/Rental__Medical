@@ -2119,7 +2119,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           variant="ghost"
                           size="icon"
                           type="button"
-                          className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-destructive"
+                          className="absolute top-2 right-2 h-9 w-9 text-muted-foreground hover:text-destructive"
                           onClick={(e) => {
                             e.preventDefault();
                             const filtered = selectedEquipments.filter((_, i) => i !== idx);
@@ -2382,7 +2382,111 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   </div>
                 </div>
                 
-                <div className="rounded-lg border border-border/50 overflow-hidden bg-background">
+                {/* Mobile Card List — Predefined Additional Amount Checklist */}
+                <div className="md:hidden space-y-2.5 max-h-[420px] overflow-y-auto pr-0.5">
+                  {additionalItems
+                    .map((item, index) => ({ item, index }))
+                    .sort((a, b) => {
+                      if (a.item.isCustom && !b.item.isCustom) return -1;
+                      if (!a.item.isCustom && b.item.isCustom) return 1;
+                      if (a.item.selected && !b.item.selected) return -1;
+                      if (!a.item.selected && b.item.selected) return 1;
+                      return 0;
+                    })
+                    .map(({ item, index }) => (
+                      <div
+                        key={item.id || item.name || `mrow-${index}`}
+                        className={`rounded-lg border shadow-soft p-3 flex flex-col gap-2.5 transition-colors ${item.selected ? 'bg-primary/5 border-primary/30' : 'bg-card border-border/60'}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center justify-center h-9 w-9 -m-1 shrink-0 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={item.selected}
+                              onChange={(e) => {
+                                const newItems = [...additionalItems];
+                                newItems[index].selected = e.target.checked;
+                                setAdditionalItems(newItems);
+                                updateCalculatedCharges(newItems, item.name);
+                              }}
+                              className="h-5 w-5 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                            />
+                          </label>
+                          {item.isCustom ? (
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <Input
+                                placeholder="Enter item name..."
+                                value={item.name}
+                                onChange={(e) => {
+                                  const newItems = [...additionalItems];
+                                  newItems[index].name = capitalizeWords(e.target.value);
+                                  setAdditionalItems(newItems);
+                                }}
+                                className="h-9 text-[12.5px] p-2 flex-1 bg-background border-border/80 focus-visible:ring-primary/20"
+                              />
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                type="button"
+                                className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const newItems = additionalItems.filter((_, i) => i !== index);
+                                  setAdditionalItems(newItems);
+                                  updateCalculatedCharges(newItems);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="font-medium text-foreground text-[13px] flex-1 min-w-0 truncate">{item.name}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 pl-9">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] uppercase tracking-wide font-bold text-muted-foreground mb-1 block">Cost (₹)</span>
+                            <Input
+                              type="number"
+                              disabled={!item.selected}
+                              value={item.amount === 0 ? "" : item.amount}
+                              onChange={(e) => {
+                                const newItems = [...additionalItems];
+                                newItems[index].amount = Number(e.target.value) || 0;
+                                setAdditionalItems(newItems);
+                                updateCalculatedCharges(newItems, item.name);
+                              }}
+                              className="h-9 text-[12.5px] p-2 bg-background disabled:opacity-50 disabled:bg-muted/30"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-[10px] uppercase tracking-wide font-bold text-muted-foreground mb-1 block">Status</span>
+                            <Select
+                              disabled={!item.selected}
+                              value={item.status}
+                              onValueChange={(val: any) => {
+                                const newItems = [...additionalItems];
+                                newItems[index].status = val;
+                                setAdditionalItems(newItems);
+                                updateCalculatedCharges(newItems, item.name);
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-[12px] bg-background disabled:opacity-50 disabled:bg-muted/30">
+                                <SelectValue placeholder="Status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Paid">Paid</SelectItem>
+                                <SelectItem value="Not Paid">Not Paid</SelectItem>
+                                <SelectItem value="Free of Cost">Free of Cost</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                <div className="hidden md:block rounded-lg border border-border/50 overflow-hidden bg-background">
                   <div className="max-h-[250px] overflow-y-auto">
                     <table className="w-full text-left text-[12.5px]">
                       <thead className="bg-muted/40 text-[10px] uppercase font-bold text-muted-foreground border-b border-border/50 sticky top-0">
@@ -2435,7 +2539,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                       size="icon"
                                       variant="ghost"
                                       type="button"
-                                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                                      className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0"
                                       onClick={(e) => {
                                         e.preventDefault();
                                         const newItems = additionalItems.filter((_, i) => i !== index);
@@ -3235,8 +3339,8 @@ function LiveWebcam({ onCapture }: { onCapture: (dataUrl: string) => void }) {
       {devices.length > 1 && !error && (
         <div className="flex items-center justify-between w-full text-[11px]">
           <span className="text-muted-foreground">Switch Camera:</span>
-          <select 
-            className="h-7 border border-border/60 rounded px-1.5 bg-background text-[11px] max-w-[150px]"
+          <select
+            className="h-9 border border-border/60 rounded px-1.5 bg-background text-[11px] max-w-[150px]"
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
           >
@@ -3732,7 +3836,7 @@ function DeliveryPhotoCaptureDialog({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-5 w-5 text-muted-foreground hover:text-destructive shrink-0"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
                         onClick={() => removePhoto(idx)}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -3965,7 +4069,7 @@ function CustomerIDProofDialog({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-5 w-5 text-muted-foreground hover:text-destructive shrink-0"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
                         onClick={() => removeFile(idx)}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -4394,27 +4498,30 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
               EQUIPMENT DETAILS ARE AS FOLLOWS: -
             </div>
             
-            <table className="w-full border-collapse border border-slate-800 text-[12px] mb-4">
-              <thead>
-                <tr className="bg-slate-100 border-b border-slate-800 text-left font-bold text-[11.5px]">
-                  <th className="border-r border-slate-800 p-1.5">Equipment Name</th>
-                  <th className="border-r border-slate-800 p-1.5 text-center">Hired</th>
-                  <th className="border-r border-slate-800 p-1.5">Model</th>
-                  <th className="border-r border-slate-800 p-1.5">M/C Sr.No</th>
-                  <th className="border-r border-slate-800 p-1.5">Ref.No</th>
-                  <th className="p-1.5">Ref.Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {finalEquipRows}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-slate-800 text-[12px] mb-4">
+                <thead>
+                  <tr className="bg-slate-100 border-b border-slate-800 text-left font-bold text-[11.5px]">
+                    <th className="border-r border-slate-800 p-1.5">Equipment Name</th>
+                    <th className="border-r border-slate-800 p-1.5 text-center">Hired</th>
+                    <th className="border-r border-slate-800 p-1.5">Model</th>
+                    <th className="border-r border-slate-800 p-1.5">M/C Sr.No</th>
+                    <th className="border-r border-slate-800 p-1.5">Ref.No</th>
+                    <th className="p-1.5">Ref.Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finalEquipRows}
+                </tbody>
+              </table>
+            </div>
             
             {/* Section 2: Rent and Deposit details */}
             <div className="font-bold text-[13px] text-red-600 underline uppercase mb-2">
               RENT AND DEPOSIT DETAILS: -
             </div>
             
+            <div className="overflow-x-auto">
             <table className="w-full border-collapse border border-slate-800 text-[12px] mb-2">
               <thead>
                 <tr className="bg-slate-100 border-b border-slate-800 text-left font-bold text-[11px]">
@@ -4491,6 +4598,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* ════════════════ PAGE 2 ════════════════ */}
@@ -4839,7 +4947,7 @@ function RentalsPage() {
           </div>
 
           {/* Desktop Table — hidden on mobile */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -5037,7 +5145,7 @@ function RentalsPage() {
           </div>
 
           {/* Mobile Card List */}
-          <div className="sm:hidden">
+          <div className="md:hidden">
             {filteredRentals.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
                 No agreements match your search or filter.

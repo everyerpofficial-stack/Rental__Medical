@@ -891,7 +891,8 @@ function OwnerDetailsSheet({
                     {stmtFromDate && stmtToDate ? ` (${stmtFromDate} to ${stmtToDate})` : ""}
                   </p>
                 </div>
-                <div className="overflow-x-auto">
+                {/* Desktop table — hidden on mobile */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-[11.5px]">
                     <thead className="bg-muted/30 border-b border-border/50">
                       <tr>
@@ -940,6 +941,49 @@ function OwnerDetailsSheet({
                       </tr>
                     </tfoot>
                   </table>
+                </div>
+
+                {/* Mobile card list — visible only on mobile */}
+                <div className="md:hidden divide-y divide-border/60">
+                  {stmtRows.map((row, idx) => (
+                    <div key={idx} className="mobile-card-item">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-semibold text-[13px] text-foreground truncate">{row.eqSerial}</p>
+                          <p className="font-bold text-[13.5px] text-primary shrink-0">₹{row.totalAmount.toLocaleString("en-IN")}</p>
+                        </div>
+                        <div className="info-row">
+                          <Package className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{row.eqCategory}</span>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="truncate">{row.customerName}</span>
+                        </div>
+                        <div className="info-row">
+                          <Calendar className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.dateTaken ? formatDateDDMMYYYY(row.dateTaken) : "—"} →{" "}
+                            {row.returnDate === "Not Returned" ? (
+                              <span className="text-warning-foreground font-semibold">Not Returned</span>
+                            ) : (
+                              formatDateDDMMYYYY(row.returnDate)
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between pt-1 mt-0.5 border-t border-border/40">
+                          <span className="text-[11px] font-bold text-foreground">{row.daysLabel} days used</span>
+                          <span className="text-[10.5px] text-muted-foreground">₹{row.perDayRate}/day · {owner.name} · Sr.{idx + 1}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between px-4 py-3 bg-muted/20 border-t border-border/50">
+                    <span className="text-[12px] font-bold text-foreground">
+                      Grand Total ({stmtRows[stmtRows.length - 1]?.totalDaysUpToNow || 0} days)
+                    </span>
+                    <span className="text-[13.5px] font-bold text-primary">
+                      ₹{stmtRows.reduce((s, r) => s + r.totalAmount, 0).toLocaleString("en-IN")}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1123,7 +1167,7 @@ function OwnersPage() {
 
       {/* Filter strip */}
       <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-border/60 pb-5">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 w-full sm:min-w-[240px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
           <Input
             placeholder="Search by owner name or agreement number…"
@@ -1146,7 +1190,7 @@ function OwnersPage() {
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           {/* Desktop Table — hidden on mobile */}
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1224,7 +1268,7 @@ function OwnersPage() {
                                   <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                    className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                     title="Edit"
                                   >
                                     <Edit className="h-3.5 w-3.5" />
@@ -1238,7 +1282,7 @@ function OwnersPage() {
                                   <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                     title="Delete"
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
@@ -1258,7 +1302,7 @@ function OwnersPage() {
           </div>
 
           {/* Mobile Card List — visible only on mobile */}
-          <div className="sm:hidden">
+          <div className="md:hidden">
             {filteredOwners.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
                 No equipment owners match your search filter.

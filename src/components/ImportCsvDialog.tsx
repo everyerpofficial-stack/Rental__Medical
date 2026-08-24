@@ -249,7 +249,7 @@ export function ImportCsvDialog({
                 <span className="text-destructive">{rows.length - readyCount} will be skipped due to missing required fields.</span>
               )}
             </p>
-            <div className="border border-border rounded-lg overflow-auto max-h-[320px]">
+            <div className="hidden md:block border border-border rounded-lg overflow-auto max-h-[320px]">
               <table className="w-full text-[11.5px]">
                 <thead className="bg-muted/40 sticky top-0">
                   <tr>
@@ -274,6 +274,31 @@ export function ImportCsvDialog({
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile card list — visible only below md */}
+            <div className="md:hidden space-y-2 max-h-[320px] overflow-y-auto pr-0.5">
+              {rows.slice(0, 50).map((r, i) => (
+                <div
+                  key={i}
+                  className={`mobile-card-item ${r.errors.length > 0 ? "border-destructive/40 bg-destructive/5" : ""}`}
+                >
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <span className="text-[11px] font-bold text-foreground">Row {i + 1}</span>
+                      {r.errors.length > 0
+                        ? <span className="text-destructive font-semibold text-[11px] text-right">{r.errors.join(", ")}</span>
+                        : <span className="text-success font-semibold text-[11px]">Ready</span>}
+                    </div>
+                    {columns.map((c) => (
+                      <div key={c.key} className="info-row justify-between gap-2">
+                        <span className="shrink-0">{c.label}</span>
+                        <span className="text-foreground font-medium text-right truncate">{r.mapped[c.key] || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
             {rows.length > 50 && (
               <p className="text-[11px] text-muted-foreground">Showing first 50 of {rows.length} rows.</p>

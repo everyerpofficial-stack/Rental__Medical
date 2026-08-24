@@ -746,11 +746,11 @@ function DeletePaymentDialog({ payment, trigger, onDelete }: { payment: Payment;
   );
 }
 
-function PrintReceiptDialog({ payment }: { payment: Payment }) {
+function PrintReceiptDialog({ payment, triggerClassName = "h-7 w-7" }: { payment: Payment; triggerClassName?: string }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" title="Print Receipt">
+        <Button variant="ghost" size="icon" className={`${triggerClassName} text-muted-foreground hover:text-foreground`} title="Print Receipt">
           <Printer className="h-3.5 w-3.5" />
         </Button>
       </DialogTrigger>
@@ -1011,51 +1011,86 @@ function AgreementPaymentHistoryModal({
             </div>
           ) : (
             <div className="rounded-xl border border-border/60 overflow-hidden">
-              <Table>
-                <TableHeader className="bg-muted/40">
-                  <TableRow>
-                    <TableHead>Receipt ID</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Mode</TableHead>
-                    <TableHead>Collected By</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agreementPayments.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-mono text-[12px] font-bold text-primary">{p.id}</TableCell>
-                      <TableCell className="text-[12px]">{formatDateDDMMYYYY(p.date)}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
-                          {p.type}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}>
-                          {p.mode}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-[12px] font-medium">{(p.collectedBy as string) || "Dr. Rao"}</TableCell>
-                      <TableCell className="text-right font-bold text-[13px]">₹{p.amount.toLocaleString("en-IN")}</TableCell>
-                      <TableCell><StatusBadge status={p.status} /></TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <PrintReceiptDialog payment={p} />
-                          <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          } />
-                        </div>
-                      </TableCell>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow>
+                      <TableHead>Receipt ID</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Mode</TableHead>
+                      <TableHead>Collected By</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {agreementPayments.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-mono text-[12px] font-bold text-primary">{p.id}</TableCell>
+                        <TableCell className="text-[12px]">{formatDateDDMMYYYY(p.date)}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
+                            {p.type}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}>
+                            {p.mode}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-[12px] font-medium">{(p.collectedBy as string) || "Dr. Rao"}</TableCell>
+                        <TableCell className="text-right font-bold text-[13px]">₹{p.amount.toLocaleString("en-IN")}</TableCell>
+                        <TableCell><StatusBadge status={p.status} /></TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <PrintReceiptDialog payment={p} />
+                            <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            } />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile card list */}
+              <div className="md:hidden divide-y divide-border/60">
+                {agreementPayments.map((p) => (
+                  <div key={p.id} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div>
+                        <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
+                        <StatusBadge status={p.status} />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground"}`}>{p.type}</span>
+                      <span>·</span>
+                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
+                      <span>·</span>
+                      <span>{(p.collectedBy as string) || "Dr. Rao"}</span>
+                    </div>
+                    <div className="mt-2 flex justify-end gap-1">
+                      <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                      <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
+                        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      } />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1387,7 +1422,7 @@ function PaymentsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Select value={dateFilter} onValueChange={setDateFilter}>
                   <SelectTrigger className="h-8 w-[120px] text-[12px] bg-card border-border/50 rounded-lg">
                     <SelectValue placeholder="All Payments" />
@@ -1655,7 +1690,7 @@ function PaymentsPage() {
                           <span>{p.type}</span>
                         </div>
                         <div className="mt-2 flex justify-end">
-                          <PrintReceiptDialog payment={p} />
+                          <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
                         </div>
                       </div>
                     ))}

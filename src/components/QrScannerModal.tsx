@@ -127,15 +127,29 @@ export function QrScannerModal({
         }
 
         setCameras(devices);
-        
+
         // Pick back camera if available, otherwise first one
         let cameraId = selectedCameraId;
+        // What we actually hand to scanner.start() — normally the resolved device id,
+        // but falls back to a facingMode constraint when label-matching can't
+        // confidently identify the back camera (e.g. generic/non-English labels),
+        // so we don't silently default to the front/selfie camera.
+        let startTarget: string | MediaTrackConstraints = cameraId;
         if (!cameraId) {
           const backCamera = devices.find((device) =>
             device.label.toLowerCase().includes("back") ||
             device.label.toLowerCase().includes("environment")
           );
-          cameraId = backCamera ? backCamera.id : devices[0].id;
+          if (backCamera) {
+            cameraId = backCamera.id;
+            startTarget = cameraId;
+          } else if (devices.length > 1) {
+            cameraId = devices[0].id;
+            startTarget = { facingMode: "environment" };
+          } else {
+            cameraId = devices[0].id;
+            startTarget = cameraId;
+          }
           setSelectedCameraId(cameraId);
         }
 
@@ -150,7 +164,7 @@ export function QrScannerModal({
         }
 
         await scanner.start(
-          cameraId,
+          startTarget,
           {
             fps: 10,
             qrbox: (width, height) => {
@@ -612,7 +626,7 @@ export function QrScannerModal({
                   <div className="flex items-center justify-between text-[12px]">
                     <Label className="text-muted-foreground">Active Camera:</Label>
                     <select
-                      className="h-8 border border-border/60 rounded-md px-2 bg-background focus:outline-none text-[11.5px] max-w-[200px]"
+                      className="h-9 border border-border/60 rounded-md px-2 bg-background focus:outline-none text-sm max-w-[200px]"
                       value={selectedCameraId}
                       onChange={(e) => handleCameraChange(e.target.value)}
                     >

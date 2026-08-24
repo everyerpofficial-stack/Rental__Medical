@@ -36,6 +36,7 @@ function PayDialog({
   calcUnpaidDetailsForEquipment,
   getEquipmentName,
   onPaid,
+  triggerClassName = "h-7 px-3 text-[11px]",
 }: {
   rental: any;
   paymentsList: any[];
@@ -43,6 +44,7 @@ function PayDialog({
   calcUnpaidDetailsForEquipment: (rental: any, eqId: string) => any;
   getEquipmentName: (eqId: string) => string;
   onPaid: () => void;
+  triggerClassName?: string;
 }) {
   const eqItems = useMemo(() => rental?.equipmentItems || [
     {
@@ -640,7 +642,7 @@ function PayDialog({
     <>
       <Button
         size="sm"
-        className="h-7 px-3 text-[11px] font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+        className={`${triggerClassName} font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs`}
         onClick={() => setOpen(true)}
       >
         <CreditCard className="h-3.5 w-3.5" /> Pay
@@ -815,7 +817,7 @@ function PayDialog({
                                           <button
                                             type="button"
                                             onClick={() => handleItemDiscountTypeChange(item.equipmentId, "one-time")}
-                                            className={`px-1.5 py-0.2 text-[9px] font-bold rounded transition-all ${
+                                            className={`px-1.5 py-1.5 text-[11px] font-bold rounded transition-all ${
                                               (itemPayments[item.equipmentId].discountType || "one-time") === "one-time"
                                                 ? "bg-emerald-600 text-white shadow-xs"
                                                 : "text-muted-foreground hover:text-foreground"
@@ -826,7 +828,7 @@ function PayDialog({
                                           <button
                                             type="button"
                                             onClick={() => handleItemDiscountTypeChange(item.equipmentId, "permanent")}
-                                            className={`px-1.5 py-0.2 text-[9px] font-bold rounded transition-all ${
+                                            className={`px-1.5 py-1.5 text-[11px] font-bold rounded transition-all ${
                                               itemPayments[item.equipmentId].discountType === "permanent"
                                                 ? "bg-emerald-600 text-white shadow-xs"
                                                 : "text-muted-foreground hover:text-foreground"
@@ -942,7 +944,7 @@ function PayDialog({
                                     <button
                                       type="button"
                                       onClick={() => setDiscountType("one-time")}
-                                      className={`flex-1 py-0.5 px-1 rounded text-[9.5px] font-bold border transition-all text-center leading-tight ${
+                                      className={`flex-1 py-1.5 px-1 rounded text-[11px] font-bold border transition-all text-center leading-tight ${
                                         discountType === "one-time"
                                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
                                           : "bg-background text-muted-foreground border-border hover:bg-muted/40"
@@ -953,7 +955,7 @@ function PayDialog({
                                     <button
                                       type="button"
                                       onClick={() => setDiscountType("permanent")}
-                                      className={`flex-1 py-0.5 px-1 rounded text-[9.5px] font-bold border transition-all text-center leading-tight ${
+                                      className={`flex-1 py-1.5 px-1 rounded text-[11px] font-bold border transition-all text-center leading-tight ${
                                         discountType === "permanent"
                                           ? "bg-primary text-primary-foreground border-primary shadow-xs"
                                           : "bg-background text-muted-foreground border-border hover:bg-muted/40"
@@ -1524,15 +1526,21 @@ function DuesPage() {
             className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 font-bold gap-1.5"
             onClick={handleExportExcel}
             title="Export Excel Report for Rent Dues (1-10, 11-20, 21-31)"
+            aria-label="Export Excel Report"
           >
             <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-            Export Excel Report
+            <span className="hidden md:inline">Export Excel Report</span>
           </Button>
-          <Button size="sm" onClick={() => {
-            toast.success("Sending reminders to " + filteredRentals.length + " customer(s) via WhatsApp, SMS & Email.");
-          }}>
-            <Bell className="mr-1.5 h-3.5 w-3.5" />
-            Send All Reminders
+          <Button
+            size="sm"
+            onClick={() => {
+              toast.success("Sending reminders to " + filteredRentals.length + " customer(s) via WhatsApp, SMS & Email.");
+            }}
+            title="Send All Reminders"
+            aria-label="Send All Reminders"
+          >
+            <Bell className="h-3.5 w-3.5 md:mr-1.5" />
+            <span className="hidden md:inline">Send All Reminders</span>
           </Button>
         </div>
       }
@@ -1623,7 +1631,7 @@ function DuesPage() {
         </CardHeader>
         <CardContent className="p-0">
           {/* Desktop table — hidden on mobile */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1884,7 +1892,7 @@ function DuesPage() {
           </div>
 
           {/* Mobile card list */}
-          <div className="sm:hidden">
+          <div className="md:hidden">
             {filteredRentals.length === 0 ? (
               <div className="py-10 text-center text-[13px] text-muted-foreground">
                 <CheckCircle2 className="h-8 w-8 text-success/50 mx-auto mb-2" />
@@ -1974,8 +1982,9 @@ function DuesPage() {
                           calcUnpaidDetailsForEquipment={calcUnpaidDetailsForEquipment}
                           getEquipmentName={getEquipmentName}
                           onPaid={() => setRefreshKey((k) => k + 1)}
+                          triggerClassName="h-10 px-3 text-[11px]"
                         />
-                        <Button variant="outline" size="sm" className="h-7 text-[11px] px-2.5" onClick={() => toast.success(`WhatsApp reminder sent to ${r.customer}`)}>
+                        <Button variant="outline" size="sm" className="h-10 text-[11px] px-2.5" onClick={() => toast.success(`WhatsApp reminder sent to ${r.customer}`)}>
                           <MessageCircle className="h-3.5 w-3.5" /> Remind
                         </Button>
                       </div>

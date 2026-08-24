@@ -361,7 +361,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
                     type="button" 
                     variant="ghost" 
                     size="sm" 
-                    className="h-6.5 text-[10px] text-muted-foreground hover:text-foreground px-1.5"
+                    className="h-9 text-[10px] text-muted-foreground hover:text-foreground px-1.5"
                     onClick={() => {
                       setIsAddingNewOwner(false);
                       setOwner("");

@@ -796,11 +796,11 @@ function DocsPage() {
                       </div>
                       <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-4">
                         <span className="text-[11px] text-muted-foreground">{d.size} · {formatDateDDMMYYYY(d.date)}</span>
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-2.5">
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            className="h-10 w-10 text-muted-foreground hover:text-foreground"
                             title="Preview File"
                             onClick={() => {
                               setIsPreviewLoading(true);
@@ -812,7 +812,7 @@ function DocsPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            className="h-10 w-10 text-muted-foreground hover:text-foreground"
                             title="Download / Print File"
                             onClick={async () => {
                               const ok = await printDocumentFile(d);
@@ -829,7 +829,7 @@ function DocsPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-destructive hover:bg-destructive/5"
+                              className="h-10 w-10 text-destructive hover:bg-destructive/5"
                               title="Delete File"
                               onClick={() => setDeleteDoc(d)}
                             >
