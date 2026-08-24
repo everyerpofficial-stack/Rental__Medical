@@ -4855,10 +4855,29 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   }
 
   // Multi-equipment agreement handling
+  //
+  // FIX: payments created at agreement time store equipmentId as a comma-space
+  // separated list (e.g. "EQ001, EQ002"). Three bugs were causing double-counting:
+  // 1. split(",") without trim caused " EQ002" to not match "EQ002"
+  // 2. The full payment amount was assigned to each matched item instead of being
+  //    prorated by the item's share ratio
+  // 3. isInitialAlreadyBooked used strict equality which failed on comma-lists
   const directPaid = paymentsList
     .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
-    .filter((p) => p.equipmentId === equipmentId || (p.equipmentId && String(p.equipmentId).split(",").includes(equipmentId)) || (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())))
-    .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
+    .filter((p) => {
+      if (p.equipmentId === equipmentId) return true;
+      if (p.equipmentId && String(p.equipmentId).split(",").map(s => s.trim()).includes(equipmentId)) return true;
+      if (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())) return true;
+      return false;
+    })
+    .reduce((sum, p) => {
+      const amt = cleanNum(p.amount) + cleanNum(p.discount);
+      // If the payment covers multiple equipment (comma-separated list in equipmentId),
+      // prorate the amount by this item's share ratio based on its rent rate.
+      const eqIds = String(p.equipmentId || "").split(",").map(s => s.trim()).filter(Boolean);
+      if (eqIds.length > 1) return sum + Math.round(amt * shareRatio);
+      return sum + amt;
+    }, 0);
 
   const sharedPaymentsPaid = paymentsList
     .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
@@ -4882,7 +4901,10 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     if (diffDays > 5) return false;
 
     if (p.equipmentId) {
-      return p.equipmentId === equipmentId;
+      // FIX: use split-and-includes so comma-separated lists like "EQ001, EQ002"
+      // are correctly matched against a single equipmentId like "EQ001"
+      const ids = String(p.equipmentId).split(",").map(s => s.trim());
+      return ids.includes(equipmentId);
     } else {
       if (p.notes) {
         return !items.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()));
