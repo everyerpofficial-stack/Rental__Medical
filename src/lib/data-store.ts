@@ -4830,7 +4830,25 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
       .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
       .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
 
-    const isInitialAlreadyBooked = paymentsList.some((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type));
+    // Check whether the initial advance rent (stored on rental.rentalPaymentStatus)
+    // already exists as a separate Payment record. Only payments near the agreement
+    // start date (within 5 days) or with notes indicating agreement-creation qualify.
+    // Without this date check, any later rent-due payment was mistaken for the
+    // initial advance, causing the advance amount to be silently dropped.
+    const isInitialAlreadyBooked = paymentsList.some((p) => {
+      if (!isMatchAgreement(p) || !isPaidStatus(p.status) || !isRentType(p.type)) return false;
+      // Payments whose notes explicitly say they are agreement-creation advances
+      // are always treated as the initial booking.
+      const notes = String(p.notes || "").toLowerCase();
+      if (notes.includes("agreement creation") || notes.includes("advance rent")) return true;
+      // Otherwise require date proximity to the rental start (same logic as
+      // the multi-equipment path).
+      const pDate = parseLocalDate(p.date);
+      const startDate = parseLocalDate(rental.start);
+      if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
+      const diffDays = Math.abs(pDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays <= 5;
+    });
     const initialPaid = isInitialAlreadyBooked ? 0 : initialTotal;
 
     return allAgreementPaid + initialPaid;
