@@ -58,6 +58,8 @@ import {
   getDocumentPreviewUrl,
   sortLatestFirst,
   extractIdNumber,
+  getRentalEquipmentDetailedItems,
+  getEquipment,
 } from "@/lib/data-store";
 import { asText, capitalizeWords } from "@/lib/utils";
 import { AgreementPreviewDialog } from "./rentals";
@@ -981,9 +983,26 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                         </CardHeader>
                         <CardContent className="p-4 space-y-3.5">
                           <div>
-                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Rented Equipment</p>
-                            <p className="text-[14px] font-bold text-foreground mt-0.5">{r.equipment}</p>
-                            <p className="text-[10.5px] font-mono text-muted-foreground mt-0.5">Serial: {r.serial}</p>
+                            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Rented Equipment</p>
+                            {(() => {
+                              const items = getRentalEquipmentDetailedItems(r, getEquipment(), returns, true);
+                              return (
+                                <div className="space-y-1">
+                                  {items.map((it, idx) => (
+                                    <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={it.returned ? "line-through text-muted-foreground/60 text-[13px] font-bold" : "text-[14px] font-bold text-foreground"}>
+                                        {it.label}
+                                      </span>
+                                      {it.returned && (
+                                        <span className="line-through inline-flex items-center rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
+                                          Ret: {it.returnedDate ? formatDateDDMMYYYY(it.returnedDate) : (r.end ? formatDateDDMMYYYY(r.end) : "")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="grid grid-cols-2 gap-3.5 bg-muted/15 p-3 rounded-lg border border-border/40 text-[12px]">

@@ -55,6 +55,8 @@ import {
   cleanNum,
   formatEquipmentLabel,
   getRentalEquipmentLabels,
+  getRentalEquipmentDetailedItems,
+  getReturns,
   getRentalOutstandingBalance,
   savePayment,
   getNextPaymentNumber,
@@ -4199,9 +4201,9 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
       const serial = item.serial || eqObj?.serial || "XXXX";
       return (
         <tr key={idx} className="border-b border-slate-800 text-[11.5px]">
-          <td className="p-1 px-2 border-r border-slate-800 font-bold">{name}</td>
+          <td className={`p-1 px-2 border-r border-slate-800 font-bold ${item.returned ? 'line-through text-slate-400' : ''}`}>{name}</td>
           <td className={`p-1 px-2 border-r border-slate-800 text-center font-bold ${item.returned ? 'text-red-600' : 'text-emerald-600'}`}>
-            {item.returned ? 'NO (Returned)' : 'YES'}
+            {item.returned ? `NO (Returned ${item.returnedDate ? formatDateDDMMYYYY(item.returnedDate) : ''})` : 'YES'}
           </td>
           <td className="p-1 px-2 border-r border-slate-800">{model}</td>
           <td className="p-1 px-2 border-r border-slate-800 font-mono text-[11px]">{serial}</td>
@@ -4708,6 +4710,8 @@ function RentalsPage() {
     [customersList]
   );
   const paymentsForDues = useMemo(() => getPayments(), [dbVersion]);
+  const returnsList = useMemo(() => getReturns(), [dbVersion]);
+  const equipmentMasterList = useMemo(() => getEquipment(), [dbVersion]);
 
   /** ITEM-16: real unpaid balance, used by the "Pending Dues" quick filter and
    *  by the Overdue badge - the stored status label alone can be stale. */
@@ -5019,11 +5023,25 @@ function RentalsPage() {
                       })()}
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-1 max-w-[200px]">
-                        {getRentalEquipmentLabels(r, undefined, false).map((label, idx) => (
-                          <p key={idx} className="text-[12.5px] text-foreground/80 leading-normal font-medium">{label}</p>
-                        ))}
-                      </div>
+                      {(() => {
+                        const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        return (
+                          <div className="space-y-1.5 max-w-[220px]">
+                            {items.map((it, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                <span className={it.returned ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-[12.5px] text-foreground/80 leading-normal font-medium"}>
+                                  {it.label}
+                                </span>
+                                {it.returned && (
+                                  <span className="line-through inline-flex items-center rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 text-[9.5px] font-bold shrink-0">
+                                    Ret: {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "")}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground whitespace-nowrap">
@@ -5042,9 +5060,43 @@ function RentalsPage() {
                       <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
-                        {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
-                      </span>
+                      {(() => {
+                        const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        if (items.length <= 1) {
+                          const single = items[0];
+                          if (single?.returned) {
+                            const retDate = single.returnedDate || r.end;
+                            return (
+                              <span className="line-through text-[12px] font-semibold text-muted-foreground/70 whitespace-nowrap">
+                                {retDate ? formatDateDDMMYY(retDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed")}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                              {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-1">
+                            {items.map((it, idx) => (
+                              <div key={idx} className="text-[12px]">
+                                {it.returned ? (
+                                  <span className="line-through text-muted-foreground/70 font-semibold whitespace-nowrap">
+                                    {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
+                                  </span>
+                                ) : (
+                                  <span className="font-semibold text-muted-foreground whitespace-nowrap">
+                                    Ongoing
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
                     <TableCell className="text-right">
@@ -5184,9 +5236,20 @@ function RentalsPage() {
                       </div>
                       <StatusBadge status={r.status} />
                     </div>
-                    <p className="text-[12px] text-muted-foreground truncate mb-2">
-                      {getRentalEquipmentLabels(r, undefined, false).join(" | ") || r.equipment}
-                    </p>
+                    <div className="space-y-1 mb-2">
+                      {getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false).map((it, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                          <span className={it.returned ? "line-through text-muted-foreground/60 text-[12px]" : "text-[12px] text-muted-foreground font-medium"}>
+                            {it.label}
+                          </span>
+                          {it.returned && (
+                            <span className="line-through rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1 py-0.2 text-[9.5px] font-bold">
+                              Ret: {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "")}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                     <div className="flex items-center gap-3">
                       <span className="info-row whitespace-nowrap">
                         <CalendarDays className="h-3 w-3 shrink-0" />

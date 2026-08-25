@@ -902,7 +902,7 @@ function ExchangesPage() {
                       const displayPhone = phone1 ? ` · ${phone1}` : "";
                       return {
                         value: r.id,
-                        label: `${r.customer} · ${r.id}${displayPhone} (Rent: ${formatDateDDMMYY(r.start)})`,
+                        label: `${r.customer} - (Rent: ${formatDateDDMMYY(r.start)}) - ${phone1 || "N/A"}`,
                         searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${formatDateDDMMYY(r.start)}`,
                       };
                     })}

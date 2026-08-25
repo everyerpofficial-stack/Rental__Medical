@@ -1637,11 +1637,11 @@ function DuesPage() {
                 <TableRow>
                   {/* Rent due history layout to match spreadsheet exactly */}
                   <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Customer</TableHead>
-                  <TableHead className="px-2.5 py-2 text-[10.5px] w-[180px]">Address</TableHead>
                   <TableHead className="px-2.5 py-2 text-[10.5px]">Equipment</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] w-[100px]">Rent Date</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Rent Amount</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Deposit</TableHead>
+                  <TableHead className="px-2 py-2 text-[10.5px] w-[100px]">Return Date</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right w-[110px]">Unpaid Duration</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right text-success w-[110px]">Total Paid</TableHead>
                   <TableHead className="px-2 py-2 text-[10.5px] text-right text-destructive w-[110px]">Remaining Balance</TableHead>
@@ -1660,16 +1660,11 @@ function DuesPage() {
                       returned: false
                     }
                   ];
-                  const custObj = customersById.get(r.customerId);
-                  const fullAddress = custObj
-                    ? [custObj.address, custObj.area, custObj.city, custObj.state, custObj.pincode].filter(Boolean).join(", ")
-                    : r.address || "No address provided";
                   return (
                     <TableRow key={item.id} className="group">
                       {/* 1. Customer name with contact numbers */}
                       <TableCell className="px-2.5 py-2">
                         <p className="font-semibold text-[12px] leading-tight">{r.customer}</p>
-                        <p className="text-[9.5px] font-mono text-muted-foreground/70">{r.customerId}</p>
                         {getCustomerPhones(r.customerId).length > 0 && (
                           <div className="mt-0.5 space-y-0.5">
                             {getCustomerPhones(r.customerId).map((p, idx) => (
@@ -1680,11 +1675,6 @@ function DuesPage() {
                           </div>
                         )}
                         <div className="mt-1 font-mono text-[9.5px] text-muted-foreground">Agr: {r.id}</div>
-                      </TableCell>
-
-                      {/* 2. Customer full address */}
-                      <TableCell className="px-2.5 py-2 text-[12px] text-foreground/80 max-w-[200px] leading-normal whitespace-normal break-words">
-                        {fullAddress}
                       </TableCell>
 
                       {/* 3. Equipment name with model */}
@@ -1757,6 +1747,12 @@ function DuesPage() {
                                   ₹{combinedDeposit.toLocaleString("en-IN")}
                                 </div>
                               </TableCell>
+                              {/* 6.5 Return Date */}
+                              <TableCell className="px-2 py-2 whitespace-nowrap">
+                                <span className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap font-sans">
+                                  Ongoing
+                                </span>
+                              </TableCell>
                               {/* 7. Unpaid Duration */}
                               <TableCell className="px-2 py-2 text-right">
                                 <div className="text-[11.5px] font-bold text-destructive">
@@ -1802,6 +1798,34 @@ function DuesPage() {
                                   return (
                                     <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
                                       ₹{depVal.toLocaleString("en-IN")}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </TableCell>
+                            {/* 6.5 Return Date */}
+                            <TableCell className="px-2 py-2 whitespace-nowrap">
+                              <div className="space-y-1">
+                                {eqItems.map((eqItem: any, idx: number) => {
+                                  const isReturned = eqItem.returned;
+                                  let retDateRaw = eqItem.returnedDate || eqItem.returnDate;
+                                  if (!retDateRaw && isReturned) {
+                                    const ret = returnsList.find(
+                                      (retItem: any) => retItem.agreement === r.id && retItem.returnedEquipmentIds?.includes(eqItem.equipmentId)
+                                    );
+                                    retDateRaw = ret?.date || r.end;
+                                  }
+                                  return (
+                                    <div key={eqItem.equipmentId || idx} className="text-[11px] whitespace-nowrap">
+                                      {isReturned ? (
+                                        <span className="line-through font-semibold text-muted-foreground/70 font-mono">
+                                          {retDateRaw ? formatDateDDMMYY(retDateRaw) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
+                                        </span>
+                                      ) : (
+                                        <span className="font-semibold text-muted-foreground font-sans">
+                                          Ongoing
+                                        </span>
+                                      )}
                                     </div>
                                   );
                                 })}

@@ -554,6 +554,7 @@ function PayReturnDueDialog({
     ? ret.duePendingBalance 
     : Math.max(0, totalCollectible - existingPaid);
 
+  const prevOpenRef = useRef(false);
   const [payAmount, setPayAmount] = useState(currentPending.toString());
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [paymentDate, setPaymentDate] = useState(() => getLocalYYYYMMDD());
@@ -563,7 +564,7 @@ function PayReturnDueDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setIsSubmitting(false);
       const pending = ret.duePendingBalance !== undefined 
         ? ret.duePendingBalance 
@@ -576,7 +577,11 @@ function PayReturnDueDialog({
       setCashAmount(cAmt.toString());
       setBankAmount((pending - cAmt).toString());
     }
+    prevOpenRef.current = open;
   }, [open, ret, totalCollectible]);
+
+  const enteredAmount = Math.max(0, Number(payAmount) || 0);
+  const liveRemaining = Math.max(0, currentPending - enteredAmount);
 
   const handlePayDue = () => {
     const amt = Number(payAmount) || 0;
@@ -683,16 +688,30 @@ function PayReturnDueDialog({
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-[12.5px] space-y-1">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-[12.5px] space-y-1.5">
               <div className="flex justify-between font-bold text-foreground">
                 <span>Return ID: {ret.id}</span>
                 <span className="font-mono text-primary">{ret.agreement}</span>
               </div>
               <p className="text-muted-foreground">Customer: <strong>{ret.customer}</strong></p>
               <p className="text-muted-foreground">Equipment: {ret.equipment}</p>
-              <div className="border-t border-amber-200/60 pt-1.5 flex justify-between font-bold text-rose-700 text-[13.5px]">
-                <span>Outstanding Return Due:</span>
-                <span>₹{currentPending.toLocaleString("en-IN")}</span>
+              <div className="border-t border-amber-200/60 pt-2 space-y-1">
+                <div className="flex justify-between font-bold text-rose-700 text-[13.5px]">
+                  <span>Outstanding Return Due:</span>
+                  <span>₹{currentPending.toLocaleString("en-IN")}</span>
+                </div>
+                {enteredAmount > 0 && liveRemaining > 0 && (
+                  <div className="flex justify-between font-bold text-amber-800 text-[12.5px] bg-amber-100/70 px-2 py-1 rounded border border-amber-200/80">
+                    <span>Remaining Due Balance:</span>
+                    <span>₹{liveRemaining.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {enteredAmount >= currentPending && currentPending > 0 && (
+                  <div className="flex justify-between font-bold text-emerald-800 text-[12.5px] bg-emerald-100/70 px-2 py-1 rounded border border-emerald-200/80">
+                    <span>Remaining Due Balance:</span>
+                    <span>₹0 (Fully Settled)</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -744,7 +763,10 @@ function PayReturnDueDialog({
               <Button variant="outline" type="button">Cancel</Button>
             </DialogClose>
             <Button type="button" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold" onClick={handlePayDue} disabled={isSubmitting}>
-              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Record & Mark Paid
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              {enteredAmount >= currentPending || currentPending === 0
+                ? "Record & Mark Fully Paid"
+                : `Record Partial Payment (₹${enteredAmount.toLocaleString("en-IN")})`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1038,13 +1060,13 @@ function ReturnsPage() {
 
         const parts = [
           r.customer,
-          phone1,
           rentDateStr ? `Rent Date: ${rentDateStr}` : "",
+          phone1,
         ].filter(Boolean);
 
         return {
           value: r.id,
-          label: parts.join(" · "),
+          label: parts.join(" - "),
           searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${rentDateStr} ${equipmentSummary}`,
         };
       });
@@ -1619,7 +1641,7 @@ function ReturnsPage() {
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
                           {addr && <span>Address: <span className="text-foreground/80 font-medium">{addr}</span></span>}
-                          <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span></span>
+                          <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="text-foreground/80 font-bold">{returnDate ? formatDateDDMMYYYY(returnDate) : "—"}</span></span>
                         </div>
                       );
                     })()}

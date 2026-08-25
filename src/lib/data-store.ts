@@ -346,6 +346,98 @@ export function getRentalEquipmentSummary(rental: any, equipmentList?: any[]): s
   return labels.length > 0 ? labels.join(", ") : "Medical Equipment";
 }
 
+export interface RentalEquipmentDetailItem {
+  equipmentId: string;
+  label: string;
+  name: string;
+  model?: string;
+  serial?: string;
+  returned: boolean;
+  returnedDate?: string;
+}
+
+/**
+ * Resolves all equipment items behind a rental along with their individual return status and return date.
+ */
+export function getRentalEquipmentDetailedItems(
+  rental: any,
+  equipmentList?: any[],
+  returnsList?: any[],
+  includeSerial = false
+): RentalEquipmentDetailItem[] {
+  if (!rental) return [];
+  const master = equipmentList || (isBrowser ? getEquipment() : []);
+  const byId = new Map<string, any>(master.map((e: any) => [e.id, e]));
+  const returns = returnsList || (isBrowser ? getReturns() : []);
+
+  const items: any[] =
+    Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
+      ? rental.equipmentItems
+      : String(rental.equipmentId || "")
+          .split(",")
+          .map((id: string) => id.trim())
+          .filter(Boolean)
+          .map((id: string) => ({ equipmentId: id, serial: rental.serial }));
+
+  if (items.length === 0) {
+    const isReturned = rental.status === "Completed";
+    const retRecord = returns.find((ret: any) => ret.agreement === rental.id);
+    const retDateRaw = rental.returnedDate || rental.returnDate || retRecord?.date || (isReturned ? rental.end : undefined);
+    const label = formatEquipmentLabel({
+      name: rental.equipment,
+      model: rental.model,
+      serial: rental.serial,
+    }, includeSerial);
+
+    return [{
+      equipmentId: rental.equipmentId || "",
+      label: label === "Equipment" && !rental.equipment ? "Medical Equipment" : label,
+      name: rental.equipment || "Medical Equipment",
+      model: rental.model,
+      serial: rental.serial,
+      returned: isReturned,
+      returnedDate: retDateRaw ? String(retDateRaw) : undefined,
+    }];
+  }
+
+  return items.map((item: any) => {
+    const eq = byId.get(item.equipmentId);
+    const name = item.equipment || item.name || eq?.name || eq?.category || rental.equipment;
+    const model = item.model || eq?.model;
+    const serial = item.serial || eq?.serial;
+
+    const label = formatEquipmentLabel({ name, model, serial }, includeSerial);
+
+    const retRecord = returns.find((ret: any) => 
+      ret.agreement === rental.id && 
+      Array.isArray(ret.returnedEquipmentIds) && 
+      ret.returnedEquipmentIds.includes(item.equipmentId)
+    );
+
+    const isReturned = Boolean(
+      item.returned || 
+      (rental.status === "Completed" && items.length === 1) || 
+      retRecord
+    );
+
+    let retDateRaw = item.returnedDate || item.returnDate || retRecord?.date;
+    if (!retDateRaw && isReturned) {
+      retDateRaw = rental.end;
+    }
+
+    return {
+      equipmentId: item.equipmentId || "",
+      label,
+      name,
+      model,
+      serial,
+      returned: isReturned,
+      returnedDate: retDateRaw ? String(retDateRaw) : undefined,
+    };
+  });
+}
+
+
 // ─── Equipment Categories ─────────────────────────────────────────────────────
 export const EQUIPMENT_CATEGORIES = [
   "Oxygen Concentrator 5LP",
@@ -2760,8 +2852,8 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
       const serial = item.serial || eqObj?.serial || "XXXX";
       return `
          <tr>
-          <td style="padding: 6px 10px; font-weight: bold;">${name}</td>
-          <td style="padding: 6px 10px; text-align: center; font-weight: bold; color: ${item.returned ? '#dc2626' : '#059669'};">${item.returned ? 'NO (Returned)' : 'YES'}</td>
+          <td style="padding: 6px 10px; font-weight: bold; ${item.returned ? 'text-decoration: line-through; color: #64748b;' : ''}">${name}</td>
+          <td style="padding: 6px 10px; text-align: center; font-weight: bold; color: ${item.returned ? '#dc2626' : '#059669'};">${item.returned ? `NO (Returned ${item.returnedDate ? formatDateDDMMYYYY(item.returnedDate) : ''})` : 'YES'}</td>
           <td style="padding: 6px 10px;">${model}</td>
           <td style="padding: 6px 10px; font-family: monospace;">${serial}</td>
           <td style="padding: 6px 10px;"></td>
