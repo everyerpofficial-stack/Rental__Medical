@@ -1718,6 +1718,25 @@ function CustomersPage() {
     return map;
   }, [rentalsList]);
 
+  // Build a set of customer IDs that have Return Due balances (totalDue > 0 from getCustomerDueBalance)
+  const returnDueMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of customers) {
+      const dueInfo = getCustomerDueBalance(c.id, c.name);
+      if (dueInfo.totalDue > 0) {
+        map.set(c.id, dueInfo.totalDue);
+      }
+    }
+    return map;
+  }, [customers, dbVersion]);
+
+  const returnDueSet = useMemo(() => new Set(returnDueMap.keys()), [returnDueMap]);
+  const totalReturnDueAmount = useMemo(() => {
+    let sum = 0;
+    for (const amt of returnDueMap.values()) sum += amt;
+    return sum;
+  }, [returnDueMap]);
+
   const filteredCustomers = useMemo(() => sortLatestFirst(
     customers.filter((c) => {
       const q = debouncedSearch.toLowerCase().trim();
@@ -1775,10 +1794,12 @@ function CustomersPage() {
           ? true
           : statusFilter === "KYC Pending"
             ? kycPendingSet.has(c.id)
-            : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
+            : statusFilter === "Return Due" || statusFilter === "Return Due (Pay)"
+              ? returnDueSet.has(c.id)
+              : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
       return matchesSearch && matchesCity && matchesStatus;
     })
-  ), [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, rentalsByCustomer]);
+  ), [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer]);
 
   // PERF: render the first page only; the rest load on demand. Large customer
   // books used to mount every row at once, which froze the tab on each filter change.
@@ -1857,27 +1878,40 @@ function CustomersPage() {
       }
     >
       {/* Stat cards */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary",            border: "border-border/60" },
-          { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success",             border: "border-border/60" },
-          { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground",  border: "border-border/60" },
-          { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive",          border: "border-border/60" },
-        ].map((s, i) => (
-          <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}>
-            <CardContent className="p-3.5 sm:p-5">
-              <div className="flex items-center gap-2.5">
-                <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9">
-                  <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
+          { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
+          { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
+          { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
+          { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
+          { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
+        ].map((s, i) => {
+          const isSelected = statusFilter === s.key;
+          return (
+            <Card 
+              key={s.l} 
+              className={`cursor-pointer transition-all hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1} ${
+                isSelected ? "ring-2 ring-primary/60 border-primary bg-primary/5" : "border-border/60"
+              }`}
+              onClick={() => setStatusFilter(isSelected ? "all-status" : s.key)}
+            >
+              <CardContent className="p-3.5 sm:p-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9 shrink-0">
+                    <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight truncate">{s.l}</p>
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <p className={`mt-0.5 font-display text-[18px] sm:text-[20px] font-bold ${s.color}`}>{s.v}</p>
+                      {s.sub && <span className="text-[10px] font-mono font-bold text-muted-foreground/80">{s.sub}</span>}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight">{s.l}</p>
-                  <p className={`mt-0.5 font-display text-[20px] sm:text-[22px] font-bold ${s.color}`}>{s.v}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Table card */}
@@ -1899,6 +1933,20 @@ function CustomersPage() {
                 <Users className="h-3.5 w-3.5" />
                 <span><strong className="text-foreground">{filteredCustomers.length}</strong> customers</span>
               </div>
+              <Button
+                variant={statusFilter === "Return Due" ? "default" : "outline"}
+                size="sm"
+                className={`h-8 text-[12px] font-bold gap-1.5 shrink-0 transition-all ${
+                  statusFilter === "Return Due"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    : "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                }`}
+                onClick={() => setStatusFilter(statusFilter === "Return Due" ? "all-status" : "Return Due")}
+                title="Filter customers with Return Due balance"
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Return Due ({returnDueSet.size})
+              </Button>
               <div className="flex-1" />
               <Select value={cityFilter} onValueChange={setCityFilter}>
                 <SelectTrigger className="w-[120px] h-8 text-[12px] shrink-0">
@@ -1914,15 +1962,16 @@ function CustomersPage() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[110px] h-8 text-[12px] shrink-0">
+                <SelectTrigger className="w-[130px] h-8 text-[12px] shrink-0">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all-status">All Status</SelectItem>
+                  <SelectItem value="Return Due">Return Due (Pay)</SelectItem>
                   <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
                   <SelectItem value="Overdue">Overdue</SelectItem>
                   <SelectItem value="KYC Pending">KYC Pending</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
                 </SelectContent>
               </Select>
             </div>
