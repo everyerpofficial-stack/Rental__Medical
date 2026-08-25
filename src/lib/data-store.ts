@@ -3312,7 +3312,7 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
             ${totalPaid > 0 ? `
               ${rental.paymentMode || 'Cash'}
               ${rental.paymentMode === 'Cash+Bank' ? ` <strong>(Cash: Rs. ${(rental.cashPaidAmount || 0).toLocaleString("en-IN")}, Bank/UPI: Rs. ${(rental.bankUpiPaidAmount || 0).toLocaleString("en-IN")})</strong>` : ''}
-              ${rental.paymentCollectedBy ? ' (Collected By: ' + rental.paymentCollectedBy + ')' : ''}
+              ${rental.paymentCollectedBy ? ' (Installed By/Payment Collected by: ' + rental.paymentCollectedBy + ')' : ''}
             ` : 'N/A'}
           </td>
         </tr>

@@ -2870,12 +2870,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
                       <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="bg-background h-10" />
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Collected By</Label>
-                      <Input placeholder="Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(capitalizeWords(e.target.value))} className="bg-background h-10" />
-                    </div>
                   </>
                 )}
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Installed By/Payment Collected by</Label>
+                  <Input placeholder="Installer / Collector Name" value={paymentCollectedBy} onChange={(e) => setPaymentCollectedBy(capitalizeWords(e.target.value))} className="bg-background h-10" />
+                </div>
               </div>
 
               {/* Hospital Name & Referred By */}
@@ -3238,7 +3238,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     <div>Bank/UPI: <strong className="text-primary">₹{bankAmt.toLocaleString("en-IN")}</strong></div>
                   </>
                 )}
-                {paymentCollectedBy && <div>Collected by: <strong className="text-foreground">{String(paymentCollectedBy)}</strong></div>}
+                {paymentCollectedBy && <div>Installed/Collected by: <strong className="text-foreground">{String(paymentCollectedBy)}</strong></div>}
               </div>
               {splitMismatch && (
                 <div className="px-4 py-2 bg-destructive/10 text-destructive text-[11.5px] font-semibold border-t border-destructive/20 flex items-center gap-1">
@@ -4797,7 +4797,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
                         {rental?.paymentMode === 'Cash+Bank' && (
                           <span className="font-semibold"> (Cash: ₹{(rental.cashPaidAmount || 0).toLocaleString("en-IN")}, Bank/UPI: ₹{(rental.bankUpiPaidAmount || 0).toLocaleString("en-IN")})</span>
                         )}
-                        {rental?.paymentCollectedBy ? ` (Collected By: ${rental.paymentCollectedBy})` : ''}
+                        {rental?.paymentCollectedBy ? ` (Installed By/Payment Collected by: ${rental.paymentCollectedBy})` : ''}
                       </>
                     ) : 'N/A'}
                   </td>
@@ -5204,19 +5204,19 @@ function RentalsPage() {
                               {(p1 || p2 || p3) && (
                                 <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
                                   {p1 && (
-                                    <span className="flex items-center gap-0.5 text-foreground font-bold">
+                                    <span className="flex items-center gap-0.5 text-foreground/80">
                                       <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
-                                      <a href={`tel:${p1}`} className="hover:underline hover:text-primary font-bold">{p1}</a>
+                                      <a href={`tel:${p1}`} className="hover:underline hover:text-primary">{p1}</a>
                                     </span>
                                   )}
                                   {p2 && (
-                                    <span className="text-[10px] font-bold text-foreground">
-                                      Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary font-bold">{p2}</a>
+                                    <span className="text-[11px] text-foreground/80">
+                                      <a href={`tel:${p2}`} className="hover:underline hover:text-primary">{p2}</a>
                                     </span>
                                   )}
                                   {p3 && (
-                                    <span className="text-[10px] font-bold text-foreground">
-                                      Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary font-bold">{p3}</a>
+                                    <span className="text-[11px] text-foreground/80">
+                                      <a href={`tel:${p3}`} className="hover:underline hover:text-primary">{p3}</a>
                                     </span>
                                   )}
                                 </div>
@@ -5237,20 +5237,19 @@ function RentalsPage() {
                     <TableCell>
                       {(() => {
                         const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
                         return (
                           <div className="space-y-1.5 max-w-[220px]">
-                            {items.map((it, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 flex-wrap">
-                                <span className={it.returned ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-[12.5px] text-foreground/80 leading-normal font-medium"}>
-                                  {it.label}
-                                </span>
-                                {it.returned && (
-                                  <span className="line-through inline-flex items-center rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 text-[9.5px] font-bold shrink-0">
-                                    Ret: {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "")}
+                            {items.map((it, idx) => {
+                              const strikeItem = it.returned && !isCompleted;
+                              return (
+                                <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={strikeItem ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-[12.5px] text-foreground/80 leading-normal font-medium"}>
+                                    {it.label}
                                   </span>
-                                )}
-                              </div>
-                            ))}
+                                </div>
+                              );
+                            })}
                           </div>
                         );
                       })()}
@@ -5274,12 +5273,13 @@ function RentalsPage() {
                     <TableCell className="whitespace-nowrap">
                       {(() => {
                         const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
                         if (items.length <= 1) {
                           const single = items[0];
                           if (single?.returned) {
                             const retDate = single.returnedDate || r.end;
                             return (
-                              <span className="line-through text-[12px] font-semibold text-muted-foreground/70 whitespace-nowrap">
+                              <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
                                 {retDate ? formatDateDDMMYY(retDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed")}
                               </span>
                             );
@@ -5291,12 +5291,36 @@ function RentalsPage() {
                           );
                         }
 
+                        // If all equipments are ongoing, show single Ongoing
+                        const allOngoing = items.every(it => !it.returned);
+                        if (allOngoing) {
+                          return (
+                            <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                              {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
+                            </span>
+                          );
+                        }
+
+                        // If all equipments are returned and have the same date, show single return date
+                        const allReturned = items.every(it => it.returned);
+                        if (allReturned) {
+                          const dates = items.map(it => it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed"));
+                          const firstDate = dates[0];
+                          if (dates.every(d => d === firstDate)) {
+                            return (
+                              <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                                {firstDate}
+                              </span>
+                            );
+                          }
+                        }
+
                         return (
                           <div className="space-y-1">
                             {items.map((it, idx) => (
                               <div key={idx} className="text-[12px]">
                                 {it.returned ? (
-                                  <span className="line-through text-muted-foreground/70 font-semibold whitespace-nowrap">
+                                  <span className={!isCompleted ? "line-through text-muted-foreground/70 font-semibold whitespace-nowrap" : "font-semibold text-muted-foreground whitespace-nowrap"}>
                                     {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
                                   </span>
                                 ) : (
@@ -5431,16 +5455,20 @@ function RentalsPage() {
                           return (p1 || p2 || p3) ? (
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
                               {p1 && (
-                                <span className="flex items-center gap-0.5 text-foreground font-bold">
+                                <span className="flex items-center gap-0.5 text-foreground/80">
                                   <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
-                                  <a href={`tel:${p1}`} className="hover:underline font-bold">{p1}</a>
+                                  <a href={`tel:${p1}`} className="hover:underline">{p1}</a>
                                 </span>
                               )}
                               {p2 && (
-                                <span className="font-bold text-foreground">Alt: <a href={`tel:${p2}`} className="hover:underline font-bold">{p2}</a></span>
+                                <span className="text-foreground/80">
+                                  <a href={`tel:${p2}`} className="hover:underline">{p2}</a>
+                                </span>
                               )}
                               {p3 && (
-                                <span className="font-bold text-foreground">Alt 1: <a href={`tel:${p3}`} className="hover:underline font-bold">{p3}</a></span>
+                                <span className="text-foreground/80">
+                                  <a href={`tel:${p3}`} className="hover:underline">{p3}</a>
+                                </span>
                               )}
                             </div>
                           ) : null;
@@ -5449,18 +5477,20 @@ function RentalsPage() {
                       <StatusBadge status={r.status} />
                     </div>
                     <div className="space-y-1 mb-2">
-                      {getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false).map((it, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5 flex-wrap">
-                          <span className={it.returned ? "line-through text-muted-foreground/60 text-[12px]" : "text-[12px] text-muted-foreground font-medium"}>
-                            {it.label}
-                          </span>
-                          {it.returned && (
-                            <span className="line-through rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1 py-0.2 text-[9.5px] font-bold">
-                              Ret: {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "")}
-                            </span>
-                          )}
-                        </div>
-                      ))}
+                      {(() => {
+                        const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
+                        return items.map((it, idx) => {
+                          const strikeItem = it.returned && !isCompleted;
+                          return (
+                            <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                              <span className={strikeItem ? "line-through text-muted-foreground/60 text-[12px]" : "text-[12px] text-muted-foreground font-medium"}>
+                                {it.label}
+                              </span>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="info-row whitespace-nowrap">

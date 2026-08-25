@@ -914,6 +914,7 @@ function ReturnsPage() {
   // Filters for Return History
   const [historyOwnerFilter, setHistoryOwnerFilter] = useState("all-owners");
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState("all-categories");
+  const [showReturnDuesOnly, setShowReturnDuesOnly] = useState(false);
 
   const activeOwners = Array.from(new Set(eqInventory.map((e) => e.owner).filter(Boolean)));
   const activeCategories = Array.from(new Set(eqInventory.map((e) => e.category).filter(Boolean)));
@@ -954,6 +955,23 @@ function ReturnsPage() {
       return true;
     });
   }, [mockReturns]);
+
+  const pendingReturnDuesCount = useMemo(() => {
+    return uniqueReturns.filter(ret => {
+      if (ret.refund >= 0) return false;
+      const totalDue = Math.abs(ret.refund);
+      const paidAmt = ret.duePaidAmount !== undefined 
+        ? ret.duePaidAmount 
+        : (ret.duePaymentStatus === "Paid" ? totalDue : 0);
+      const pendingDue = ret.duePendingBalance !== undefined 
+        ? ret.duePendingBalance 
+        : Math.max(0, totalDue - paidAmt);
+      const status = ret.duePaymentStatus === "Paid" || pendingDue <= 0
+        ? "Paid"
+        : (paidAmt > 0 ? "Partial" : "Not Paid");
+      return status !== "Paid" && pendingDue > 0;
+    }).length;
+  }, [uniqueReturns]);
 
   // PERF: index rentals/customers once instead of scanning both arrays for
   // every return on every keystroke.
@@ -998,16 +1016,31 @@ function ReturnsPage() {
           String(customer.contactNumber3 || "").toLowerCase().includes(searchLower)
         ));
 
-      return matchesOwner && matchesCategory && matchesSearch;
+      const matchesReturnDue = !showReturnDuesOnly || (() => {
+        if (ret.refund >= 0) return false;
+        const totalDue = Math.abs(ret.refund);
+        const paidAmt = ret.duePaidAmount !== undefined 
+          ? ret.duePaidAmount 
+          : (ret.duePaymentStatus === "Paid" ? totalDue : 0);
+        const pendingDue = ret.duePendingBalance !== undefined 
+          ? ret.duePendingBalance 
+          : Math.max(0, totalDue - paidAmt);
+        const status = ret.duePaymentStatus === "Paid" || pendingDue <= 0
+          ? "Paid"
+          : (paidAmt > 0 ? "Partial" : "Not Paid");
+        return status !== "Paid" && pendingDue > 0;
+      })();
+
+      return matchesOwner && matchesCategory && matchesSearch && matchesReturnDue;
     }),
     "date"
-  ), [uniqueReturns, historyOwnerFilter, historyCategoryFilter, debouncedHistorySearch, rentalsById, customersByName, customersById, eqInventory, owners]);
+  ), [uniqueReturns, historyOwnerFilter, historyCategoryFilter, showReturnDuesOnly, debouncedHistorySearch, rentalsById, customersByName, customersById, eqInventory, owners]);
 
   // PERF: mount a page of history rows at a time.
   const [historyVisibleCount, setHistoryVisibleCount] = useState(RETURNS_PAGE_SIZE);
   useEffect(() => {
     setHistoryVisibleCount(RETURNS_PAGE_SIZE);
-  }, [debouncedHistorySearch, historyOwnerFilter, historyCategoryFilter]);
+  }, [debouncedHistorySearch, historyOwnerFilter, historyCategoryFilter, showReturnDuesOnly]);
   const visibleReturns = useMemo(
     () => filteredReturns.slice(0, historyVisibleCount),
     [filteredReturns, historyVisibleCount]
@@ -1767,25 +1800,25 @@ function ReturnsPage() {
                     
                     <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 bg-muted/20 p-3 rounded-xl border border-border/40">
                       {/* Duration */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Duration</Label>
                         </div>
-                        <div className="text-[11.5px] font-bold text-foreground h-7 flex items-center px-2 bg-muted/30 rounded border border-border/50 truncate">
+                        <div className="text-[11.5px] font-bold text-foreground h-8.5 flex items-center px-2.5 bg-muted/30 rounded-md border border-border/50 truncate">
                           {selectedRental ? formatRentalDuration(selectedRental.start, returnDate, rentalEquipments[0]?.rentCycle) : "0 Days"}
                         </div>
                       </div>
 
                       {/* Total Rent Payable */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Payable</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-9 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={finalRent}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1799,15 +1832,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Total Rent Paid */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-9 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={totalPaidAmount}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1821,15 +1854,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Outstanding Rent Due */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent Due</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className={`h-9 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
+                            className={`h-8.5 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
                             value={pendingBalance}
                             onChange={(e) => setPendingBalance(e.target.value)}
                           />
@@ -1837,15 +1870,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Damage Charges */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Damage Charges</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-9 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
+                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
                             value={damageCharges}
                             onChange={(e) => setDamageCharges(e.target.value)}
                           />
@@ -1853,15 +1886,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Return Discount */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Return Discount</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-9 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
+                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
                             value={discount}
                             onChange={(e) => setDiscount(e.target.value)}
                           />
@@ -1869,13 +1902,13 @@ function ReturnsPage() {
                       </div>
 
                       {/* Unpaid Accessories */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
                         </div>
-                        <div className="h-7 flex items-center px-2 bg-muted/30 rounded border border-border/50 overflow-hidden">
+                        <div className="h-8.5 flex items-center px-2 bg-muted/30 rounded-md border border-border/50 overflow-hidden">
                           {unpaidItems.length > 0 ? (
-                            <div className="w-full max-h-7 overflow-y-auto space-y-0.5">
+                            <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
                               {unpaidItems.map((item: any, idx: number) => (
                                 <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
                                   <span className="truncate max-w-[70px]">{item.name}</span>
@@ -1890,11 +1923,11 @@ function ReturnsPage() {
                       </div>
 
                       {/* Security Deposit */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[68px]">
-                        <div className="h-6 flex items-center">
+                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
+                        <div className="h-7 flex items-center">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</Label>
                         </div>
-                        <div className="text-[11.5px] font-bold text-blue-600 h-7 flex items-center px-2 bg-blue-50/20 rounded border border-blue-200/60 truncate">
+                        <div className="text-[11.5px] font-bold text-blue-600 h-8.5 flex items-center px-2.5 bg-blue-50/20 rounded-md border border-blue-200/60 truncate">
                           ₹{deposit.toLocaleString("en-IN")}
                         </div>
                       </div>
@@ -2458,7 +2491,23 @@ function ReturnsPage() {
 
               {/* Advanced search and filters */}
               <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-                <div className="relative w-full sm:w-[220px]">
+                <Button
+                  type="button"
+                  variant={showReturnDuesOnly ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowReturnDuesOnly(!showReturnDuesOnly)}
+                  className={`h-8.5 text-[11.5px] font-bold gap-1.5 whitespace-nowrap transition-all ${
+                    showReturnDuesOnly 
+                      ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-600 shadow-sm" 
+                      : "bg-background text-amber-700 dark:text-amber-400 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  }`}
+                  title="Click to filter returns with pending return dues"
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Return Dues {pendingReturnDuesCount > 0 ? `(${pendingReturnDuesCount})` : ""}
+                </Button>
+
+                <div className="relative w-full sm:w-[200px]">
                   <Input
                     placeholder="Search returns..."
                     value={historySearch}
@@ -2469,7 +2518,7 @@ function ReturnsPage() {
                 </div>
 
                 <Select value={historyOwnerFilter} onValueChange={setHistoryOwnerFilter}>
-                  <SelectTrigger className="w-full sm:w-[140px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Owner" /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[130px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Owner" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all-owners">All Owners</SelectItem>
                     {activeOwners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
@@ -2477,7 +2526,7 @@ function ReturnsPage() {
                 </Select>
 
                 <Select value={historyCategoryFilter} onValueChange={setHistoryCategoryFilter}>
-                  <SelectTrigger className="w-full sm:w-[150px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
+                  <SelectTrigger className="w-full sm:w-[140px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all-categories">All Categories</SelectItem>
                     {activeCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}

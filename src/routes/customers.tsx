@@ -986,20 +986,19 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Rented Equipment</p>
                             {(() => {
                               const items = getRentalEquipmentDetailedItems(r, getEquipment(), returns, true);
+                              const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
                               return (
                                 <div className="space-y-1">
-                                  {items.map((it, idx) => (
-                                    <div key={idx} className="flex items-center gap-1.5 flex-wrap">
-                                      <span className={it.returned ? "line-through text-muted-foreground/60 text-[13px] font-bold" : "text-[14px] font-bold text-foreground"}>
-                                        {it.label}
-                                      </span>
-                                      {it.returned && (
-                                        <span className="line-through inline-flex items-center rounded bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 text-[10px] font-bold">
-                                          Ret: {it.returnedDate ? formatDateDDMMYYYY(it.returnedDate) : (r.end ? formatDateDDMMYYYY(r.end) : "")}
+                                  {items.map((it, idx) => {
+                                    const strikeItem = it.returned && !isCompleted;
+                                    return (
+                                      <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                        <span className={strikeItem ? "line-through text-muted-foreground/60 text-[13px] font-bold" : "text-[14px] font-bold text-foreground"}>
+                                          {it.label}
                                         </span>
-                                      )}
-                                    </div>
-                                  ))}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               );
                             })()}

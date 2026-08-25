@@ -1691,21 +1691,7 @@ function DuesPage() {
                                     serial: "",
                                   })}
                                 </span>
-                                {isReturned && (() => {
-                                  let retDateRaw = eqItem.returnedDate || eqItem.returnDate;
-                                  if (!retDateRaw) {
-                                    const ret = returnsList.find(
-                                      (retItem: any) => retItem.agreement === r.id && retItem.returnedEquipmentIds?.includes(eqItem.equipmentId)
-                                    );
-                                    retDateRaw = ret?.date || r.end;
-                                  }
-                                  const formattedRetDate = retDateRaw ? formatDateDDMMYY(retDateRaw) : "";
-                                  return (
-                                    <span className="inline-flex items-center rounded-md bg-success/8 px-1 py-0.5 text-[9.5px] font-bold text-success border border-success/15 shrink-0">
-                                      Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
-                                    </span>
-                                  );
-                                })()}
+
                               </div>
                             );
                           })}
@@ -1783,7 +1769,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { rateText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
+                                    <div key={eqItem.equipmentId} className="text-[11.5px] font-semibold text-muted-foreground">
                                       {rateText}
                                     </div>
                                   );
@@ -1796,7 +1782,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const depVal = Number(eqItem.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-semibold ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-muted-foreground"}`}>
+                                    <div key={eqItem.equipmentId} className="text-[11.5px] font-semibold text-muted-foreground">
                                       ₹{depVal.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -1818,7 +1804,7 @@ function DuesPage() {
                                   return (
                                     <div key={eqItem.equipmentId || idx} className="text-[11px] whitespace-nowrap">
                                       {isReturned ? (
-                                        <span className="line-through font-semibold text-muted-foreground/70 font-mono">
+                                        <span className="font-semibold text-muted-foreground/70 font-mono">
                                           {retDateRaw ? formatDateDDMMYY(retDateRaw) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
                                         </span>
                                       ) : (
@@ -1850,7 +1836,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { grandTotalPaid } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/40 line-through" : "text-success"}`}>
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/60" : "text-success"}`}>
                                       ₹{grandTotalPaid.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -1863,7 +1849,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { outstanding } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/40 line-through" : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/40" : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
                                       ₹{outstanding.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -1963,28 +1949,14 @@ function DuesPage() {
                                 <span className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-slate-800 font-semibold"}>
                                   {getEquipmentName(eqItem.equipmentId)}
                                 </span>
-                                {eqItem.returned ? (() => {
-                                  let retDateRaw = eqItem.returnedDate || eqItem.returnDate;
-                                  if (!retDateRaw) {
-                                    const ret = returnsList.find(
-                                      (retItem: any) => retItem.agreement === r.id && retItem.returnedEquipmentIds?.includes(eqItem.equipmentId)
-                                    );
-                                    retDateRaw = ret?.date || r.end;
-                                  }
-                                  const formattedRetDate = retDateRaw ? formatDateDDMMYY(retDateRaw) : "";
-                                  return (
-                                    <span className="inline-flex items-center rounded bg-success/8 px-1.5 py-0.5 text-[9px] font-bold text-success border border-success/15 shrink-0 whitespace-nowrap">
-                                      Returned {formattedRetDate ? `on ${formattedRetDate}` : ""}
-                                    </span>
-                                  );
-                                })() : (
+                                {eqItem.returned ? null : (
                                   <span className="inline-flex items-center rounded bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary border border-primary/15 shrink-0">Active</span>
                                 )}
                               </div>
                               <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
                                 <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-destructive"}>{eqItem.returned ? "—" : unpaidText}</strong></span>
-                                <span>Paid: <strong className={eqItem.returned ? "text-muted-foreground/50 line-through" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
-                                <span>Bal: <strong className={eqItem.returned ? "text-muted-foreground/50 line-through" : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
+                                <span>Paid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
+                                <span>Bal: <strong className={eqItem.returned ? "text-muted-foreground/50" : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
                               </div>
                             </div>
                           );
