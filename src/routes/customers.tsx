@@ -59,7 +59,7 @@ import {
   sortLatestFirst,
   extractIdNumber,
 } from "@/lib/data-store";
-import { capitalizeWords } from "@/lib/utils";
+import { asText, capitalizeWords } from "@/lib/utils";
 import { AgreementPreviewDialog } from "./rentals";
 
 export const Route = createFileRoute("/customers")({
@@ -141,6 +141,11 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
   return { ok: true };
 }
 
+// Seeding this form straight from the stored record put a *number* where every
+// save validation expects a string (see asText), so `phone.trim()` threw a
+// TypeError after setIsSubmitting(true) and outside any catch: "Save Customer"
+// did nothing, raised no error, and stayed greyed out - which also meant the
+// ID-proof adds/removes queued in the dialog were never applied.
 function CustomerFormDialog({
   trigger,
   title,
@@ -153,19 +158,19 @@ function CustomerFormDialog({
   onSave?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(customer?.name || "");
-  const [phone, setPhone] = useState(customer?.phone || "");
-  const [altPhone, setAltPhone] = useState(customer?.altPhone || "");
-  const [contactNumber3, setContactNumber3] = useState(customer?.contactNumber3 || "");
-  const [email, setEmail] = useState(customer?.email || "");
-  const [aadhaar, setAadhaar] = useState((customer?.aadhaar || "").replace(/\D/g, "").slice(0, 12));
-  const [pan, setPan] = useState(customer?.pan || "");
-  const [address, setAddress] = useState(customer?.address || "");
-  const [area, setArea] = useState(customer?.area || "");
-  const [city, setCity] = useState(customer?.city || "Mysore");
-  const [state, setState] = useState(customer?.state || "Karnataka");
-  const [pincode, setPincode] = useState(customer?.pincode || "");
-  const [notes, setNotes] = useState(customer?.notes || "");
+  const [name, setName] = useState(asText(customer?.name));
+  const [phone, setPhone] = useState(asText(customer?.phone));
+  const [altPhone, setAltPhone] = useState(asText(customer?.altPhone));
+  const [contactNumber3, setContactNumber3] = useState(asText(customer?.contactNumber3));
+  const [email, setEmail] = useState(asText(customer?.email));
+  const [aadhaar, setAadhaar] = useState(asText(customer?.aadhaar).replace(/\D/g, "").slice(0, 12));
+  const [pan, setPan] = useState(asText(customer?.pan));
+  const [address, setAddress] = useState(asText(customer?.address));
+  const [area, setArea] = useState(asText(customer?.area));
+  const [city, setCity] = useState(asText(customer?.city) || "Mysore");
+  const [state, setState] = useState(asText(customer?.state) || "Karnataka");
+  const [pincode, setPincode] = useState(asText(customer?.pincode));
+  const [notes, setNotes] = useState(asText(customer?.notes));
   const [selectedFiles, setSelectedFiles] = useState<Array<{ id?: string; name: string; size: string; fileData?: string; isExisting?: boolean; missing?: boolean }>>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // ID proofs the user removed in this dialog. Held in a ref, not state: it is
@@ -181,19 +186,19 @@ function CustomerFormDialog({
 
   useEffect(() => {
     if (open) {
-      setName(customer?.name || "");
-      setPhone(customer?.phone || "");
-      setAltPhone(customer?.altPhone || "");
-      setContactNumber3(customer?.contactNumber3 || "");
-      setEmail(customer?.email || "");
-      setAadhaar((customer?.aadhaar || "").replace(/\D/g, "").slice(0, 12));
-      setPan(customer?.pan || "");
-      setAddress(customer?.address || "");
-      setArea(customer?.area || "");
-      setCity(customer?.city || "Mysore");
-      setState(customer?.state || "Karnataka");
-      setPincode(customer?.pincode || "");
-      setNotes(customer?.notes || "");
+      setName(asText(customer?.name));
+      setPhone(asText(customer?.phone));
+      setAltPhone(asText(customer?.altPhone));
+      setContactNumber3(asText(customer?.contactNumber3));
+      setEmail(asText(customer?.email));
+      setAadhaar(asText(customer?.aadhaar).replace(/\D/g, "").slice(0, 12));
+      setPan(asText(customer?.pan));
+      setAddress(asText(customer?.address));
+      setArea(asText(customer?.area));
+      setCity(asText(customer?.city) || "Mysore");
+      setState(asText(customer?.state) || "Karnataka");
+      setPincode(asText(customer?.pincode));
+      setNotes(asText(customer?.notes));
       setSelectedFiles([]);
       removedDocIdsRef.current = new Set();
       setIsSubmitting(false);
@@ -266,32 +271,16 @@ function CustomerFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, customer?.id]);
 
-  const handleSave = () => {
-    if (isSubmitting) return;
-
-    // KYC-EDIT FIX: FileReader had not finished yet, so the attachment is not
-    // in `selectedFiles`. Saving now would silently drop it.
-    if (pendingReads > 0) {
-      toast.info("Still reading the selected file(s) - please try again in a moment.");
-      return;
-    }
-    // Saving before the customer's saved ID proofs have loaded would let a
-    // half-known document list drive the delete/keep decisions below.
-    if (loadingDocs) {
-      toast.info("Still loading this customer's saved ID proofs - please wait a moment.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
+  // The actual save. Split out of handleSave so the in-flight flag is owned by
+  // a single finally: every early return below is then safe by construction,
+  // and an unexpected throw can no longer strand the Save button as disabled.
+  const commitCustomer = () => {
     if (!name.trim()) {
       toast.error("Please enter the customer's full name.");
-      setIsSubmitting(false);
       return;
     }
     if (!phone.trim()) {
       toast.error("Please enter a primary phone number.");
-      setIsSubmitting(false);
       return;
     }
 
@@ -302,19 +291,16 @@ function CustomerFormDialog({
 
     if (!isValidPhone(phone)) {
       toast.error("Primary Phone Number must be exactly 10 digits.");
-      setIsSubmitting(false);
       return;
     }
 
     if (altPhone.trim() && !isValidPhone(altPhone)) {
       toast.error("Alternative Phone Number must be exactly 10 digits.");
-      setIsSubmitting(false);
       return;
     }
 
     if (contactNumber3.trim() && !isValidPhone(contactNumber3)) {
       toast.error("Alternative Phone 1 must be exactly 10 digits.");
-      setIsSubmitting(false);
       return;
     }
 
@@ -322,19 +308,16 @@ function CustomerFormDialog({
       const aadhaarDigits = aadhaar.replace(/\D/g, "").slice(0, 12);
       if (aadhaarDigits.length > 0 && aadhaarDigits.length !== 12) {
         toast.error("Aadhaar Number must contain exactly 12 digits.");
-        setIsSubmitting(false);
         return;
       }
     }
 
     if (!city.trim()) {
       toast.error("Please enter the customer's city.");
-      setIsSubmitting(false);
       return;
     }
     if (!state) {
       toast.error("Please select the customer's state.");
-      setIsSubmitting(false);
       return;
     }
 
@@ -352,7 +335,6 @@ function CustomerFormDialog({
       toast.error(
         `This phone number is already registered to "${phoneOwner.name}" (${phoneOwner.id}). Please use a different number.`
       );
-      setIsSubmitting(false);
       return;
     }
 
@@ -397,7 +379,6 @@ function CustomerFormDialog({
     } catch (err) {
       console.error("[Customers] Failed to save customer:", err);
       toast.error("Could not save the customer. Storage may be full - export a backup from Settings and try again.");
-      setIsSubmitting(false);
       return;
     }
 
@@ -445,9 +426,41 @@ function CustomerFormDialog({
     } else {
       toast.success(customer ? `Customer details for "${name}" saved successfully.` : "New customer created successfully.");
     }
-    setIsSubmitting(false);
     setOpen(false);
     if (onSave) onSave();
+  };
+
+  const handleSave = () => {
+    if (isSubmitting) return;
+
+    // KYC-EDIT FIX: FileReader had not finished yet, so the attachment is not
+    // in `selectedFiles`. Saving now would silently drop it.
+    if (pendingReads > 0) {
+      toast.info("Still reading the selected file(s) - please try again in a moment.");
+      return;
+    }
+    // Saving before the customer's saved ID proofs have loaded would let a
+    // half-known document list drive the delete/keep decisions below.
+    if (loadingDocs) {
+      toast.info("Still loading this customer's saved ID proofs - please wait a moment.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      commitCustomer();
+    } catch (err) {
+      // A throw escaping here used to leave isSubmitting stuck at true, which
+      // disables the Save button for as long as the dialog stays open - an edit
+      // that silently refuses to save and gives the operator nothing to act on.
+      console.error("[Customers] Unexpected failure while saving customer:", err);
+      toast.error("Something went wrong while saving this customer - nothing was changed.", {
+        description: err instanceof Error ? err.message : String(err),
+        duration: 12000,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleFilesAdded = (files: FileList | null) => {

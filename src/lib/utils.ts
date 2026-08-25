@@ -6,6 +6,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Coerce a stored field to a string before any string method touches it.
+ *
+ * Google Sheets hands numeric-looking cells back as JS *numbers*, not strings:
+ * phone numbers, PIN codes, Aadhaar numbers and all-digit PANs all arrive as
+ * numbers, and the background sync writes them into localStorage exactly as
+ * received. Anything that then calls `.trim()` / `.replace()` on such a value
+ * throws a TypeError, which in a form's save handler surfaces as "the button
+ * does nothing".
+ */
+export const asText = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
+
 export function capitalizeWords(str: string): string {
   if (!str) return "";
   return str.replace(/(?:^|\s|-|\/)([a-z])/g, (match) => match.toUpperCase());

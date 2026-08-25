@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { asText } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,25 +116,28 @@ function OwnerFormDialog({
   onSave?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(owner?.name || "");
-  const [ownerName, setOwnerName] = useState(owner?.ownerName || "");
-  const [inventorySeries, setInventorySeries] = useState(owner?.inventorySeries || "");
-  const [phone, setPhone] = useState(owner?.phone || "");
-  const [email, setEmail] = useState(owner?.email || "");
-  const [address, setAddress] = useState(owner?.address || "");
-  const [commissionRate, setCommissionRate] = useState(owner?.commissionRate?.toString() || "100");
+  // asText: values pulled down from Google Sheets arrive as numbers for
+  // numeric-looking cells, and `phone.trim()` in handleSave throws on those -
+  // the save then does nothing at all, with no error for the operator.
+  const [name, setName] = useState(asText(owner?.name));
+  const [ownerName, setOwnerName] = useState(asText(owner?.ownerName));
+  const [inventorySeries, setInventorySeries] = useState(asText(owner?.inventorySeries));
+  const [phone, setPhone] = useState(asText(owner?.phone));
+  const [email, setEmail] = useState(asText(owner?.email));
+  const [address, setAddress] = useState(asText(owner?.address));
+  const [commissionRate, setCommissionRate] = useState(asText(owner?.commissionRate) || "100");
   // Status is auto-computed based on equipment availability — not manually settable
 
   // Keep state sync'd when dialog opens or owner prop changes
   useEffect(() => {
     if (open && owner) {
-      setName(owner.name);
-      setOwnerName(owner.ownerName || "");
-      setInventorySeries(owner.inventorySeries);
-      setPhone(owner.phone);
-      setEmail(owner.email);
-      setAddress(owner.address || "");
-      setCommissionRate(owner.commissionRate.toString());
+      setName(asText(owner.name));
+      setOwnerName(asText(owner.ownerName));
+      setInventorySeries(asText(owner.inventorySeries));
+      setPhone(asText(owner.phone));
+      setEmail(asText(owner.email));
+      setAddress(asText(owner.address));
+      setCommissionRate(asText(owner.commissionRate) || "100");
     }
   }, [open, owner]);
 
