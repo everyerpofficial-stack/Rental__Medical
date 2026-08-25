@@ -623,7 +623,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
                 setSignedDocUrl(fullDoc.fileData);
               }
-            });
+            }).catch((err: any) => console.warn("Failed to load signed document:", err));
           }
           if (existingDeliveryPhotos.length > 0) {
             setInitialDeliveryPhotoIds(existingDeliveryPhotos.map((d: any) => d.id));
@@ -637,35 +637,32 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   id: d.id,
                 }));
               setDeliveryPhotos(loadedPhotos);
-            });
+            }).catch((err: any) => console.warn("Failed to load delivery photos:", err));
           }
           if (existingLocationDoc) {
             setExistingLocationDocId(existingLocationDoc.id);
           }
 
-          // BUG FIX: If signatureUrl/thumbprintUrl are missing from the rental
-          // object (e.g. truncated by Google Sheets cell-size limits during sync),
-          // fall back to loading them from the Documents collection where they may
-          // have been separately persisted.
-          if (!rental.signatureUrl) {
-            const sigDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Digital Signature");
-            if (sigDoc) {
-              getDocumentWithFile(sigDoc).then((fullDoc: any) => {
-                if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
-                  setSignatureUrl(fullDoc.fileData);
-                }
-              });
-            }
+          // ALWAYS load signatureUrl/thumbprintUrl from the Documents collection
+          // (IndexedDB), even when the rental object has a value. The rental
+          // object's inline base64 may have been truncated or lost during Google
+          // Sheets sync (cell-size limits), so the document store in IndexedDB is
+          // the authoritative, uncorrupted source for these files.
+          const sigDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Digital Signature");
+          if (sigDoc) {
+            getDocumentWithFile(sigDoc).then((fullDoc: any) => {
+              if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
+                setSignatureUrl(fullDoc.fileData);
+              }
+            }).catch((err: any) => console.warn("Failed to load signature from documents:", err));
           }
-          if (!rental.thumbprintUrl) {
-            const tpDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Thumbprint Scan");
-            if (tpDoc) {
-              getDocumentWithFile(tpDoc).then((fullDoc: any) => {
-                if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
-                  setThumbprintUrl(fullDoc.fileData);
-                }
-              });
-            }
+          const tpDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Thumbprint Scan");
+          if (tpDoc) {
+            getDocumentWithFile(tpDoc).then((fullDoc: any) => {
+              if (fullDoc.fileData && fullDoc.fileData !== "NOT_FOUND") {
+                setThumbprintUrl(fullDoc.fileData);
+              }
+            }).catch((err: any) => console.warn("Failed to load thumbprint from documents:", err));
           }
         } catch (err) {
           console.warn("Failed to load existing files for editing agreement:", err);

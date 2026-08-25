@@ -1744,7 +1744,16 @@ export function saveRental(rental: typeof initialRentals[number] & { equipmentIt
   }
 
   // Sync to Google Sheets (fire-and-forget)
-  if (isGSheetsEnabled()) syncRowToSheet(SHEETS.RENTALS, rental as unknown as Record<string, unknown>);
+  // Strip signatureUrl/thumbprintUrl — these large base64 data URIs can
+  // exceed Google Sheets cell-size limits (~50K chars), causing silent
+  // truncation. When the truncated data syncs back it corrupts the local
+  // rental fields. These files are safely persisted in the Documents
+  // collection (IndexedDB + FileChunks sheet), so they don't need to be
+  // on the Rentals sheet row.
+  if (isGSheetsEnabled()) {
+    const { signatureUrl: _sig, thumbprintUrl: _tp, ...rentalForSheets } = rental as any;
+    syncRowToSheet(SHEETS.RENTALS, rentalForSheets as unknown as Record<string, unknown>);
+  }
 
   return list;
 }
