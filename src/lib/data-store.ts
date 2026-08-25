@@ -1423,6 +1423,15 @@ function saveDocumentSilent(doc: DocumentItem) {
     list.unshift(metadataDoc);
   }
   localStorage.setItem("medirent-documents", JSON.stringify(list));
+  // This write deliberately bypasses setStorageItem() to skip the re-render
+  // notification, but it must NOT skip cache housekeeping: getDocuments()
+  // memoises its result against the write stamp, so without bumping the stamp
+  // and clearing the caches every later read keeps serving a list that has no
+  // record of the document just created. That is what made auto-created
+  // agreement documents invisible until some unrelated save happened to
+  // invalidate the cache.
+  localStorage.setItem("medirent-last-write-time", Date.now().toString());
+  _invalidateAllCaches();
   if (isGSheetsEnabled()) syncRowToSheet(SHEETS.DOCUMENTS, metadataDoc as unknown as Record<string, unknown>);
   return list;
 }

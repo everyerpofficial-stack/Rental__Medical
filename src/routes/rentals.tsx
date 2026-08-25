@@ -32,6 +32,7 @@ import {
   getEquipment,
   saveCustomer,
   downloadAgreementFile,
+  downloadBase64File,
   downloadFile,
   downloadExcel,
   getPayments,
@@ -240,6 +241,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   // the browser just couldn't paint until that heavy work finished). Load it
   // like equipmentList: once on open, and again on remote db updates.
   const [customersList, setCustomersList] = useState(() => getCustomers());
+  // Bumped on every database update so the customer's saved KYC documents are
+  // re-read after an upload elsewhere (Customers page, Documents page).
+  const [docsRefresh, setDocsRefresh] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -252,6 +256,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     const handleUpdate = () => {
       setEquipmentList(getEquipment());
       setCustomersList(getCustomers());
+      setDocsRefresh((v) => v + 1);
     };
     window.addEventListener("medirent-db-updated", handleUpdate);
     return () => window.removeEventListener("medirent-db-updated", handleUpdate);
@@ -333,6 +338,21 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [custPincode, setCustPincode] = useState("");
   const [custNotes, setCustNotes] = useState("");
   const [custFiles, setCustFiles] = useState<Array<{ fileData: string; name: string; size: string }>>([]);
+
+  // KYC ID proofs already on file for the selected customer. These live in the
+  // Documents collection keyed by customerId (not rentalId), which is why the
+  // Documents page listed them inside the agreement folder while this dialog
+  // showed nothing at all. Loaded separately from `custFiles`, which only ever
+  // holds files newly attached in this dialog and still waiting to be saved.
+  const [existingCustDocs, setExistingCustDocs] = useState<Array<{
+    id: string; name: string; size: string; fileData?: string; missing?: boolean;
+  }>>([]);
+  const [isLoadingCustDocs, setIsLoadingCustDocs] = useState(false);
+  const custDocLoadTokenRef = useRef(0);
+  // Resolved file payloads keyed by document id, so re-runs of the loader
+  // effect reuse what is already in memory instead of re-reading IndexedDB.
+  const resolvedCustDocsRef = useRef<Map<string, { fileData?: string; missing?: boolean }>>(new Map());
+  const [previewCustDoc, setPreviewCustDoc] = useState<{ id: string; name: string; size: string; fileData?: string } | null>(null);
 
   // Equipment and commercials
   const [selectedEquipments, setSelectedEquipments] = useState<any[]>(() => {
@@ -612,7 +632,17 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       if (rental) {
         try {
           const docs = getDocuments();
-          const existingSignedDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Signed Agreement");
+          // A signed agreement uploaded from the Documents page is auto-typed
+          // "Agreement" (detectDocumentType maps every PDF there), so matching
+          // only "Signed Agreement" left those uploads invisible here even
+          // though the Documents folder listed them. `doc-agr-*` is excluded:
+          // that is the placeholder record saveRental() creates for the
+          // system-generated agreement PDF and carries no uploaded file.
+          const existingSignedDoc = docs.find((d: any) =>
+            d.rentalId === rental.id &&
+            (d.type === "Signed Agreement" ||
+              (d.type === "Agreement" && !String(d.id).startsWith("doc-agr-")))
+          );
           const existingDeliveryPhotos = docs.filter((d: any) => d.rentalId === rental.id && d.type === "Delivery Photo");
           const existingLocationDoc = docs.find((d: any) => d.rentalId === rental.id && d.type === "Location Tag");
 
@@ -1013,6 +1043,73 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   );
 
   const selectedCustomer = customersList.find(c => c.id === selectedCustomerId);
+
+  // Load the selected customer's saved KYC ID proofs whenever the dialog is
+  // open and the selection changes. Files live in IndexedDB (and are pulled
+  // back from the Google Sheets chunk store on a fresh device), so metadata is
+  // rendered immediately and each file fills in as it resolves. A load token
+  // drops responses from a previous selection that land out of order.
+  useEffect(() => {
+    if (!open || isNewCustomer || !selectedCustomerId) {
+      setExistingCustDocs([]);
+      setIsLoadingCustDocs(false);
+      return;
+    }
+
+    const loadToken = ++custDocLoadTokenRef.current;
+    let metadata: any[] = [];
+    try {
+      metadata = getDocuments().filter(
+        (d: any) => d.customerId === selectedCustomerId && d.type === "ID Proof"
+      );
+    } catch (err) {
+      console.warn("Failed to read customer KYC documents:", err);
+    }
+
+    if (metadata.length === 0) {
+      setExistingCustDocs([]);
+      setIsLoadingCustDocs(false);
+      return;
+    }
+
+    // This effect re-runs on every database update, so already-resolved files
+    // are carried over instead of being re-fetched — otherwise saving anything
+    // else while the form is open would blank the thumbnails and pull every
+    // file back out of IndexedDB (or off Google Sheets) again.
+    const resolved = resolvedCustDocsRef.current;
+    setExistingCustDocs(
+      metadata.map((d: any) => ({ id: d.id, name: d.name, size: d.size, ...(resolved.get(d.id) || {}) }))
+    );
+
+    const pending = metadata.filter((d: any) => !resolved.has(d.id));
+    if (pending.length === 0) {
+      setIsLoadingCustDocs(false);
+      return;
+    }
+    setIsLoadingCustDocs(true);
+
+    Promise.all(
+      // One unreadable file must not blank the whole list — fall back to
+      // metadata-only so the document is still visible as "file unavailable".
+      pending.map((d: any) => getDocumentWithFile(d).catch(() => ({ ...d, fileData: "NOT_FOUND" })))
+    )
+      .then((fullDocs: any[]) => {
+        fullDocs.forEach((d) => {
+          resolved.set(d.id, {
+            fileData: d.fileData !== "NOT_FOUND" ? d.fileData : undefined,
+            missing: d.fileData === "NOT_FOUND",
+          });
+        });
+        if (custDocLoadTokenRef.current !== loadToken) return;
+        setExistingCustDocs((prev) =>
+          prev.map((doc) => ({ ...doc, ...(resolved.get(doc.id) || {}) }))
+        );
+      })
+      .catch((err: any) => console.warn("Failed to load customer KYC documents:", err))
+      .finally(() => {
+        if (custDocLoadTokenRef.current === loadToken) setIsLoadingCustDocs(false);
+      });
+  }, [open, isNewCustomer, selectedCustomerId, docsRefresh]);
 
   const getAutoSelectItems = (eqName: string, eqCategory: string, eqModel?: string): string[] => {
     const fullStr = `${eqName || ""} ${eqCategory || ""} ${eqModel || ""}`.toLowerCase().trim();
@@ -1460,26 +1557,31 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       saveCustomer(newCust);
       customerId = newCustId;
       customerName = newCust.name;
-
-      if (custFiles.length > 0) {
-        custFiles.forEach((file) => {
-          saveDocument({
-            id: getNextDocumentNumber(),
-            customerId: newCustId,
-            name: file.name,
-            type: "ID Proof",
-            size: file.size,
-            date: agreementDate || getLocalYYYYMMDD(),
-            fileData: file.fileData,
-          });
-        });
-      }
     }
 
     if (!customerId) {
       toast.error("Please select or add a customer.");
       setIsSubmitting(false);
       return;
+    }
+
+    // Persist KYC ID proofs attached in this dialog. `custFiles` only ever
+    // holds newly attached files (documents already on record are listed
+    // separately as `existingCustDocs`), so this never duplicates them — and
+    // it now covers existing customers too, not just newly created ones.
+    if (custFiles.length > 0) {
+      const kycCustomerId = customerId;
+      custFiles.forEach((file) => {
+        saveDocument({
+          id: getNextDocumentNumber(),
+          customerId: kycCustomerId,
+          name: file.name,
+          type: "ID Proof",
+          size: file.size,
+          date: agreementDate || getLocalYYYYMMDD(),
+          fileData: file.fileData,
+        });
+      });
     }
 
     // Validate equipment entries
@@ -2020,6 +2122,89 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         <ReadOnlyField label="State" value={selectedCustomer.state} />
                         <ReadOnlyField label="Pincode" value={selectedCustomer.pincode} />
                         <ReadOnlyField label="Notes" value={selectedCustomer.notes || "—"} className="sm:col-span-2" />
+
+                        {/* Uploaded KYC documents already on file for this
+                            customer. Previously only the Documents page showed
+                            these, so editing an agreement looked as if nothing
+                            had ever been uploaded. */}
+                        <div className="sm:col-span-2 space-y-1.5 border-t border-border/50 pt-3">
+                          <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between gap-2">
+                            <span className="flex items-center gap-1.5">
+                              <FileCheck2 className="h-3.5 w-3.5 text-primary" /> Uploaded KYC Documents
+                              {existingCustDocs.length > 0 && (
+                                <span className="text-primary font-bold normal-case">({existingCustDocs.length})</span>
+                              )}
+                            </span>
+                            {isLoadingCustDocs && (
+                              <span className="text-[10px] font-medium normal-case text-muted-foreground">Loading files…</span>
+                            )}
+                          </Label>
+
+                          {existingCustDocs.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground italic">
+                              No ID proof uploaded for this customer yet.
+                            </p>
+                          ) : (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {existingCustDocs.map((doc) => {
+                                const isImg = doc.fileData?.startsWith("data:image/") || /\.(jpg|jpeg|png|webp)$/i.test(doc.name);
+                                return (
+                                  <div
+                                    key={doc.id}
+                                    className="flex items-center gap-2 rounded-md border border-border/60 bg-background p-1.5 shadow-xs"
+                                  >
+                                    {isImg && doc.fileData ? (
+                                      <img src={doc.fileData} alt={doc.name} className="h-9 w-9 rounded object-cover border shrink-0" />
+                                    ) : (
+                                      <div className="h-9 w-9 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                        <FileText className="h-4 w-4" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-[11px] font-medium truncate text-foreground leading-tight" title={doc.name}>{doc.name}</p>
+                                      <p className="text-[9px] text-muted-foreground">
+                                        {doc.missing ? "File unavailable on this device" : doc.size}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 px-2 text-[10px] font-semibold text-primary hover:bg-primary/10 shrink-0"
+                                      disabled={!doc.fileData}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        if (doc.fileData) setPreviewCustDoc(doc);
+                                      }}
+                                    >
+                                      View
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          <CustomerIDProofDialog
+                            initialFiles={custFiles}
+                            onSave={(files) => setCustFiles(files)}
+                            trigger={
+                              <div className="border-2 border-dashed border-border/60 hover:bg-muted/10 transition-colors rounded-xl p-2.5 text-center cursor-pointer flex flex-col items-center justify-center min-h-[60px] bg-background/50">
+                                {custFiles.length > 0 ? (
+                                  <div>
+                                    <p className="text-[12px] font-bold text-primary truncate max-w-[280px]">{custFiles.length} New ID Proof File{custFiles.length === 1 ? "" : "s"} — saved with this agreement</p>
+                                    <p className="text-[10px] text-muted-foreground">{custFiles.map((f) => f.name).join(", ")} · Click to change/add</p>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center text-muted-foreground hover:text-primary transition-colors">
+                                    <FileUp className="h-4.5 w-4.5 mb-0.5 text-muted-foreground/60" />
+                                    <p className="text-[12px] font-semibold">Click to upload more ID Proofs</p>
+                                  </div>
+                                )}
+                              </div>
+                            }
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3210,6 +3395,36 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           onScanSuccess={handleQrScanSuccess}
           title="Scan Equipment Barcode / QR Code"
         />
+
+        {/* Preview of an already-uploaded customer KYC document */}
+        <Dialog open={!!previewCustDoc} onOpenChange={(o) => { if (!o) setPreviewCustDoc(null); }}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-[15px] font-bold truncate">{previewCustDoc?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              {previewCustDoc?.fileData?.startsWith("data:image/") ? (
+                <img src={previewCustDoc.fileData} alt={previewCustDoc.name} className="w-full max-h-[70vh] object-contain rounded-lg border border-border/60 bg-muted/20" />
+              ) : previewCustDoc?.fileData ? (
+                <iframe src={previewCustDoc.fileData} title={previewCustDoc.name} className="w-full h-[70vh] rounded-lg border border-border/60 bg-muted/20" />
+              ) : (
+                <p className="text-[13px] text-muted-foreground py-6 text-center">This file is not available on this device.</p>
+              )}
+            </div>
+            <DialogFooter>
+              {previewCustDoc?.fileData && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => downloadBase64File(previewCustDoc.fileData!, previewCustDoc.name)}
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" /> Download
+                </Button>
+              )}
+              <Button type="button" onClick={() => setPreviewCustDoc(null)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
 }
