@@ -2595,40 +2595,34 @@ function ReturnsPage() {
                           {/* 3. Equipment name */}
                           <TableCell className="text-[12.5px] text-foreground/80">
                             {(() => {
+                              const cleanEqName = (str?: string) => {
+                                if (!str) return "";
+                                return str.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
+                              };
                               const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
                               const labels = ids
                                 .map((id) => {
                                   const eq = eqInventory.find((e) => e.id === id);
                                   if (!eq) return "";
-                                  return formatEquipmentLabel(eq);
+                                  return cleanEqName(formatEquipmentLabel(eq, false));
                                 })
                                 .filter(Boolean);
                               if (labels.length === 0) {
-                                return <p className="font-semibold text-[13px]">{ret.equipment}</p>;
+                                return <p className="font-semibold text-[13px]">{cleanEqName(ret.equipment)}</p>;
                               }
                               return (
                                 <div className="space-y-0.5">
                                   {labels.map((label, i) => (
-                                    <p key={i} className="font-semibold text-[13px] leading-tight">{label}</p>
+                                    <p key={i} className="font-semibold text-[13px] leading-tight">{cleanEqName(label)}</p>
                                   ))}
                                 </div>
                               );
                             })()}
-                            <p className="text-[10.5px] text-muted-foreground mt-0.5 flex flex-wrap gap-x-1.5">
-                              <span>Owner: <strong className="text-foreground/70 font-medium">{info.owner}</strong></span>
-                              {info.category && info.category !== ret.equipment && (
-                                <>
-                                  <span>·</span>
-                                  <span>Cat: <strong className="text-foreground/70 font-medium">{info.category}</strong></span>
-                                </>
-                              )}
-                              {ret.collectedBy && (
-                                <>
-                                  <span>·</span>
-                                  <span>Coll. By: <strong className="text-foreground/70 font-medium">{ret.collectedBy}</strong></span>
-                                </>
-                              )}
-                            </p>
+                            {ret.collectedBy && (
+                              <p className="text-[10.5px] text-muted-foreground mt-0.5">
+                                <span>Coll. By: <strong className="text-foreground/70 font-medium">{ret.collectedBy}</strong></span>
+                              </p>
+                            )}
                           </TableCell>
 
                           {/* 4. Rent Date */}

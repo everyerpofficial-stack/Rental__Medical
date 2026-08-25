@@ -5261,11 +5261,46 @@ function RentalsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {(r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0) ? (
-                        <p className="font-display text-[14px] font-bold text-muted-foreground">₹{(r.dailyRent ?? 0).toLocaleString("en-IN")}/day</p>
-                      ) : (
-                        <p className="font-display text-[14px] font-bold">₹{r.monthlyRent.toLocaleString("en-IN")}/mo</p>
-                      )}
+                      {(() => {
+                        const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        if (items.length <= 1) {
+                          return (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0) ? (
+                            <p className="font-display text-[14px] font-bold">₹{(r.dailyRent ?? 0).toLocaleString("en-IN")}/day</p>
+                          ) : (
+                            <p className="font-display text-[14px] font-bold">₹{r.monthlyRent.toLocaleString("en-IN")}/mo</p>
+                          );
+                        }
+
+                        const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
+                        const eqItems = Array.isArray(r.equipmentItems) ? r.equipmentItems : [];
+
+                        return (
+                          <div className="space-y-1 font-display text-[13px] font-bold">
+                            {items.map((it, idx) => {
+                              const eqItem = eqItems.find((e: any) => e.equipmentId === it.equipmentId);
+                              const isDaily = (eqItem?.rentCycle === "Daily") || ((r as any).rentCycle === "Daily") || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0);
+                              
+                              let itemRate: number | undefined = undefined;
+                              if (eqItem) {
+                                itemRate = isDaily ? (eqItem.dailyRent || eqItem.rentRate) : (eqItem.monthlyRent || eqItem.rentRate);
+                              }
+                              
+                              const finalRate = itemRate !== undefined && itemRate !== null && !isNaN(Number(itemRate)) && Number(itemRate) > 0
+                                ? Number(itemRate)
+                                : (isDaily ? Math.round((r.dailyRent ?? 0) / items.length) : Math.round(r.monthlyRent / items.length));
+                                
+                              const rateLabel = isDaily ? `₹${finalRate.toLocaleString("en-IN")}/day` : `₹${finalRate.toLocaleString("en-IN")}/mo`;
+                              const strikeItem = it.returned && !isCompleted;
+
+                              return (
+                                <div key={idx} className={strikeItem ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-foreground font-bold"}>
+                                  {rateLabel}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">
                       <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
@@ -5320,7 +5355,7 @@ function RentalsPage() {
                             {items.map((it, idx) => (
                               <div key={idx} className="text-[12px]">
                                 {it.returned ? (
-                                  <span className={!isCompleted ? "line-through text-muted-foreground/70 font-semibold whitespace-nowrap" : "font-semibold text-muted-foreground whitespace-nowrap"}>
+                                  <span className="font-semibold text-muted-foreground whitespace-nowrap">
                                     {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
                                   </span>
                                 ) : (
