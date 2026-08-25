@@ -1008,7 +1008,6 @@ function EquipmentPage() {
 
   const rentalsList = useMemo(() => getRentals(), [dbVersion]);
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
-  const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
   const filteredEquipment = equipment.filter((e) => {
     const q = search.toLowerCase().trim();
@@ -1070,18 +1069,10 @@ function EquipmentPage() {
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
           <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="w-[180px] h-8 text-[12px] shrink-0"><SelectValue placeholder="All Owners" /></SelectTrigger>
+            <SelectTrigger className="w-[140px] h-8 text-[12px] shrink-0"><SelectValue placeholder="All Owners" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all-owners">All Owners</SelectItem>
-              {activeOwners.map((o) => {
-                const ow = ownersList.find((x: any) => x.name?.toLowerCase() === o.toLowerCase() || x.ownerName?.toLowerCase() === o.toLowerCase() || x.id === o);
-                const personName = ow?.ownerName && ow.ownerName.trim() !== "" && ow.ownerName.trim().toLowerCase() !== o.toLowerCase() ? ow.ownerName.trim() : "";
-                return (
-                  <SelectItem key={o} value={o}>
-                    {o}{personName ? ` (${personName})` : ""}
-                  </SelectItem>
-                );
-              })}
+              {activeOwners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex gap-1 shrink-0">
