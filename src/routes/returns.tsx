@@ -266,12 +266,7 @@ function generateWhatsAppPickupMessage(params: {
     .filter(Boolean);
 
   const uniqueModels = Array.from(new Set(modelsFromItems));
-  let foundModel = "";
-  if (uniqueModels.length > 2) {
-    foundModel = uniqueModels.slice(0, -1).join(", ") + " and " + uniqueModels[uniqueModels.length - 1];
-  } else {
-    foundModel = uniqueModels.join(" and ");
-  }
+  let foundModel = uniqueModels.join(" & ");
   let foundName = "";
 
   if (!foundModel) {
