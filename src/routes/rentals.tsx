@@ -5263,7 +5263,9 @@ function RentalsPage() {
                     <TableCell className="text-right">
                       {(() => {
                         const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
-                        if (items.length <= 1) {
+                        const hasPartialReturn = items.length > 1 && items.some(it => it.returned) && !items.every(it => it.returned);
+
+                        if (!hasPartialReturn) {
                           return (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0) ? (
                             <p className="font-display text-[14px] font-bold">₹{(r.dailyRent ?? 0).toLocaleString("en-IN")}/day</p>
                           ) : (
@@ -5303,7 +5305,42 @@ function RentalsPage() {
                       })()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
+                      {(() => {
+                        const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                        const hasPartialReturn = items.length > 1 && items.some(it => it.returned) && !items.every(it => it.returned);
+
+                        if (!hasPartialReturn) {
+                          return (
+                            <span className="text-[13px] font-semibold text-muted-foreground">₹{(r.deposit ?? 0).toLocaleString("en-IN")}</span>
+                          );
+                        }
+
+                        const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
+                        const eqItems = Array.isArray(r.equipmentItems) ? r.equipmentItems : [];
+
+                        return (
+                          <div className="space-y-1 text-[13px] font-semibold">
+                            {items.map((it, idx) => {
+                              const eqItem = eqItems.find((e: any) => e.equipmentId === it.equipmentId);
+                              let itemDep: number | undefined = undefined;
+                              if (eqItem) {
+                                itemDep = eqItem.deposit !== undefined ? eqItem.deposit : eqItem.securityDeposit;
+                              }
+                              const finalDep = itemDep !== undefined && itemDep !== null && !isNaN(Number(itemDep))
+                                ? Number(itemDep)
+                                : Math.round((r.deposit ?? 0) / items.length);
+
+                              const strikeItem = it.returned && !isCompleted;
+
+                              return (
+                                <div key={idx} className={strikeItem ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-muted-foreground font-semibold"}>
+                                  ₹{finalDep.toLocaleString("en-IN")}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {(() => {
@@ -5314,36 +5351,36 @@ function RentalsPage() {
                           if (single?.returned) {
                             const retDate = single.returnedDate || r.end;
                             return (
-                              <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                              <span className="text-[12px] font-semibold text-rose-600 whitespace-nowrap">
                                 {retDate ? formatDateDDMMYY(retDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed")}
                               </span>
                             );
                           }
                           return (
-                            <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                            <span className="text-[12px] font-semibold text-emerald-600 whitespace-nowrap">
                               {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
                             </span>
                           );
                         }
 
-                        // If all equipments are ongoing, show single Ongoing
+                        // If all equipments are ongoing, show single Ongoing in green
                         const allOngoing = items.every(it => !it.returned);
                         if (allOngoing) {
                           return (
-                            <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                            <span className="text-[12px] font-semibold text-emerald-600 whitespace-nowrap">
                               {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
                             </span>
                           );
                         }
 
-                        // If all equipments are returned and have the same date, show single return date
+                        // If all equipments are returned and have the same date, show single return date in red
                         const allReturned = items.every(it => it.returned);
                         if (allReturned) {
                           const dates = items.map(it => it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed"));
                           const firstDate = dates[0];
                           if (dates.every(d => d === firstDate)) {
                             return (
-                              <span className="text-[12px] font-semibold text-muted-foreground whitespace-nowrap">
+                              <span className="text-[12px] font-semibold text-rose-600 whitespace-nowrap">
                                 {firstDate}
                               </span>
                             );
@@ -5355,11 +5392,11 @@ function RentalsPage() {
                             {items.map((it, idx) => (
                               <div key={idx} className="text-[12px]">
                                 {it.returned ? (
-                                  <span className="font-semibold text-muted-foreground whitespace-nowrap">
+                                  <span className="font-semibold text-rose-600 whitespace-nowrap">
                                     {it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
                                   </span>
                                 ) : (
-                                  <span className="font-semibold text-muted-foreground whitespace-nowrap">
+                                  <span className="font-semibold text-emerald-600 whitespace-nowrap">
                                     Ongoing
                                   </span>
                                 )}
