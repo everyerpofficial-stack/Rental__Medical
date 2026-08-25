@@ -902,7 +902,7 @@ function ExchangesPage() {
                       const displayPhone = phone1 ? ` · ${phone1}` : "";
                       return {
                         value: r.id,
-                        label: `${r.customer}${displayPhone} (Rent: ${formatDateDDMMYY(r.start)})`,
+                        label: `${r.customer} · ${r.id}${displayPhone} (Rent: ${formatDateDDMMYY(r.start)})`,
                         searchTerms: `${r.id} ${r.customerId || ""} ${r.customer || ""} ${phones} ${r.equipment || ""} ${r.serial || ""} ${formatDateDDMMYY(r.start)}`,
                       };
                     })}
@@ -943,6 +943,18 @@ function ExchangesPage() {
                       placeholder="Select item to return..."
                       searchPlaceholder="Search item by name, model, serial..."
                     />
+                    {currentEquipmentId && (() => {
+                      const selectedCurrentItem = agreementItems.find(item => item.equipmentId === currentEquipmentId);
+                      const masterCurrentEq = equipmentList.find(e => e.id === currentEquipmentId);
+                      const model = selectedCurrentItem?.model || masterCurrentEq?.model || "";
+                      const serial = selectedCurrentItem?.serial || masterCurrentEq?.serial || "";
+                      return (
+                        <p className="text-[11px] font-mono text-slate-500 mt-1 pl-0.5">
+                          Model: <span className="font-semibold text-slate-800">{model || "—"}</span>
+                          {serial ? <> | S/N: <span className="font-semibold text-slate-800">{serial}</span></> : null}
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">New Equipment (To Swap)</Label>
@@ -957,6 +969,17 @@ function ExchangesPage() {
                       placeholder="Select available item..."
                       searchPlaceholder="Search available inventory..."
                     />
+                    {newEquipmentId && (() => {
+                      const selectedNewEq = equipmentList.find(e => e.id === newEquipmentId);
+                      const model = selectedNewEq?.model || "";
+                      const serial = selectedNewEq?.serial || "";
+                      return (
+                        <p className="text-[11px] font-mono text-slate-500 mt-1 pl-0.5">
+                          Model: <span className="font-semibold text-slate-800">{model || "—"}</span>
+                          {serial ? <> | S/N: <span className="font-semibold text-slate-800">{serial}</span></> : null}
+                        </p>
+                      );
+                    })()}
                     {availableEquipment.length === 0 && (
                       <p className="text-[11px] text-destructive mt-1 font-medium">No items available in inventory</p>
                     )}

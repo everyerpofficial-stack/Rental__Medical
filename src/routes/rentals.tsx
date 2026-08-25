@@ -4985,23 +4985,22 @@ function RentalsPage() {
                           const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
                           return (
                             <div className="space-y-0.5 mt-0.5 max-w-[200px]">
-                              <p className="text-[10px] font-mono text-muted-foreground">{r.customerId}</p>
                               {(p1 || p2 || p3) && (
                                 <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
                                   {p1 && (
-                                    <span className="flex items-center gap-0.5 text-foreground font-medium">
+                                    <span className="flex items-center gap-0.5 text-foreground font-bold">
                                       <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
-                                      <a href={`tel:${p1}`} className="hover:underline hover:text-primary">{p1}</a>
+                                      <a href={`tel:${p1}`} className="hover:underline hover:text-primary font-bold">{p1}</a>
                                     </span>
                                   )}
                                   {p2 && (
-                                    <span className="text-[10px]">
-                                      Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary">{p2}</a>
+                                    <span className="text-[10px] font-bold text-foreground">
+                                      Alt: <a href={`tel:${p2}`} className="hover:underline hover:text-primary font-bold">{p2}</a>
                                     </span>
                                   )}
                                   {p3 && (
-                                    <span className="text-[10px]">
-                                      Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary">{p3}</a>
+                                    <span className="text-[10px] font-bold text-foreground">
+                                      Alt 1: <a href={`tel:${p3}`} className="hover:underline hover:text-primary font-bold">{p3}</a>
                                     </span>
                                   )}
                                 </div>
@@ -5168,16 +5167,16 @@ function RentalsPage() {
                           return (p1 || p2 || p3) ? (
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[11px] text-muted-foreground">
                               {p1 && (
-                                <span className="flex items-center gap-0.5 text-foreground font-medium">
+                                <span className="flex items-center gap-0.5 text-foreground font-bold">
                                   <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
-                                  <a href={`tel:${p1}`} className="hover:underline">{p1}</a>
+                                  <a href={`tel:${p1}`} className="hover:underline font-bold">{p1}</a>
                                 </span>
                               )}
                               {p2 && (
-                                <span>Alt: <a href={`tel:${p2}`} className="hover:underline">{p2}</a></span>
+                                <span className="font-bold text-foreground">Alt: <a href={`tel:${p2}`} className="hover:underline font-bold">{p2}</a></span>
                               )}
                               {p3 && (
-                                <span>Alt 1: <a href={`tel:${p3}`} className="hover:underline">{p3}</a></span>
+                                <span className="font-bold text-foreground">Alt 1: <a href={`tel:${p3}`} className="hover:underline font-bold">{p3}</a></span>
                               )}
                             </div>
                           ) : null;
