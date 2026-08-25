@@ -1741,7 +1741,7 @@ function DuesPage() {
                               </TableCell>
                               {/* 7. Unpaid Duration */}
                               <TableCell className="px-2 py-2 text-right">
-                                <div className="text-[11.5px] font-bold text-destructive">
+                                <div className="text-[11.5px] font-medium text-muted-foreground">
                                   {sampleDetails.unpaidText}
                                 </div>
                               </TableCell>
@@ -1769,7 +1769,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { rateText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className="text-[11.5px] font-semibold text-muted-foreground">
+                                    <div key={eqItem.equipmentId} className={eqItem.returned ? "line-through text-muted-foreground/60 text-[11.5px] font-medium" : "text-[11.5px] font-semibold text-muted-foreground"}>
                                       {rateText}
                                     </div>
                                   );
@@ -1782,7 +1782,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const depVal = Number(eqItem.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
                                   return (
-                                    <div key={eqItem.equipmentId} className="text-[11.5px] font-semibold text-muted-foreground">
+                                    <div key={eqItem.equipmentId} className={eqItem.returned ? "line-through text-muted-foreground/60 text-[11.5px] font-medium" : "text-[11.5px] font-semibold text-muted-foreground"}>
                                       ₹{depVal.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -1823,7 +1823,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { unpaidText } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-bold ${eqItem.returned ? "text-muted-foreground/40" : "text-destructive"}`}>
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-medium ${eqItem.returned ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                                       {eqItem.returned ? "—" : unpaidText}
                                     </div>
                                   );
@@ -1836,7 +1836,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { grandTotalPaid } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/60" : "text-success"}`}>
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] text-right ${eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "font-extrabold text-success"}`}>
                                       ₹{grandTotalPaid.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -1954,8 +1954,8 @@ function DuesPage() {
                                 )}
                               </div>
                               <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
-                                <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-destructive"}>{eqItem.returned ? "—" : unpaidText}</strong></span>
-                                <span>Paid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
+                                <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? "—" : unpaidText}</strong></span>
+                                <span>Paid: <strong className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
                                 <span>Bal: <strong className={eqItem.returned ? "text-muted-foreground/50" : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
                               </div>
                             </div>

@@ -843,7 +843,7 @@ const statusMap: Record<string, { classes: string; pulse?: boolean }> = {
   Overdue:            { classes: "bg-destructive/10 text-destructive border-destructive/25", pulse: true },
   Paid:               { classes: "bg-success/10 text-success border-success/25" },
   Partial:            { classes: "bg-warning/12 text-warning-foreground border-warning/30" },
-  Completed:          { classes: "bg-muted text-muted-foreground border-border/60" },
+  Completed:          { classes: "bg-destructive/10 text-destructive border-destructive/25" },
   // Bug fix: Added Cancelled status (was missing — showed as unstyled fallback)
   Cancelled:          { classes: "bg-destructive/8 text-destructive/70 border-destructive/20" },
   "Returned to Owner": { classes: "bg-amber-500/10 text-amber-700 border-amber-500/20" },
