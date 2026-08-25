@@ -179,23 +179,6 @@ const isWithinDateRange = (dateStr: string | undefined | null, start: string, en
   return true;
 };
 
-const getOwnerPersonName = (rawOwner: string | undefined, owners: any[]) => {
-  if (!rawOwner || rawOwner.trim() === "") return "In-House";
-  const o = owners.find(
-    (owner) => owner.name?.toLowerCase() === rawOwner.toLowerCase() ||
-               owner.ownerName?.toLowerCase() === rawOwner.toLowerCase() ||
-               owner.id === rawOwner
-  );
-  if (o?.ownerName && o.ownerName.trim() !== "") {
-    return o.ownerName.trim();
-  }
-  // Never return organization name if rawOwner matches an organization name
-  if (o && o.name?.toLowerCase() === rawOwner.toLowerCase()) {
-    return "In-House";
-  }
-  return rawOwner;
-};
-
 function ReportsPage() {
   const dbVersion = useDatabaseTrigger();
   const [activeStatement, setActiveStatement] = useState<string>("Rentals Statement");
@@ -347,16 +330,8 @@ function ReportsPage() {
     .slice(0, 5);
 
   const ownerOptions = useMemo(() => {
-    const names = new Set<string>();
-    ownersList.forEach((o) => {
-      if (o.ownerName && o.ownerName.trim()) names.add(o.ownerName.trim());
-    });
-    equipmentList.forEach((eq) => {
-      const pName = getOwnerPersonName(eq.owner, ownersList);
-      if (pName && pName !== "In-House") names.add(pName);
-    });
-    return Array.from(names).filter(Boolean).sort();
-  }, [ownersList, equipmentList]);
+    return Array.from(new Set(ownersList.map(o => o.name).filter(Boolean)));
+  }, [ownersList]);
 
   const categoryOptions = useMemo(() => {
     return Array.from(new Set(equipmentList.map(eq => eq.category).filter(Boolean))).sort();
@@ -455,7 +430,7 @@ function ReportsPage() {
           itemRentals.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
           
           if (itemRentals.length === 0) {
-            const ownerName = getOwnerPersonName(item.owner, ownersList);
+            const ownerName = item.owner || "In-House";
             const serial = item.serial || "No Serial";
             const model = item.model || "Standard";
             const status = item.status === "UnderMaintenance" ? "Under Maintenance" : "IN";
@@ -477,7 +452,7 @@ function ReportsPage() {
             });
           } else {
             itemRentals.forEach((r, idx) => {
-              const ownerName = getOwnerPersonName(item.owner, ownersList);
+              const ownerName = item.owner || "In-House";
               const serial = item.serial || "No Serial";
               const model = item.model || "Standard";
               const agreementId = r.id;
