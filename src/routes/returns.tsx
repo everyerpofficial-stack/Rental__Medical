@@ -265,7 +265,13 @@ function generateWhatsAppPickupMessage(params: {
     })
     .filter(Boolean);
 
-  let foundModel = Array.from(new Set(modelsFromItems)).join(", ");
+  const uniqueModels = Array.from(new Set(modelsFromItems));
+  let foundModel = "";
+  if (uniqueModels.length > 2) {
+    foundModel = uniqueModels.slice(0, -1).join(", ") + " and " + uniqueModels[uniqueModels.length - 1];
+  } else {
+    foundModel = uniqueModels.join(" and ");
+  }
   let foundName = "";
 
   if (!foundModel) {
@@ -324,7 +330,7 @@ function generateWhatsAppPickupMessage(params: {
   } else if (params.refundAmount && params.refundAmount > 0) {
     line6 = `Refund ${params.refundAmount}`;
   } else {
-    line6 = `Collect 0`;
+    line6 = `No Amount`;
   }
 
   return [line1, line2, line3, line4, line5, line6].filter(Boolean).join("\n");
@@ -1853,10 +1859,10 @@ function ReturnsPage() {
                         </div>
                       </div>
 
-                      {/* Outstanding Rent Due */}
+                      {/* Outstanding Rent */}
                       <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
                         <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent Due</Label>
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent</Label>
                         </div>
                         <div className="relative">
                           <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>

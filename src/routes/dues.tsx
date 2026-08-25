@@ -1682,16 +1682,18 @@ function DuesPage() {
                         <div className="space-y-1">
                           {eqItems.map((eqItem: any) => {
                             const isReturned = eqItem.returned;
+                            const itemEqName = (() => {
+                              if (eqItem.label) return eqItem.label.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
+                              const name = eqItem.name || eqItem.equipment || getEquipmentName(eqItem.equipmentId);
+                              const model = eqItem.model || equipmentById.get(eqItem.equipmentId)?.model || (eqItems.length === 1 ? r.model : undefined);
+                              return formatEquipmentLabel({ name, model, serial: "" }, false);
+                            })();
+
                             return (
                               <div key={eqItem.equipmentId} className="flex items-center gap-1 text-[11.5px]">
                                 <span className={isReturned ? "line-through text-muted-foreground/50" : "text-foreground/80 font-medium"}>
-                                  {formatEquipmentLabel({
-                                    name: eqItem.name || getEquipmentName(eqItem.equipmentId),
-                                    model: eqItem.model || equipmentById.get(eqItem.equipmentId)?.model,
-                                    serial: "",
-                                  })}
+                                  {itemEqName}
                                 </span>
-
                               </div>
                             );
                           })}
@@ -1947,7 +1949,12 @@ function DuesPage() {
                             <div key={eqItem.equipmentId} className="text-[12px] flex flex-col gap-0.5 border-b border-border/40 last:border-b-0 pb-2 last:pb-0 mb-2 last:mb-0">
                               <div className="flex items-center justify-between font-medium">
                                 <span className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-slate-800 font-semibold"}>
-                                  {getEquipmentName(eqItem.equipmentId)}
+                                  {(() => {
+                                    if (eqItem.label) return eqItem.label.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
+                                    const name = eqItem.name || eqItem.equipment || getEquipmentName(eqItem.equipmentId);
+                                    const model = eqItem.model || equipmentById.get(eqItem.equipmentId)?.model || (eqItems.length === 1 ? r.model : undefined);
+                                    return formatEquipmentLabel({ name, model, serial: "" }, false);
+                                  })()}
                                 </span>
                                 {eqItem.returned ? null : (
                                   <span className="inline-flex items-center rounded bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary border border-primary/15 shrink-0">Active</span>
