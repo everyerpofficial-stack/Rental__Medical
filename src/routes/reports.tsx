@@ -1907,14 +1907,20 @@ function ReportsPage() {
                 {/* Owner filter dropdown (Specific to Owner Statement) */}
                 {activeStatement === "Owner Statement" && (
                   <Select value={selectedOwnerFilter} onValueChange={setSelectedOwnerFilter}>
-                    <SelectTrigger className="h-8.5 w-[150px] text-[12px] bg-background shrink-0">
+                    <SelectTrigger className="h-8.5 w-[200px] text-[12px] bg-background shrink-0">
                       <SelectValue placeholder="All Owners" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all-owners">All Owners</SelectItem>
-                      {ownerOptions.map(name => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                      ))}
+                      {ownerOptions.map(name => {
+                        const ow = ownersList.find((x: any) => x.name?.toLowerCase() === name.toLowerCase() || x.ownerName?.toLowerCase() === name.toLowerCase() || x.id === name);
+                        const personName = ow?.ownerName && ow.ownerName.trim() !== "" && ow.ownerName.trim().toLowerCase() !== name.toLowerCase() ? ow.ownerName.trim() : "";
+                        return (
+                          <SelectItem key={name} value={name}>
+                            {name}{personName ? ` (${personName})` : ""}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 )}
