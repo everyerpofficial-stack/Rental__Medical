@@ -1472,17 +1472,32 @@ function DuesPage() {
     let rateText = "";
     let totalDue = 0;
 
-    // Check if the item has been returned, and find its return date
+    // Check if the item has been returned, and find its return date and pending return due
     let billingEndDate = today;
+    let returnDueOutstanding = 0;
     if (item?.returned) {
       const returns = getReturns();
       const ret = returns.find(
-        (r: any) => r.agreement === rental.id && r.returnedEquipmentIds?.includes(eqId)
+        (r: any) => r.agreement === rental.id && (r.returnedEquipmentIds?.includes(eqId) || (!r.returnedEquipmentIds && rental.equipmentItems?.length === 1))
       );
-      if (ret?.date) {
-        const parsedReturn = parseLocalDate(ret.date);
-        if (!isNaN(parsedReturn.getTime())) {
-          billingEndDate = parsedReturn;
+      if (ret) {
+        if (ret.date) {
+          const parsedReturn = parseLocalDate(ret.date);
+          if (!isNaN(parsedReturn.getTime())) {
+            billingEndDate = parsedReturn;
+          }
+        }
+        if (ret.refund < 0) {
+          const totalCollectible = Math.abs(ret.refund);
+          const paidAmt = ret.duePaidAmount !== undefined 
+            ? ret.duePaidAmount 
+            : (ret.duePaymentStatus === "Paid" ? totalCollectible : 0);
+          const pendingDue = ret.duePendingBalance !== undefined 
+            ? ret.duePendingBalance 
+            : Math.max(0, totalCollectible - paidAmt);
+          if (pendingDue > 0 && ret.duePaymentStatus !== "Paid") {
+            returnDueOutstanding = pendingDue;
+          }
         }
       }
     }
@@ -1495,9 +1510,9 @@ function DuesPage() {
       const monthsElapsed = Math.floor(totalDaysElapsed / 30);
       totalDue = monthsElapsed * monthlyRent;
       
-      outstanding = item?.returned ? 0 : Math.max(0, totalDue - grandTotalPaid);
+      outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidMonths = monthlyRent > 0 ? Math.round(outstanding / monthlyRent) : 0;
-      unpaidText = item?.returned ? "—" : `${unpaidMonths}m`;
+      unpaidText = item?.returned ? (returnDueOutstanding > 0 ? "Return Due" : "—") : `${unpaidMonths}m`;
       rateText = `₹${monthlyRent.toLocaleString("en-IN")}/mo`;
     } else {
       // Daily billing: calculate purely by days elapsed
@@ -1505,10 +1520,10 @@ function DuesPage() {
       const daysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       totalDue = daysElapsed * dailyRate;
       
-      outstanding = item?.returned ? 0 : Math.max(0, totalDue - grandTotalPaid);
+      outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidDays = dailyRate > 0 ? Math.round(outstanding / dailyRate) : 0;
       unpaidMonths = 0;
-      unpaidText = item?.returned ? "—" : `${unpaidDays}d`;
+      unpaidText = item?.returned ? (returnDueOutstanding > 0 ? "Return Due" : "—") : `${unpaidDays}d`;
       rateText = `₹${dailyRate.toLocaleString("en-IN")}/day`;
     }
 
@@ -1545,7 +1560,7 @@ function DuesPage() {
   // Group by rental agreement (one row per rental)
   const dueRentals = useMemo(() => {
     const mapped = activeRentals.map((r) => {
-      const rawEqItems = r.equipmentItems || [
+      const eqItems = r.equipmentItems || [
         {
           equipmentId: r.equipmentId,
           serial: r.serial,
@@ -1554,8 +1569,6 @@ function DuesPage() {
           returned: false
         }
       ];
-      const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
-      const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
       
       let totalOutstanding = 0;
       let totalPaid = 0;
@@ -1566,7 +1579,7 @@ function DuesPage() {
       });
 
       // Equipment still out, for the breakdown column.
-      const openItems = activeEqItems;
+      const openItems = eqItems.filter((it: any) => !it.returned);
 
       return {
         rental: r,
@@ -2189,7 +2202,7 @@ function DuesPage() {
                   }
 
                   const r = item.rental;
-                  const rawEqItems = r.equipmentItems || [
+                  const eqItems = r.equipmentItems || [
                     {
                       equipmentId: r.equipmentId,
                       serial: r.serial,
@@ -2197,8 +2210,6 @@ function DuesPage() {
                       returned: false
                     }
                   ];
-                  const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
-                  const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
                   return (
                     <TableRow key={item.id} className="group">
                       {/* 1. Customer name with contact numbers */}
@@ -2390,7 +2401,7 @@ function DuesPage() {
                                 {eqItems.map((eqItem: any) => {
                                   const { outstanding } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? "text-muted-foreground/40" : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
+                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/40") : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
                                       ₹{outstanding.toLocaleString("en-IN")}
                                     </div>
                                   );
@@ -2503,7 +2514,7 @@ function DuesPage() {
                   }
 
                   const r = item.rental;
-                  const rawEqItems = r.equipmentItems || [
+                  const eqItems = r.equipmentItems || [
                     {
                       equipmentId: r.equipmentId,
                       serial: r.serial,
@@ -2511,8 +2522,6 @@ function DuesPage() {
                       returned: false
                     }
                   ];
-                  const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
-                  const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
                   return (
                     <div key={item.id} className="px-4 py-3.5 space-y-2.5">
                       <div className="flex items-start justify-between gap-2">
@@ -2551,9 +2560,9 @@ function DuesPage() {
                                 )}
                               </div>
                               <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
-                                <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? "—" : unpaidText}</strong></span>
+                                <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? (outstanding > 0 ? "Return Due" : "—") : unpaidText}</strong></span>
                                 <span>Paid: <strong className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
-                                <span>Bal: <strong className={eqItem.returned ? "text-muted-foreground/50" : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
+                                <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
                               </div>
                             </div>
                           );
