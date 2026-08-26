@@ -1545,7 +1545,7 @@ function DuesPage() {
   // Group by rental agreement (one row per rental)
   const dueRentals = useMemo(() => {
     const mapped = activeRentals.map((r) => {
-      const eqItems = r.equipmentItems || [
+      const rawEqItems = r.equipmentItems || [
         {
           equipmentId: r.equipmentId,
           serial: r.serial,
@@ -1554,6 +1554,8 @@ function DuesPage() {
           returned: false
         }
       ];
+      const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
+      const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
       
       let totalOutstanding = 0;
       let totalPaid = 0;
@@ -1564,7 +1566,7 @@ function DuesPage() {
       });
 
       // Equipment still out, for the breakdown column.
-      const openItems = eqItems.filter((it: any) => !it.returned);
+      const openItems = activeEqItems;
 
       return {
         rental: r,
@@ -2187,7 +2189,7 @@ function DuesPage() {
                   }
 
                   const r = item.rental;
-                  const eqItems = r.equipmentItems || [
+                  const rawEqItems = r.equipmentItems || [
                     {
                       equipmentId: r.equipmentId,
                       serial: r.serial,
@@ -2195,6 +2197,8 @@ function DuesPage() {
                       returned: false
                     }
                   ];
+                  const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
+                  const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
                   return (
                     <TableRow key={item.id} className="group">
                       {/* 1. Customer name with contact numbers */}
@@ -2499,7 +2503,7 @@ function DuesPage() {
                   }
 
                   const r = item.rental;
-                  const eqItems = r.equipmentItems || [
+                  const rawEqItems = r.equipmentItems || [
                     {
                       equipmentId: r.equipmentId,
                       serial: r.serial,
@@ -2507,6 +2511,8 @@ function DuesPage() {
                       returned: false
                     }
                   ];
+                  const activeEqItems = rawEqItems.filter((it: any) => !it.returned);
+                  const eqItems = activeEqItems.length > 0 ? activeEqItems : rawEqItems;
                   return (
                     <div key={item.id} className="px-4 py-3.5 space-y-2.5">
                       <div className="flex items-start justify-between gap-2">
