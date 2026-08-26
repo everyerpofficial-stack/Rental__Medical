@@ -2162,7 +2162,7 @@ function DuesPage() {
 
                         {/* 3. Rent / Start Date */}
                         <TableCell className="px-2 py-2 whitespace-nowrap">
-                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                          <span className="text-[11.5px] font-semibold text-muted-foreground whitespace-nowrap">
                             {item.rentDate ? formatDateDDMMYY(item.rentDate) : (item.date ? formatDateDDMMYY(item.date) : "—")}
                           </span>
                         </TableCell>
@@ -2183,7 +2183,7 @@ function DuesPage() {
 
                         {/* 6. Return Date */}
                         <TableCell className="px-2 py-2 whitespace-nowrap">
-                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                          <span className="text-[11.5px] font-semibold text-muted-foreground whitespace-nowrap">
                             {item.date ? formatDateDDMMYY(item.date) : "Returned"}
                           </span>
                         </TableCell>
@@ -2287,7 +2287,7 @@ function DuesPage() {
 
                       {/* 4. Rent Date */}
                       <TableCell className="px-2 py-2 whitespace-nowrap">
-                        <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                        <span className="text-[11.5px] font-semibold text-muted-foreground whitespace-nowrap">
                           {formatDateDDMMYY(r.start)}
                         </span>
                       </TableCell>
@@ -2389,9 +2389,9 @@ function DuesPage() {
                                     retDateRaw = ret?.date || r.end;
                                   }
                                   return (
-                                    <div key={eqItem.equipmentId || idx} className="text-[11px] whitespace-nowrap">
+                                    <div key={eqItem.equipmentId || idx} className="text-[11.5px] whitespace-nowrap">
                                       {isReturned ? (
-                                        <span className="font-semibold text-muted-foreground/70 font-mono">
+                                        <span className="font-semibold text-muted-foreground/70">
                                           {retDateRaw ? formatDateDDMMYY(retDateRaw) : (r.end ? formatDateDDMMYY(r.end) : "Returned")}
                                         </span>
                                       ) : (
