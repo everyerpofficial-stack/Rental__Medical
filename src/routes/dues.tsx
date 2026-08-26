@@ -18,9 +18,9 @@ import { toast } from "sonner";
 
 import {
   MessageCircle, Mail, Phone, Bell,
-  IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock,
+  IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock, AlertCircle,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, saveRental, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, saveRental, saveReturn, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
 
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
@@ -1117,6 +1117,272 @@ function PayDialog({
   );
 }
 
+// ─── Pay Return Due Dialog ───────────────────────────────────────────────────
+function PayReturnDueDialog({
+  ret,
+  onPaid,
+  triggerClassName = "h-7 px-3 text-[11px]",
+}: {
+  ret: any;
+  onPaid: () => void;
+  triggerClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const totalCollectible = Math.abs(ret.refund || 0);
+  const existingPaid = ret.duePaidAmount !== undefined 
+    ? ret.duePaidAmount 
+    : (ret.duePaymentStatus === "Paid" ? totalCollectible : 0);
+  const currentPending = ret.duePendingBalance !== undefined 
+    ? ret.duePendingBalance 
+    : Math.max(0, totalCollectible - existingPaid);
+
+  const prevOpenRef = useRef(false);
+  const [payAmount, setPayAmount] = useState(currentPending.toString());
+  const [paymentMode, setPaymentMode] = useState("Cash");
+  const [paymentDate, setPaymentDate] = useState(() => getLocalYYYYMMDD());
+  const [txRef, setTxRef] = useState("");
+  const [cashAmount, setCashAmount] = useState("");
+  const [bankAmount, setBankAmount] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setIsSubmitting(false);
+      const pending = ret.duePendingBalance !== undefined 
+        ? ret.duePendingBalance 
+        : Math.max(0, totalCollectible - (ret.duePaidAmount !== undefined ? ret.duePaidAmount : (ret.duePaymentStatus === "Paid" ? totalCollectible : 0)));
+      setPayAmount(pending.toString());
+      setPaymentMode("Cash");
+      setPaymentDate(getLocalYYYYMMDD());
+      setTxRef("");
+      const cAmt = Math.round(pending / 2);
+      setCashAmount(cAmt.toString());
+      setBankAmount((pending - cAmt).toString());
+    }
+    prevOpenRef.current = open;
+  }, [open, ret, totalCollectible]);
+
+  const handlePayDue = () => {
+    const amt = Number(payAmount) || 0;
+    if (amt <= 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+    setIsSubmitting(true);
+    
+    if (paymentMode === "Cash+Bank") {
+      let cAmt = Number(cashAmount) || 0;
+      let bAmt = Number(bankAmount) || 0;
+      if (cAmt + bAmt !== amt) {
+        bAmt = Math.max(0, amt - cAmt);
+      }
+      if (cAmt > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate,
+          customer: ret.customer,
+          customerId: ret.customerId || "",
+          agreement: ret.agreement,
+          amount: cAmt,
+          mode: "Cash",
+          type: "Rent" as const,
+          notes: `Return Due Settlement (Cash portion) for Return ${ret.id} (${ret.equipment})`,
+          status: "Paid" as const,
+        });
+      }
+      if (bAmt > 0) {
+        savePayment({
+          id: getNextPaymentNumber(),
+          date: paymentDate,
+          customer: ret.customer,
+          customerId: ret.customerId || "",
+          agreement: ret.agreement,
+          amount: bAmt,
+          mode: "Bank",
+          type: "Rent" as const,
+          txRef,
+          notes: `Return Due Settlement (Bank portion) for Return ${ret.id} (${ret.equipment})`,
+          status: "Paid" as const,
+        });
+      }
+    } else {
+      savePayment({
+        id: getNextPaymentNumber(),
+        date: paymentDate,
+        customer: ret.customer,
+        customerId: ret.customerId || "",
+        agreement: ret.agreement,
+        amount: amt,
+        mode: paymentMode as any,
+        type: "Rent" as const,
+        txRef,
+        notes: `Return Due Settlement for Return ${ret.id} (${ret.equipment})`,
+        status: "Paid" as const,
+      });
+    }
+
+    const newTotalPaid = existingPaid + amt;
+    const newRemainingPending = Math.max(0, totalCollectible - newTotalPaid);
+    const newStatus = newRemainingPending <= 0 ? "Paid" : "Partial";
+
+    const updatedReturn = {
+      ...ret,
+      duePaymentStatus: newStatus,
+      duePaymentMode: paymentMode,
+      dueTxRef: txRef,
+      duePaidAmount: newTotalPaid,
+      duePendingBalance: newRemainingPending,
+      status: newRemainingPending <= 0 ? "Completed" : ret.status,
+    };
+    saveReturn(updatedReturn);
+
+    toast.success(`₹${amt.toLocaleString("en-IN")} payment recorded for Return ${ret.id}! Remaining due: ₹${newRemainingPending.toLocaleString("en-IN")}.`);
+    setIsSubmitting(false);
+    setOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("medirent-db-updated"));
+    }
+    onPaid();
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        className={`${triggerClassName} font-bold gap-1 bg-amber-600 hover:bg-amber-700 text-white shadow-xs`}
+        onClick={() => setOpen(true)}
+      >
+        <CreditCard className="h-3.5 w-3.5" /> Pay Due
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg w-[95vw] p-0 border-border/60 shadow-2xl overflow-hidden">
+          <div className="py-3 px-5 border-b border-border/40 bg-gradient-to-r from-amber-500/10 via-background to-amber-500/5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0 border border-amber-500/20">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground leading-snug">{ret.customer}</h3>
+                <p className="text-[11.5px] text-muted-foreground mt-0.5 font-mono">
+                  Return Due ({ret.id}) — Agr: {ret.agreement}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-300 tracking-wider">Equipment Returned</p>
+                <p className="text-[12.5px] font-bold text-foreground mt-0.5">{ret.equipment}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Pending Due</p>
+                <p className="text-base font-mono font-bold text-amber-600 dark:text-amber-400">
+                  ₹{currentPending.toLocaleString("en-IN")}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Amount to Collect (₹)</Label>
+                <Input
+                  type="number"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="h-9 text-[13px] font-bold bg-background"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+                  <Input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="h-9 text-[12px] bg-background"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={setPaymentMode}>
+                    <SelectTrigger className="h-9 text-[12px] bg-background"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["Cash", "Bank", "Cash+Bank"].map((m) => (
+                        <SelectItem key={m} value={m}>{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {paymentMode === "Cash+Bank" && (
+                <div className="grid grid-cols-2 gap-2 p-2 bg-background rounded-lg border border-border">
+                  <div className="space-y-0.5">
+                    <Label className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Cash (₹)</Label>
+                    <Input
+                      type="number"
+                      className="h-7 text-[11px] font-semibold bg-emerald-50/20"
+                      value={cashAmount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCashAmount(val);
+                        const cNum = Math.max(0, Number(val) || 0);
+                        setBankAmount(Math.max(0, (Number(payAmount) || 0) - cNum).toString());
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <Label className="text-[9px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-400">Bank (₹)</Label>
+                    <Input
+                      type="number"
+                      className="h-7 text-[11px] font-semibold bg-blue-50/20"
+                      value={bankAmount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBankAmount(val);
+                        const bNum = Math.max(0, Number(val) || 0);
+                        setCashAmount(Math.max(0, (Number(payAmount) || 0) - bNum).toString());
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Txn Reference (Optional)</Label>
+                <Input
+                  placeholder="UPI txn ID, cheque no, etc."
+                  value={txRef}
+                  onChange={(e) => setTxRef(e.target.value)}
+                  className="h-8 text-[12px] bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+              <DialogClose asChild className="flex-1">
+                <Button variant="outline" type="button" className="h-9 text-[12px] font-semibold">Cancel</Button>
+              </DialogClose>
+              <Button
+                type="button"
+                onClick={handlePayDue}
+                disabled={isSubmitting}
+                className="flex-1 h-9 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[12px] gap-1.5 shadow-sm disabled:opacity-60"
+              >
+                <CheckCircle2 className="h-4 w-4" /> {isSubmitting ? "Processing..." : "Confirm Return Due Payment"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function DuesPage() {
   const dbVersion = useDatabaseTrigger();
   const [activeTab, setActiveTab] = useState("all");
@@ -1317,24 +1583,109 @@ function DuesPage() {
     });
   }, [activeRentals, paymentsList]);
 
-  // Group by start day-of-month ranges
+  // ─── Calculate Return Dues ──────────────────────────────────────────────────
+  const pendingReturnDues = useMemo(() => {
+    const seen = new Set<string>();
+    const unique = returnsList.filter((ret: any) => {
+      if (!ret?.id || seen.has(ret.id)) return false;
+      seen.add(ret.id);
+      return true;
+    });
+
+    return unique.filter((ret: any) => {
+      if (ret.refund >= 0) return false;
+      const totalDue = Math.abs(ret.refund);
+      const paidAmt = ret.duePaidAmount !== undefined 
+        ? ret.duePaidAmount 
+        : (ret.duePaymentStatus === "Paid" ? totalDue : 0);
+      const pendingDue = ret.duePendingBalance !== undefined 
+        ? ret.duePendingBalance 
+        : Math.max(0, totalDue - paidAmt);
+      const status = ret.duePaymentStatus === "Paid" || pendingDue <= 0
+        ? "Paid"
+        : (paidAmt > 0 ? "Partial" : "Not Paid");
+      return status !== "Paid" && pendingDue > 0;
+    }).map((ret: any) => {
+      const totalDue = Math.abs(ret.refund);
+      const paidAmt = ret.duePaidAmount !== undefined 
+        ? ret.duePaidAmount 
+        : (ret.duePaymentStatus === "Paid" ? totalDue : 0);
+      const pendingDue = ret.duePendingBalance !== undefined 
+        ? ret.duePendingBalance 
+        : Math.max(0, totalDue - paidAmt);
+      const status = ret.duePaymentStatus === "Paid" || pendingDue <= 0
+        ? "Paid"
+        : (paidAmt > 0 ? "Partial" : "Not Paid");
+
+      return {
+        isReturnDue: true as const,
+        returnObj: ret,
+        id: ret.id,
+        agreementId: ret.agreement,
+        customer: ret.customer,
+        customerId: ret.customerId || "",
+        equipment: ret.equipment || "Equipment",
+        date: ret.date,
+        deposit: Number(ret.deposit || 0),
+        totalDue,
+        totalPaid: paidAmt,
+        totalOutstanding: pendingDue,
+        status,
+        start: ret.date,
+      };
+    });
+  }, [returnsList]);
+
+  // Combine Active Rent Dues + Return Dues
+  const combinedDues = useMemo(() => {
+    const activeRows = dueRentals.map((d) => ({
+      isReturnDue: false as const,
+      rental: d.rental,
+      totalOutstanding: d.totalOutstanding,
+      totalPaid: d.totalPaid,
+      start: d.start,
+      id: d.id,
+      openItems: d.openItems,
+      customer: d.rental.customer,
+      customerId: d.rental.customerId,
+    }));
+
+    const returnRows = pendingReturnDues.map((r) => ({
+      isReturnDue: true as const,
+      returnObj: r.returnObj,
+      totalOutstanding: r.totalOutstanding,
+      totalPaid: r.totalPaid,
+      start: r.start,
+      id: r.id,
+      agreementId: r.agreementId,
+      customer: r.customer,
+      customerId: r.customerId,
+      equipment: r.equipment,
+      date: r.date,
+      deposit: r.deposit,
+      totalDue: r.totalDue,
+      status: r.status,
+    }));
+
+    return [...activeRows, ...returnRows].sort((a, b) => {
+      if (a.totalOutstanding !== b.totalOutstanding) return b.totalOutstanding - a.totalOutstanding;
+      return extractIdNumber(b.id) - extractIdNumber(a.id);
+    });
+  }, [dueRentals, pendingReturnDues]);
+
+  // Group by start day-of-month ranges for active rent dues
   const due1To10List  = dueRentals.filter((item) => { const d = getStartDayOfMonth(item.start); return d >= 1  && d <= 10; });
   const due11To20List = dueRentals.filter((item) => { const d = getStartDayOfMonth(item.start); return d >= 11 && d <= 20; });
   const due21To31List = dueRentals.filter((item) => { const d = getStartDayOfMonth(item.start); return d >= 21 && d <= 31; });
 
   const [searchQuery, setSearchQuery] = useState("");
-  // PERF: the field stays bound to searchQuery so typing is instant; the filter
-  // below runs off the debounced copy.
   const debouncedSearch = useDebounce(searchQuery, 300);
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
-  // PERF: one lookup per row instead of a linear scan of every customer.
   const customersById = useMemo(
     () => new Map<string, any>(customersList.map((c: any) => [c.id, c])),
     [customersList]
   );
 
-  // Returns every phone number on file for a customer (primary + alternates),
-  // so the dues table can stack them instead of showing just one.
   const getCustomerPhones = (customerId: string): string[] => {
     const cust: any = customersList.find((c: any) => c.id === customerId);
     if (!cust) return [];
@@ -1347,7 +1698,6 @@ function DuesPage() {
     const q = debouncedSearch.toLowerCase().trim();
     const tokens = q.split(/\s+/).filter(Boolean);
 
-    /** True when any whole word in `text` starts with `token`. */
     const wordStartsWith = (text: unknown, token: string) => {
       if (!text) return false;
       return String(text)
@@ -1357,35 +1707,29 @@ function DuesPage() {
         .some((w) => w.startsWith(token));
     };
 
-    return dueRentals.filter((item) => {
-      const r = item.rental;
-      const customer = customersById.get(r.customerId);
+    return combinedDues.filter((item) => {
+      const customer = customersById.get(item.customerId);
 
-      // ITEM-8 FIX: every field was matched with a bare `.includes()`, so
-      // searching a customer name also hit any address, area or equipment name
-      // that happened to contain those letters - typing "ram" returned rows for
-      // "Ramanagara" (an area) and "Ram Nagar" (an address) alongside the actual
-      // customer. Names and places now match on word prefix, ids on prefix, and
-      // phone numbers only against digits, so a name search returns customers.
       const matchesSearch = !q || tokens.every((token) => {
         const tokenDigits = token.replace(/\D/g, "");
 
-        // Customer name - word prefix ("srini" finds "Srinivas", not "Nagasrini")
-        if (wordStartsWith(r.customer, token)) return true;
+        if (wordStartsWith(item.customer, token)) return true;
 
-        // Agreement id, either whole or just the numeric part
-        const idLower = String(r.id || "").toLowerCase();
+        const idLower = String(item.id || "").toLowerCase();
         if (idLower.startsWith(token) || (tokenDigits.length >= 2 && idLower.includes(tokenDigits))) return true;
 
-        // Serial numbers identify a unit exactly - substring is right here
-        if (String(r.serial || "").toLowerCase().includes(token)) return true;
-        if (Array.isArray(r.equipmentItems) && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(token))) return true;
-
-        // Equipment name - word prefix, not substring
-        if (wordStartsWith(r.equipment, token)) return true;
+        if (item.isReturnDue) {
+          const agrLower = String(item.agreementId || "").toLowerCase();
+          if (agrLower.startsWith(token) || (tokenDigits.length >= 2 && agrLower.includes(tokenDigits))) return true;
+          if (wordStartsWith(item.equipment, token)) return true;
+        } else {
+          const r = item.rental;
+          if (String(r.serial || "").toLowerCase().includes(token)) return true;
+          if (Array.isArray(r.equipmentItems) && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(token))) return true;
+          if (wordStartsWith(r.equipment, token)) return true;
+        }
 
         if (customer) {
-          // Phones: compare digits to digits so "98" never matches a street name
           if (tokenDigits.length >= 3) {
             const phones = [customer.phone, customer.altPhone, customer.contactNumber3];
             if (phones.some((ph: any) => String(ph || "").replace(/\D/g, "").includes(tokenDigits))) return true;
@@ -1400,15 +1744,27 @@ function DuesPage() {
       if (!matchesSearch) return false;
 
       if (activeTab === "all") return true;
+      if (activeTab === "returns") return item.isReturnDue;
+      
+      if (item.isReturnDue) return false;
+
       const day = getStartDayOfMonth(item.start);
       if (activeTab === "1-10")  return day >= 1  && day <= 10;
       if (activeTab === "11-20") return day >= 11 && day <= 20;
       if (activeTab === "21-31") return day >= 21 && day <= 31;
       return true;
     });
-  }, [dueRentals, debouncedSearch, activeTab, customersById]);
+  }, [combinedDues, debouncedSearch, activeTab, customersById]);
 
   const severityBuckets = [
+    {
+      l: "Return Dues (Pending)",
+      v: formatRupee(pendingReturnDues.reduce((sum, item) => sum + item.totalOutstanding, 0)),
+      n: `${pendingReturnDues.length} return agreement(s) due`,
+      icon: AlertCircle,
+      iconColor: "text-amber-600 dark:text-amber-400",
+      alert: pendingReturnDues.length > 0,
+    },
     {
       l: "1–10 Days Due (1st–10th)",
       v: formatRupee(due1To10List.reduce((sum, item) => sum + item.totalOutstanding, 0)),
@@ -1434,29 +1790,49 @@ function DuesPage() {
   ];
 
   const handleExportExcel = () => {
-    const listToExport = filteredRentals.length > 0 ? filteredRentals : dueRentals;
+    const listToExport = filteredRentals.length > 0 ? filteredRentals : combinedDues;
     if (listToExport.length === 0) {
       toast.error("No rent due records available to export.");
       return;
     }
 
-        const headers = [
+    const headers = [
       "Customer Name",
       "Phone Number",
       "Equipment",
       "Deposit Amount (₹)",
       "Start Date",
-      "Rent Rate (₹)",
-      "Pending Months",
+      "Rent Rate / Type (₹)",
+      "Pending Duration / Status",
       "Total Paid Amount (₹)",
       "Remaining Due (₹)"
     ];
 
     const rows = listToExport.map((item) => {
+      if (item.isReturnDue) {
+        const cust = customersList.find((c: any) => c.id === item.customerId || (c.name && item.customer && c.name.toLowerCase() === item.customer.toLowerCase()));
+        const p1 = cust?.phone || "";
+        const p2 = cust?.altPhone || "";
+        const p3 = cust?.contactNumber3 || "";
+        const phoneList = [p1, p2, p3].map((p) => String(p || "").trim()).filter(Boolean);
+        const allPhones = Array.from(new Set(phoneList)).join("\n");
+
+        return [
+          item.customer || "Unknown",
+          allPhones || "—",
+          `${item.equipment} (Return Due: ${item.id})`,
+          item.deposit,
+          formatDateDDMMYYYY(item.date),
+          `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
+          "Return Settlement Due",
+          item.totalPaid,
+          item.totalOutstanding
+        ];
+      }
+
       const r = item.rental;
       const cust = customersList.find((c: any) => c.id === r.customerId);
 
-      // Show all phone numbers down by down
       const p1 = r.phone || cust?.phone || "";
       const p2 = r.altPhone || cust?.altPhone || "";
       const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
@@ -1472,7 +1848,6 @@ function DuesPage() {
         }
       ];
 
-      // Equipment Name + Model Number down by down
       const eqNames = eqItems.map((ei: any) => {
         const eq = equipmentById.get(ei.equipmentId);
         const name = ei.name || getEquipmentName(ei.equipmentId);
@@ -1507,7 +1882,7 @@ function DuesPage() {
       ];
     });
 
-    const tabLabel = activeTab === "all" ? "1-10_11-20_21-31" : activeTab === "1-10" ? "1-10_Days" : activeTab === "11-20" ? "11-20_Days" : "21-31_Days";
+    const tabLabel = activeTab === "all" ? "All_Dues" : activeTab === "returns" ? "Return_Dues" : `${activeTab}_Days`;
     const filename = `rent_due_statement_${tabLabel}_${getLocalYYYYMMDD()}.xls`;
 
     downloadExcel(filename, headers, rows, [180, 220, 260, 130, 110, 140, 130, 140, 140]);
@@ -1548,7 +1923,7 @@ function DuesPage() {
       {/* Severity metric bar */}
       <Card className="mb-5 overflow-hidden">
         <CardContent className="p-0">
-          <div className="grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
+          <div className="grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-2 lg:grid-cols-4 sm:divide-y-0 sm:divide-x">
             {severityBuckets.map((s, i) => {
               const Icon = s.icon;
               return (
@@ -1598,10 +1973,13 @@ function DuesPage() {
             <div className="hidden sm:flex items-center gap-2">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="h-8">
-                  <TabsTrigger value="all"      className="text-[12px] h-7 px-3">All</TabsTrigger>
-                  <TabsTrigger value="1-10"     className="text-[12px] h-7 px-3">1–10 Days</TabsTrigger>
-                  <TabsTrigger value="11-20"    className="text-[12px] h-7 px-3">11–20 Days</TabsTrigger>
-                  <TabsTrigger value="21-31"    className="text-[12px] h-7 px-3">21–31 Days</TabsTrigger>
+                  <TabsTrigger value="all" className="text-[12px] h-7 px-3">All ({combinedDues.length})</TabsTrigger>
+                  <TabsTrigger value="returns" className="text-[12px] h-7 px-3 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold data-[state=active]:bg-amber-600 data-[state=active]:text-white">
+                    Return Dues ({pendingReturnDues.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="1-10" className="text-[12px] h-7 px-3">1–10 Days</TabsTrigger>
+                  <TabsTrigger value="11-20" className="text-[12px] h-7 px-3">11–20 Days</TabsTrigger>
+                  <TabsTrigger value="21-31" className="text-[12px] h-7 px-3">21–31 Days</TabsTrigger>
                 </TabsList>
               </Tabs>
 
@@ -1617,13 +1995,13 @@ function DuesPage() {
             </div>
             {/* Mobile chips */}
             <div className="flex gap-1.5 overflow-x-auto pb-0.5 sm:hidden">
-              {["all", "1-10", "11-20", "21-31"].map((tab) => (
+              {["all", "returns", "1-10", "11-20", "21-31"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={`mobile-chip shrink-0 ${activeTab === tab ? "active" : ""}`}
                 >
-                  {tab === "all" ? "All" : `${tab} Days`}
+                  {tab === "all" ? `All (${combinedDues.length})` : tab === "returns" ? `Return Dues (${pendingReturnDues.length})` : `${tab} Days`}
                 </button>
               ))}
             </div>
@@ -1651,6 +2029,114 @@ function DuesPage() {
               </TableHeader>
               <TableBody>
                 {filteredRentals.map((item) => {
+                  if (item.isReturnDue) {
+                    const ret = item.returnObj;
+                    return (
+                      <TableRow key={`ret-${item.id}`} className="group bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
+                        {/* 1. Customer name with contact numbers & Return ID */}
+                        <TableCell className="px-2.5 py-2">
+                          <p className="font-semibold text-[12px] leading-tight text-foreground">{item.customer}</p>
+                          {getCustomerPhones(item.customerId).length > 0 && (
+                            <div className="mt-0.5 space-y-0.5">
+                              {getCustomerPhones(item.customerId).map((p, idx) => (
+                                <p key={idx} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                  <Phone className="h-2.5 w-2.5 shrink-0" /> {p}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-1 flex items-center gap-1.5 font-mono text-[9.5px]">
+                            <span className="font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded border border-amber-500/20">{item.id}</span>
+                            <span className="text-muted-foreground">Agr: {item.agreementId}</span>
+                          </div>
+                        </TableCell>
+
+                        {/* 2. Equipment name with Return Due badge */}
+                        <TableCell className="px-2.5 py-2">
+                          <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
+                            <span>{item.equipment}</span>
+                            <span className="inline-flex items-center gap-0.5 rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-800 dark:text-amber-300 shrink-0">
+                              <AlertCircle className="h-2.5 w-2.5" /> Return Due
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        {/* 3. Rent / Start Date */}
+                        <TableCell className="px-2 py-2 whitespace-nowrap">
+                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                            {item.date ? formatDateDDMMYY(item.date) : "—"}
+                          </span>
+                        </TableCell>
+
+                        {/* 4. Total Rent / Settlement Due Amount */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
+                            ₹{item.totalDue.toLocaleString("en-IN")}
+                          </div>
+                          <span className="text-[9px] text-muted-foreground block">Final Settlement</span>
+                        </TableCell>
+
+                        {/* 5. Deposit */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="text-[11.5px] font-semibold text-muted-foreground">
+                            ₹{item.deposit.toLocaleString("en-IN")}
+                          </div>
+                        </TableCell>
+
+                        {/* 6. Return Date */}
+                        <TableCell className="px-2 py-2 whitespace-nowrap">
+                          <span className="text-[11px] font-semibold text-foreground font-mono">
+                            {item.date ? formatDateDDMMYY(item.date) : "Returned"}
+                          </span>
+                        </TableCell>
+
+                        {/* 7. Unpaid Duration */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="text-[11.5px] font-bold text-amber-700 dark:text-amber-400">
+                            Return Settlement
+                          </div>
+                        </TableCell>
+
+                        {/* 8. Total Paid Amount */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="text-[11.5px] font-extrabold text-success text-right">
+                            ₹{item.totalPaid.toLocaleString("en-IN")}
+                          </div>
+                        </TableCell>
+
+                        {/* 9. Remaining Balance */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="text-[11.5px] font-extrabold text-right text-amber-600 dark:text-amber-400">
+                            ₹{item.totalOutstanding.toLocaleString("en-IN")}
+                          </div>
+                        </TableCell>
+
+                        {/* 10. Status */}
+                        <TableCell className="px-2 py-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 whitespace-nowrap">
+                            Return Due ({item.status})
+                          </span>
+                        </TableCell>
+
+                        {/* 11. Actions */}
+                        <TableCell className="px-2 py-2 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            <PayReturnDueDialog
+                              ret={ret}
+                              onPaid={() => setRefreshKey((k) => k + 1)}
+                            />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-success hover:bg-success/10" title="WhatsApp" onClick={() => toast.success(`WhatsApp reminder sent to ${item.customer}`)}>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="SMS" onClick={() => toast.success(`SMS reminder sent to ${item.customer}`)}>
+                              <Phone className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+
                   const r = item.rental;
                   const eqItems = r.equipmentItems || [
                     {
@@ -1914,6 +2400,58 @@ function DuesPage() {
             ) : (
               <div className="divide-y divide-border/60">
                 {filteredRentals.map((item) => {
+                  if (item.isReturnDue) {
+                    const ret = item.returnObj;
+                    return (
+                      <div key={`ret-${item.id}`} className="px-4 py-3.5 space-y-2.5 bg-amber-500/5 border-b border-border/60">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold text-[13.5px]">{item.customer}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="inline-flex items-center rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-800 dark:text-amber-300">{item.id}</span>
+                              <span className="text-[11px] text-muted-foreground font-mono">Agr: {item.agreementId}</span>
+                            </div>
+                            {getCustomerPhones(item.customerId).length > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                {getCustomerPhones(item.customerId).map((p, idx) => (
+                                  <p key={idx} className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                    <Phone className="h-2.5 w-2.5 shrink-0" /> {p}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                            Return Due
+                          </span>
+                        </div>
+                        
+                        <div className="space-y-1.5 bg-amber-500/10 rounded-xl p-3 border border-amber-500/20">
+                          <div className="flex items-center justify-between font-semibold text-[12.5px]">
+                            <span>{item.equipment}</span>
+                            <span className="text-amber-700 dark:text-amber-300 font-bold">₹{item.totalDue.toLocaleString("en-IN")}</span>
+                          </div>
+                          <div className="flex justify-between text-[11.5px] text-muted-foreground">
+                            <span>Return Date: <strong className="text-foreground font-mono">{item.date ? formatDateDDMMYY(item.date) : "Returned"}</strong></span>
+                            <span>Paid: <strong className="text-success font-bold">₹{item.totalPaid.toLocaleString("en-IN")}</strong></span>
+                            <span>Due: <strong className="text-amber-600 dark:text-amber-400 font-bold">₹{item.totalOutstanding.toLocaleString("en-IN")}</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <PayReturnDueDialog
+                            ret={ret}
+                            onPaid={() => setRefreshKey((k) => k + 1)}
+                            triggerClassName="h-10 px-3 text-[11px] flex-1"
+                          />
+                          <Button variant="outline" size="sm" className="h-10 text-[11px] px-2.5" onClick={() => toast.success(`WhatsApp reminder sent to ${item.customer}`)}>
+                            <MessageCircle className="h-3.5 w-3.5" /> Remind
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const r = item.rental;
                   const eqItems = r.equipmentItems || [
                     {
