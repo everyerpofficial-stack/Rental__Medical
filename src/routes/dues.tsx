@@ -1583,6 +1583,57 @@ function DuesPage() {
     });
   }, [activeRentals, paymentsList]);
 
+  const cleanEqName = (str: string) => {
+    if (!str) return "";
+    return str.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
+  };
+
+  const getReturnEquipmentLabel = (ret: any): string[] => {
+    const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+    if (ids.length > 0) {
+      const labels = ids
+        .map((id) => {
+          const eq = equipmentById.get(id) || eqInventory.find((e: any) => e.id === id);
+          if (!eq) return "";
+          return cleanEqName(formatEquipmentLabel(eq, false));
+        })
+        .filter(Boolean);
+      if (labels.length > 0) return labels;
+    }
+
+    const rental = rentalsList.find((r: any) => r.id === ret.agreement);
+    if (rental) {
+      const eqItems = rental.equipmentItems || [];
+      if (eqItems.length > 0) {
+        const labels = eqItems
+          .map((ei: any) => {
+            const eq = equipmentById.get(ei.equipmentId);
+            const name = ei.name || ei.equipment || getEquipmentName(ei.equipmentId);
+            const model = ei.model || eq?.model || (eqItems.length === 1 ? rental.model : undefined);
+            return cleanEqName(formatEquipmentLabel({ name, model, serial: "" }, false));
+          })
+          .filter(Boolean);
+        if (labels.length > 0) return labels;
+      } else if (rental.equipmentId || rental.equipment) {
+        const eq = equipmentById.get(rental.equipmentId);
+        const name = rental.equipment || getEquipmentName(rental.equipmentId);
+        const model = rental.model || eq?.model;
+        const formatted = cleanEqName(formatEquipmentLabel({ name, model, serial: "" }, false));
+        if (formatted) return [formatted];
+      }
+    }
+
+    const rawEqStr = ret.equipment || "";
+    if (rawEqStr) {
+      const matchEq = eqInventory.find((e: any) => e.name && rawEqStr.toLowerCase().includes(e.name.toLowerCase()));
+      if (matchEq && matchEq.model && !rawEqStr.toLowerCase().includes(matchEq.model.toLowerCase())) {
+        return [cleanEqName(formatEquipmentLabel({ name: rawEqStr, model: matchEq.model, serial: "" }, false))];
+      }
+    }
+
+    return [cleanEqName(rawEqStr || "Equipment")];
+  };
+
   // ─── Calculate Return Dues ──────────────────────────────────────────────────
   const pendingReturnDues = useMemo(() => {
     const seen = new Set<string>();
@@ -1617,6 +1668,8 @@ function DuesPage() {
         ? "Paid"
         : (paidAmt > 0 ? "Partial" : "Not Paid");
 
+      const eqLabels = getReturnEquipmentLabel(ret);
+
       return {
         isReturnDue: true as const,
         returnObj: ret,
@@ -1624,7 +1677,8 @@ function DuesPage() {
         agreementId: ret.agreement,
         customer: ret.customer,
         customerId: ret.customerId || "",
-        equipment: ret.equipment || "Equipment",
+        equipmentLabels: eqLabels,
+        equipment: eqLabels.join(", "),
         date: ret.date,
         deposit: Number(ret.deposit || 0),
         totalDue,
@@ -1634,7 +1688,7 @@ function DuesPage() {
         start: ret.date,
       };
     });
-  }, [returnsList]);
+  }, [returnsList, rentalsList, equipmentById, eqInventory]);
 
   // Combine Active Rent Dues + Return Dues
   const combinedDues = useMemo(() => {
@@ -1660,6 +1714,7 @@ function DuesPage() {
       agreementId: r.agreementId,
       customer: r.customer,
       customerId: r.customerId,
+      equipmentLabels: r.equipmentLabels,
       equipment: r.equipment,
       date: r.date,
       deposit: r.deposit,
@@ -2050,8 +2105,10 @@ function DuesPage() {
 
                         {/* 2. Equipment name */}
                         <TableCell className="px-2.5 py-2">
-                          <div className="flex items-center text-[11.5px] font-medium text-foreground">
-                            <span>{item.equipment}</span>
+                          <div className="space-y-1 text-[11.5px] font-medium text-foreground">
+                            {(item.equipmentLabels || [item.equipment]).map((lbl: string, idx: number) => (
+                              <div key={idx}>{lbl}</div>
+                            ))}
                           </div>
                         </TableCell>
 

@@ -56,6 +56,7 @@ import {
   getLocalYYYYMMDD,
   formatDateDDMMYYYY,
   getDocumentPreviewUrl,
+  getGeneratedDocumentHtml,
   sortLatestFirst,
   extractIdNumber,
   getRentalEquipmentDetailedItems,
@@ -794,14 +795,29 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
 
   const [previewDoc, setPreviewDoc] = useState<any | null>(null);
 
-  // Load heavy file content from IndexedDB when a document is opened in preview
+  // Load heavy file content from IndexedDB when a document is opened in preview.
+  // System-generated rows (doc-agr-/doc-ret-/doc-pay-) never carry uploaded
+  // bytes — they're rebuilt from their source record below — but an uploaded
+  // agreement PDF has its own doc id and must still be fetched.
+  const isSystemGeneratedDoc = (doc: any) =>
+    String(doc.id).startsWith("doc-agr-") || String(doc.id).startsWith("doc-ret-") || String(doc.id).startsWith("doc-pay-");
+
   useEffect(() => {
-    if (previewDoc && !previewDoc.fileData && previewDoc.type !== "Agreement" && !previewDoc.id.startsWith("doc-ret-") && !previewDoc.id.startsWith("doc-pay-")) {
+    if (previewDoc && !previewDoc.fileData && !isSystemGeneratedDoc(previewDoc)) {
       getDocumentWithFile(previewDoc).then((fullDoc) => {
         setPreviewDoc(fullDoc);
       });
     }
   }, [previewDoc]);
+
+  // Agreements / return receipts / payment receipts render from their source
+  // record, so they preview even when no file is stored on this device.
+  const previewGeneratedHtml = useMemo(
+    () => (previewDoc && previewDoc.fileData !== "PDF" && !String(previewDoc.fileData ?? "").startsWith("data:")
+      ? getGeneratedDocumentHtml(previewDoc)
+      : null),
+    [previewDoc?.id, previewDoc?.fileData]
+  );
 
   const custRentals  = rentals.filter((r) => r.customerId === customer.id);
   const custPayments = payments.filter((p) => p.customerId === customer.id);
@@ -1322,6 +1338,12 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                           <p className="font-semibold text-[14px]">{previewDoc.name}</p>
                           <p className="text-[12px] text-muted-foreground mt-0.5">{previewDoc.type} · {previewDoc.size} · Uploaded {formatDateDDMMYYYY(previewDoc.date)}</p>
                         </div>
+                        {previewGeneratedHtml && (
+                          <span className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/10 px-2 py-1 text-[10px] font-bold text-accent shrink-0">
+                            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                            Generated from record
+                          </span>
+                        )}
                       </>
                     );
                   })()}
@@ -1336,6 +1358,12 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                   ) : previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:application/pdf") ? (
                     <iframe
                       src={previewDoc.fileData}
+                      className="w-full h-full border-0 bg-white"
+                      title={previewDoc.name}
+                    />
+                  ) : previewGeneratedHtml ? (
+                    <iframe
+                      srcDoc={previewGeneratedHtml}
                       className="w-full h-full border-0 bg-white"
                       title={previewDoc.name}
                     />
@@ -1375,8 +1403,8 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
                 {previewDoc && (
                   <Button
                     className="h-9 text-[13px]"
-                    disabled={previewDoc.fileData === "NOT_FOUND"}
-                    title={previewDoc.fileData === "NOT_FOUND" ? "Not available on this device or in Google Sheets" : undefined}
+                    disabled={previewDoc.fileData === "NOT_FOUND" && !previewGeneratedHtml}
+                    title={previewDoc.fileData === "NOT_FOUND" && !previewGeneratedHtml ? "Not available on this device or in Google Sheets" : undefined}
                     onClick={async () => {
                       if (previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:")) {
                         downloadBase64File(previewDoc.fileData, previewDoc.name);

@@ -3402,14 +3402,14 @@ export function printAgreement(rental: any) {
   printWindow.document.close();
 }
 
-export function printReceipt(paymentInput: any, customerNameInput?: string) {
+export function getPaymentReceiptHtmlContent(
+  paymentInput: any,
+  customerNameInput?: string,
+  isPrintMode: boolean = false,
+  isZoomedPreview: boolean = false,
+): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  if (!paymentInput || typeof window === "undefined") return;
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    alert("Please allow popups to print/download the receipt.");
-    return;
-  }
+  if (!paymentInput) return "";
   // Escape once here rather than at each interpolation site below.
   const payment = escapeRecordForHtml(paymentInput);
   const customerName = customerNameInput === undefined ? undefined : escapeHtml(customerNameInput);
@@ -3441,6 +3441,7 @@ export function printReceipt(paymentInput: any, customerNameInput?: string) {
       padding: 40px;
       box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
       position: relative;
+      ${isZoomedPreview ? 'zoom: 0.8; margin: 16px auto;' : ''}
     }
     .header {
       display: flex;
@@ -3653,6 +3654,7 @@ export function printReceipt(paymentInput: any, customerNameInput?: string) {
     </div>
   </div>
 
+  ${isPrintMode ? `
   <script>
     window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
@@ -3660,10 +3662,22 @@ export function printReceipt(paymentInput: any, customerNameInput?: string) {
       }, 500);
     });
   </script>
+  ` : ''}
 </body>
 </html>
   `;
 
+  return htmlContent;
+}
+
+export function printReceipt(paymentInput: any, customerNameInput?: string) {
+  if (!paymentInput || typeof window === "undefined") return;
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Please allow popups to print/download the receipt.");
+    return;
+  }
+  const htmlContent = getPaymentReceiptHtmlContent(paymentInput, customerNameInput, true);
   printWindow.document.write(htmlContent);
   printWindow.document.close();
 }
@@ -3992,58 +4006,91 @@ export function printReturnReceipt(ret: any) {
   printWindow.document.close();
 }
 
-export function getDocumentPreviewUrl(doc: DocumentItem): string {
-  if (doc.fileData && doc.fileData !== "PDF" && doc.fileData.startsWith("data:")) {
-    return doc.fileData;
+/** The record a system-generated document renders from. Agreements, return
+ *  receipts and payment receipts/invoices are stored as document rows that
+ *  carry no uploaded bytes — their PDF is rebuilt from the source record on
+ *  demand, so "not in IndexedDB / Google Sheets" is normal for them. */
+export type GeneratedDocumentSource =
+  | { kind: "agreement"; rental: any }
+  | { kind: "return"; ret: any }
+  | { kind: "payment"; payment: any; customerName?: string };
+
+/** Resolves the source record behind a system-generated document, or null for
+ *  real uploads (and for system docs whose source record no longer exists). */
+export function resolveGeneratedDocument(doc: DocumentItem): GeneratedDocumentSource | null {
+  if (!doc) return null;
+  const name = (doc.name || "").toLowerCase();
+
+  // Return receipts are matched first: their names contain both "return" and
+  // "receipt", so the agreement/payment matchers below would misclassify them.
+  const isReturn = doc.id.startsWith("doc-ret-") || doc.type === "Return" || name.includes("return");
+  if (isReturn) {
+    // Returns are numbered RET-NNNN (no year segment), unlike agreements.
+    let retId = doc.id.startsWith("doc-ret-") ? doc.id.replace("doc-ret-", "").toUpperCase() : "";
+    if (!retId) {
+      const match = doc.name.match(/RET-\d{4}(-\d{4})?/i);
+      if (match) retId = match[0].toUpperCase();
+    }
+    const ret = getReturns().find((r) =>
+      String(r.id).toUpperCase() === retId || String(r.id) === doc.id
+    );
+    return ret ? { kind: "return", ret } : null;
   }
 
-  // Check if this is a dynamic system agreement or return receipt
-  const isAgreement = doc.type === "Agreement" || (doc.name.toLowerCase().includes("agreement") && !doc.name.toLowerCase().includes("return"));
-  const isReturn = doc.type === "Return" || doc.name.toLowerCase().includes("return");
+  const isPayment = doc.id.startsWith("doc-pay-") || doc.type === "Invoice" || doc.type === "Receipt";
+  if (isPayment) {
+    let payId = doc.id.startsWith("doc-pay-") ? doc.id.replace("doc-pay-", "").toUpperCase() : "";
+    if (!payId) {
+      const match = doc.name.match(/PAY-\d{4}(-\d{4})?/i);
+      if (match) payId = match[0].toUpperCase();
+    }
+    const payment = getPayments().find((p) =>
+      String(p.id).toUpperCase() === payId || String(p.id) === doc.id
+    );
+    if (payment) {
+      const customerName = getCustomers().find((c) => c.id === payment.customerId)?.name;
+      return { kind: "payment", payment, customerName };
+    }
+    return null;
+  }
 
+  const isAgreement = doc.type === "Agreement" || name.includes("agreement");
   if (isAgreement) {
     let rentalId = doc.rentalId;
     if (!rentalId) {
       const match = doc.name.match(/AGR-\d{4}-\d{4}/i);
       if (match) rentalId = match[0].toUpperCase();
     }
-    const rental = getRentals().find(r => r.id === rentalId);
-    if (rental) {
-      const htmlContent = getAgreementHtmlContent(rental, false, true);
-      return "data:text/html;charset=utf-8," + encodeURIComponent(htmlContent);
+    if (!rentalId && doc.id.startsWith("doc-agr-")) {
+      rentalId = doc.id.replace("doc-agr-", "").toUpperCase();
     }
-  } else if (isReturn) {
-    // BUG-5 FIX: Previous code only stripped "doc-" leaving "ret-RET-YYYY-NNNN"
-    // which never matched any stored return. Strip the full "doc-ret-" prefix instead.
-    // Also fixed the name regex — returns use RET-YYYY-NNNN (4+4 digits), not 4+4 from exchanges.
-    const returns = getReturns();
-    let cleanRetId = "";
+    const rental = getRentals().find((r) => r.id === rentalId);
+    return rental ? { kind: "agreement", rental } : null;
+  }
 
-    // 1. Try stripping the full "doc-ret-" prefix from the doc ID
-    if (doc.id.startsWith("doc-ret-")) {
-      cleanRetId = doc.id.replace("doc-ret-", "").toUpperCase();
-    }
+  return null;
+}
 
-    // 2. Try extracting RET-YYYY-NNNN from the document name
-    if (!cleanRetId) {
-      const match = doc.name.match(/RET-\d{4}-\d{4}/i);
-      if (match) cleanRetId = match[0].toUpperCase();
-    }
+/** Renders a system-generated document (agreement / return receipt / payment
+ *  receipt) to standalone HTML, or null when the doc isn't one. Used for the
+ *  in-app preview so these documents display instead of reporting missing
+ *  file content — they never had uploaded bytes to begin with. */
+export function getGeneratedDocumentHtml(doc: DocumentItem): string | null {
+  const source = resolveGeneratedDocument(doc);
+  if (!source) return null;
+  if (source.kind === "agreement") return getAgreementHtmlContent(source.rental, false, true);
+  if (source.kind === "return") return getReturnReceiptHtmlContent(source.ret, false, true);
+  return getPaymentReceiptHtmlContent(source.payment, source.customerName, false, true);
+}
 
-    // 3. Fallback: use raw doc.id (covers edge cases)
-    if (!cleanRetId) {
-      cleanRetId = doc.id;
-    }
+export function getDocumentPreviewUrl(doc: DocumentItem): string {
+  if (doc.fileData && doc.fileData !== "PDF" && doc.fileData !== "NOT_FOUND" && doc.fileData.startsWith("data:")) {
+    return doc.fileData;
+  }
 
-    const ret = returns.find(r =>
-      r.id === cleanRetId ||
-      r.id === doc.id ||
-      r.id.toUpperCase() === cleanRetId.toUpperCase()
-    );
-    if (ret) {
-      const htmlContent = getReturnReceiptHtmlContent(ret, false, true);
-      return "data:text/html;charset=utf-8," + encodeURIComponent(htmlContent);
-    }
+  const generatedHtml = getGeneratedDocumentHtml(doc);
+  if (generatedHtml) {
+    return "data:text/html;charset=utf-8," + encodeURIComponent(generatedHtml);
   }
 
   const docTypeLabel = doc.type || "Document";
@@ -4206,9 +4253,14 @@ export function downloadBase64File(fileData: string, filename: string) {
 // so the UI can say so instead of silently handing back a fake placeholder.
 export async function printDocumentFile(doc: DocumentItem): Promise<boolean> {
   let fileData = doc.fileData;
-  const isRealUploadType = doc.type !== "Agreement" && !doc.id.startsWith("doc-ret-") && !doc.id.startsWith("doc-pay-");
+  const generatedSource = resolveGeneratedDocument(doc);
 
-  if ((!fileData || fileData === "NOT_FOUND") && isRealUploadType) {
+  // Look for real uploaded bytes first, even for Agreement/Receipt types — a
+  // manually uploaded signed agreement must download as itself rather than as
+  // the system-generated copy. Rows the app created itself (doc-agr-/doc-ret-/
+  // doc-pay-) never hold bytes, so skip the lookup for those.
+  const isSystemRow = /^doc-(agr|ret|pay)-/.test(doc.id);
+  if ((!fileData || fileData === "NOT_FOUND") && !isSystemRow) {
     fileData = await getFileFromIndexedDB(doc.id);
     // Not on this device — check the Google Sheets backup before giving up,
     // so downloads work on any device, not just the one that uploaded it.
@@ -4226,52 +4278,21 @@ export async function printDocumentFile(doc: DocumentItem): Promise<boolean> {
     return true;
   }
 
-  if (doc.type === "Agreement") {
-    const rentals = getRentals();
-    const rental = rentals.find(r => r.id === doc.rentalId || doc.id.endsWith(r.id) || doc.id.includes(r.id));
-    if (rental) {
-      printAgreement(rental);
-      return true;
+  if (generatedSource) {
+    if (generatedSource.kind === "agreement") {
+      printAgreement(generatedSource.rental);
+    } else if (generatedSource.kind === "return") {
+      printReturnReceipt(generatedSource.ret);
+    } else {
+      printReceipt(generatedSource.payment, generatedSource.customerName);
     }
-  } else if (doc.type === "Invoice" || doc.type === "Receipt") {
-    if (doc.id.startsWith("doc-ret-")) {
-      const returns = getReturns();
-      const retId = doc.id.replace("doc-ret-", "");
-      const ret = returns.find(r => r.id === retId || doc.id.includes(r.id));
-      if (ret) {
-        printReturnReceipt(ret);
-        return true;
-      }
-    }
-
-    const payments = getPayments();
-    const payId = doc.id.replace("doc-pay-", "");
-    const payment = payments.find(p => p.id === payId || doc.id.includes(p.id));
-    if (payment) {
-      const customers = getCustomers();
-      const customer = customers.find(c => c.id === payment.customerId);
-      printReceipt(payment, customer?.name);
-      return true;
-    }
+    return true;
   }
 
-  // A real uploaded file with no data anywhere has nothing to download —
-  // don't hand back a fake "securely archived" placeholder for it.
-  if (isRealUploadType) {
-    return false;
-  }
-
-  // Fallback: If no real data and not system printable, download the generated verification sheet
-  if (typeof window !== "undefined") {
-    const previewUrl = getDocumentPreviewUrl(doc);
-    const link = document.createElement("a");
-    link.href = previewUrl;
-    link.download = doc.name.endsWith(".html") ? doc.name : `${doc.name}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-  return true;
+  // An uploaded file with no bytes anywhere, and no source record to rebuild
+  // it from, has nothing to download — don't hand back a fake
+  // "securely archived" placeholder for it.
+  return false;
 }
 
 /** Push any locally-held document files that never made it to the Google

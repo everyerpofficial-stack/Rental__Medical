@@ -31,6 +31,7 @@ import {
   useDatabaseTrigger,
   getDocumentPreviewUrl,
   getDocumentWithFile,
+  getGeneratedDocumentHtml,
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/documents")({
@@ -148,9 +149,15 @@ function DocsPage() {
     }
   }, [dbVersion]);
 
+  // System-generated rows (agreements, return receipts, payment invoices) never
+  // had uploaded bytes — their PDF is rebuilt from the source record instead, so
+  // don't spend a round trip to IndexedDB / Google Sheets looking for a file.
+  const isSystemGeneratedDoc = (doc: DocumentItem) =>
+    doc.id.startsWith("doc-agr-") || doc.id.startsWith("doc-ret-") || doc.id.startsWith("doc-pay-");
+
   // Load heavy file content from IndexedDB when a document is opened in preview
   useEffect(() => {
-    if (previewDoc && !previewDoc.fileData) {
+    if (previewDoc && !previewDoc.fileData && !isSystemGeneratedDoc(previewDoc)) {
       setIsPreviewLoading(true);
       getDocumentWithFile(previewDoc).then((fullDoc) => {
         setPreviewDoc(fullDoc);
@@ -160,6 +167,15 @@ function DocsPage() {
       setIsPreviewLoading(false);
     }
   }, [previewDoc?.id]);
+
+  // Agreements / return receipts / payment receipts are rendered on demand from
+  // their source record, so they preview even with no file stored anywhere.
+  const previewGeneratedHtml = useMemo(
+    () => (previewDoc && previewDoc.fileData !== "PDF" && !previewDoc.fileData?.startsWith("data:")
+      ? getGeneratedDocumentHtml(previewDoc)
+      : null),
+    [previewDoc?.id, previewDoc?.fileData]
+  );
 
   // Find the selected agreement (if any)
   const currentRental = useMemo(() => {
@@ -870,6 +886,12 @@ function DocsPage() {
                   <h4 className="font-bold text-[14px] text-foreground">{previewDoc.name}</h4>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{previewDoc.type} · {previewDoc.size} · Uploaded {formatDateDDMMYYYY(previewDoc.date)}</p>
                 </div>
+                {previewGeneratedHtml && (
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/20 bg-accent/10 px-2 py-1 text-[10px] font-bold text-accent shrink-0">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                    Generated from record
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-h-0 border border-border/60 rounded-xl overflow-hidden bg-muted/10 w-full relative">
                 {isPreviewLoading ? (
@@ -896,6 +918,12 @@ function DocsPage() {
                   ) ? (
                   <iframe
                     src={previewDoc.fileData.startsWith("data:") ? previewDoc.fileData : `data:application/pdf;base64,${previewDoc.fileData}`}
+                    className="w-full h-full border-0 bg-white"
+                    title={previewDoc.name}
+                  />
+                ) : previewGeneratedHtml ? (
+                  <iframe
+                    srcDoc={previewGeneratedHtml}
                     className="w-full h-full border-0 bg-white"
                     title={previewDoc.name}
                   />
@@ -936,8 +964,8 @@ function DocsPage() {
               {previewDoc && (
                 <Button
                   className="h-9 text-[13px]"
-                  disabled={previewDoc.fileData === "NOT_FOUND"}
-                  title={previewDoc.fileData === "NOT_FOUND" ? "Not available on this device or in Google Sheets" : undefined}
+                  disabled={previewDoc.fileData === "NOT_FOUND" && !previewGeneratedHtml}
+                  title={previewDoc.fileData === "NOT_FOUND" && !previewGeneratedHtml ? "Not available on this device or in Google Sheets" : undefined}
                   onClick={async () => {
                     if (previewDoc.fileData && previewDoc.fileData !== "NOT_FOUND" && previewDoc.fileData.startsWith("data:")) {
                       downloadBase64File(previewDoc.fileData, previewDoc.name);
