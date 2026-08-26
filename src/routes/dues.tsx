@@ -1689,14 +1689,19 @@ function DuesPage() {
       let rentRateText = "—";
 
       if (rental) {
-        const eqItems = rental.equipmentItems || [];
-        if (eqItems.length > 0) {
-          const monthlySum = eqItems.reduce((acc: number, ei: any) => acc + (Number(ei.monthlyRent || ei.rentRate) || 0), 0);
-          const dailySum = eqItems.reduce((acc: number, ei: any) => acc + (Number(ei.dailyRent) || 0), 0);
+        const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+        const allEqItems = rental.equipmentItems || [];
+        const targetEqItems = ids.length > 0
+          ? allEqItems.filter((ei: any) => ids.includes(ei.equipmentId))
+          : (allEqItems.length === 1 ? allEqItems : allEqItems);
+
+        if (targetEqItems.length > 0) {
+          const monthlySum = targetEqItems.reduce((acc: number, ei: any) => acc + (Number(ei.monthlyRent || ei.rentRate) || 0), 0);
+          const dailySum = targetEqItems.reduce((acc: number, ei: any) => acc + (Number(ei.dailyRent) || 0), 0);
           if (monthlySum > 0) rentRateText = `₹${monthlySum.toLocaleString("en-IN")}/mo`;
           else if (dailySum > 0) rentRateText = `₹${dailySum.toLocaleString("en-IN")}/day`;
         }
-        if (rentRateText === "—" && rental.monthlyRent) {
+        if (rentRateText === "—" && rental.monthlyRent && allEqItems.length <= 1) {
           rentRateText = `₹${Number(rental.monthlyRent).toLocaleString("en-IN")}/mo`;
         }
       }
@@ -2170,7 +2175,7 @@ function DuesPage() {
 
                         {/* 6. Return Date */}
                         <TableCell className="px-2 py-2 whitespace-nowrap">
-                          <span className="text-[11px] font-semibold text-foreground font-mono">
+                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
                             {item.date ? formatDateDDMMYY(item.date) : "Returned"}
                           </span>
                         </TableCell>
