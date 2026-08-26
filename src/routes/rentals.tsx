@@ -4888,7 +4888,7 @@ function RentalsPage() {
   // Pending Dues". These cut across the raw status label (Pending Dues spans
   // Active and Overdue agreements that carry a real unpaid balance), so they
   // are a separate control from the status dropdown rather than more options in it.
-  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues">("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues" | "cancelled">("all");
   const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
   // PERF: render the first page only; the rest load on demand.
@@ -4979,9 +4979,13 @@ function RentalsPage() {
       });
       if (!matchesSearch) return false;
 
+      const statusLower = String(r.status || "").toLowerCase().trim();
+      const targetFilter = statusFilter.toLowerCase().trim();
       const matchesStatus =
         statusFilter === "all" ||
-        String(r.status || "").toLowerCase() === statusFilter.toLowerCase();
+        (targetFilter === "returned" || targetFilter === "completed"
+          ? statusLower === "completed" || statusLower === "returned"
+          : statusLower === targetFilter);
       if (!matchesStatus) return false;
 
       // ITEM-16 quick filters
@@ -4989,7 +4993,10 @@ function RentalsPage() {
         return r.status === "Active" || r.status === "Overdue";
       }
       if (quickFilter === "completed") {
-        return r.status === "Completed";
+        return r.status === "Completed" || r.status === "Returned";
+      }
+      if (quickFilter === "cancelled") {
+        return r.status === "Cancelled";
       }
       if (quickFilter === "dues") {
         return (outstandingByRental.get(r.id) || 0) > 0;
@@ -5123,13 +5130,14 @@ function RentalsPage() {
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[130px] h-9 text-[12px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px] h-9 text-[12px]"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="pending approval">Pending Approval</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
-                <SelectItem value="returned">Returned</SelectItem>
+                <SelectItem value="completed">Completed / Returned</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -5137,16 +5145,19 @@ function RentalsPage() {
           {/* ITEM-16: quick filters across the history. Counts are live so the
               operator can see at a glance how much is still open or owing. */}
           <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
-            {([
+            {[
               { key: "all",       label: "All",           count: rentalsList.length },
               { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
-              { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed").length },
+              { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
               { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
-            ] as const).map((f) => (
+              ...(rentalsList.some((r) => r.status === "Cancelled")
+                ? [{ key: "cancelled", label: "Cancelled", count: rentalsList.filter((r) => r.status === "Cancelled").length }]
+                : []),
+            ].map((f) => (
               <button
                 key={f.key}
                 type="button"
-                onClick={() => setQuickFilter(f.key)}
+                onClick={() => setQuickFilter(f.key as any)}
                 aria-pressed={quickFilter === f.key}
                 className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
                   quickFilter === f.key
