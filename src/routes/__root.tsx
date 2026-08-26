@@ -13,7 +13,7 @@ import appCss from "../styles.css?url";
 import { reportError } from "../lib/error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
-import { Mail, Lock, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendOtpEmail, isGSheetsEnabled, syncRowToSheet, SHEETS } from "@/lib/google-sheets";
 
@@ -144,106 +144,7 @@ function getLockoutRemainingMs(): number {
   return Math.max(0, lockoutUntil - Date.now());
 }
 
-// ─── First-Run Setup ────────────────────────────────────────────────────────
 
-function FirstRunSetup({ onComplete }: { onComplete: () => void }) {
-  const [name, setName] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showSetupPass, setShowSetupPass] = useState(false);   // ITEM-6
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSetup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) { toast.error("Please enter your name"); return; }
-    if (!adminEmail.includes("@")) { toast.error("Please enter a valid email"); return; }
-    if (pass.length < 8) { toast.error("Password must be at least 8 characters"); return; }
-    if (!/[A-Z]/.test(pass)) { toast.error("Password must contain at least one uppercase letter"); return; }
-    if (!/[0-9]/.test(pass)) { toast.error("Password must contain at least one number"); return; }
-    if (!/[^A-Za-z0-9]/.test(pass)) { toast.error("Password must contain at least one special character"); return; }
-    if (pass !== confirm) { toast.error("Passwords do not match"); return; }
-
-    setIsSaving(true);
-    const passwordHash = await hashPassword(pass);
-    const adminUser = { id: "1", name: name.trim(), email: adminEmail.toLowerCase().trim(), passwordHash, role: "Admin", firstAdmin: true };
-    localStorage.setItem("medirent-staff-users", JSON.stringify([adminUser]));
-    localStorage.setItem("medirent-setup-done", "true");
-    toast.success("Admin account created! Please log in.");
-    setIsSaving(false);
-    onComplete();
-  };
-
-  return (
-    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] px-4 py-12 font-sans overflow-hidden">
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full bg-blue-100/30 blur-[130px] -z-10 animate-pulse duration-[8000ms]" />
-      <div className="w-full max-w-[440px] bg-white border border-slate-100/80 rounded-[28px] p-8 shadow-[0_20px_50px_rgba(15,23,42,0.06)] text-slate-800 flex flex-col items-center">
-        <div className="flex h-16 w-full items-center justify-center mb-6">
-          <img src="/images/logo.png" alt="Relife Logo" className="max-h-full max-w-full object-contain" />
-        </div>
-        <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center mb-3">
-          <ShieldCheck className="h-4 w-4 text-white" />
-        </div>
-        <h2 className="text-[22px] font-bold tracking-tight text-slate-900 text-center">First-Time Setup</h2>
-        <p className="text-[13px] text-slate-400 mt-2 text-center mb-6">Create your administrator account to get started</p>
-        <form onSubmit={handleSetup} className="w-full space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Full Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Your name" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Email Address</label>
-            <input type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required placeholder="admin@yourcompany.com" className="w-full px-4 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Password</label>
-            <div className="relative">
-              <input type={showSetupPass ? "text" : "password"} value={pass} onChange={(e) => setPass(e.target.value)} required placeholder="Min 8 chars, uppercase, number, symbol" className="w-full pl-4 pr-11 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
-              <button
-                type="button"
-                onClick={() => setShowSetupPass((v) => !v)}
-                aria-label={showSetupPass ? "Hide password" : "Show password"}
-                aria-pressed={showSetupPass}
-                title={showSetupPass ? "Hide password" : "Show password"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
-              >
-                {showSetupPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 block">Confirm Password</label>
-            <div className="relative">
-              <input type={showSetupPass ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} required placeholder="Re-enter password" className="w-full pl-4 pr-11 py-3 bg-white border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-slate-800 text-[14px] placeholder-slate-400/80 outline-none transition-all" />
-              <button
-                type="button"
-                onClick={() => setShowSetupPass((v) => !v)}
-                aria-label={showSetupPass ? "Hide password" : "Show password"}
-                aria-pressed={showSetupPass}
-                title={showSetupPass ? "Hide password" : "Show password"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/40 transition-colors"
-              >
-                {showSetupPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-[12px] text-blue-700 space-y-1">
-            <p className="font-semibold">Password requirements:</p>
-            <ul className="space-y-0.5 list-disc list-inside text-blue-600">
-              <li className={pass.length >= 8 ? "text-emerald-600" : ""}>At least 8 characters</li>
-              <li className={/[A-Z]/.test(pass) ? "text-emerald-600" : ""}>One uppercase letter</li>
-              <li className={/[0-9]/.test(pass) ? "text-emerald-600" : ""}>One number</li>
-              <li className={/[^A-Za-z0-9]/.test(pass) ? "text-emerald-600" : ""}>One special character</li>
-            </ul>
-          </div>
-          <Button type="submit" disabled={isSaving} className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-[0_4px_12px_rgba(37,99,235,0.15)] transition-all flex items-center justify-center gap-2 border-0 cursor-pointer text-[14px]">
-            {isSaving ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating...</> : <><ShieldCheck className="h-4 w-4" /> Create Admin Account</>}
-          </Button>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 // ─── Login Interface ────────────────────────────────────────────────────────
 
@@ -676,8 +577,7 @@ function RootComponent() {
   const queryClient = context?.queryClient || fallbackQueryClient;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  // First-run: true when no staff users have been created yet
-  const [needsSetup, setNeedsSetup] = useState(false);
+
 
   const checkSetupAndAuth = async () => {
     if (typeof window === "undefined") return;
@@ -709,7 +609,7 @@ function RootComponent() {
       }
     }
 
-    setNeedsSetup(!hasUsers);
+
 
     if (hasUsers) {
       // Validate existing session
@@ -801,10 +701,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {needsSetup ? (
-        // First-run: no admin account exists — force setup before login
-        <FirstRunSetup onComplete={() => { setNeedsSetup(false); }} />
-      ) : isAuthenticated ? (
+      {isAuthenticated ? (
         <Outlet />
       ) : (
         <LoginInterface onLoginSuccess={() => setIsAuthenticated(true)} />
