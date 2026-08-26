@@ -1684,6 +1684,22 @@ function DuesPage() {
         : (paidAmt > 0 ? "Partial" : "Not Paid");
 
       const eqLabels = getReturnEquipmentLabel(ret);
+      const rental = rentalsList.find((r: any) => r.id === ret.agreement);
+      const rentDateStr = rental?.start || ret.date || "";
+      let rentRateText = "—";
+
+      if (rental) {
+        const eqItems = rental.equipmentItems || [];
+        if (eqItems.length > 0) {
+          const monthlySum = eqItems.reduce((acc: number, ei: any) => acc + (Number(ei.monthlyRent || ei.rentRate) || 0), 0);
+          const dailySum = eqItems.reduce((acc: number, ei: any) => acc + (Number(ei.dailyRent) || 0), 0);
+          if (monthlySum > 0) rentRateText = `₹${monthlySum.toLocaleString("en-IN")}/mo`;
+          else if (dailySum > 0) rentRateText = `₹${dailySum.toLocaleString("en-IN")}/day`;
+        }
+        if (rentRateText === "—" && rental.monthlyRent) {
+          rentRateText = `₹${Number(rental.monthlyRent).toLocaleString("en-IN")}/mo`;
+        }
+      }
 
       return {
         isReturnDue: true as const,
@@ -1695,12 +1711,14 @@ function DuesPage() {
         equipmentLabels: eqLabels,
         equipment: eqLabels.join(", "),
         date: ret.date,
+        rentDate: rentDateStr,
+        rentRateText,
         deposit: Number(ret.deposit || 0),
         totalDue,
         totalPaid: paidAmt,
         totalOutstanding: pendingDue,
         status,
-        start: ret.date,
+        start: rentDateStr || ret.date,
       };
     });
   }, [returnsList, rentalsList, equipmentById, eqInventory]);
@@ -1732,6 +1750,8 @@ function DuesPage() {
       equipmentLabels: r.equipmentLabels,
       equipment: r.equipment,
       date: r.date,
+      rentDate: r.rentDate,
+      rentRateText: r.rentRateText,
       deposit: r.deposit,
       totalDue: r.totalDue,
       status: r.status,
@@ -1890,11 +1910,11 @@ function DuesPage() {
         return [
           item.customer || "Unknown",
           allPhones || "—",
-          `${item.equipment} (Return Due: ${item.id})`,
+          `${item.equipment}`,
           item.deposit,
-          formatDateDDMMYYYY(item.date),
+          item.rentDate ? formatDateDDMMYYYY(item.rentDate) : formatDateDDMMYYYY(item.date),
+          item.rentRateText || "—",
           `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
-          "Return Settlement Due",
           item.totalPaid,
           item.totalOutstanding
         ];
@@ -2127,17 +2147,18 @@ function DuesPage() {
                           </div>
                         </TableCell>
 
-                        {/* 3. Rent / Start Date (Blank for Return Dues) */}
+                        {/* 3. Rent / Start Date */}
                         <TableCell className="px-2 py-2 whitespace-nowrap">
-                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">—</span>
+                          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                            {item.rentDate ? formatDateDDMMYY(item.rentDate) : (item.date ? formatDateDDMMYY(item.date) : "—")}
+                          </span>
                         </TableCell>
 
-                        {/* 4. Total Rent / Settlement Due Amount */}
+                        {/* 4. Rent Rate Amount */}
                         <TableCell className="px-2 py-2 text-right">
-                          <div className="text-[11.5px] font-semibold text-amber-700 dark:text-amber-400">
-                            ₹{item.totalDue.toLocaleString("en-IN")}
+                          <div className="text-[11.5px] font-semibold text-foreground">
+                            {item.rentRateText || "—"}
                           </div>
-                          <span className="text-[9px] text-muted-foreground block">Final Settlement</span>
                         </TableCell>
 
                         {/* 5. Deposit */}
@@ -2154,11 +2175,12 @@ function DuesPage() {
                           </span>
                         </TableCell>
 
-                        {/* 7. Unpaid Duration */}
+                        {/* 7. Unpaid Duration / Final Settlement Amount */}
                         <TableCell className="px-2 py-2 text-right">
                           <div className="text-[11.5px] font-bold text-amber-700 dark:text-amber-400">
-                            Return Settlement
+                            ₹{item.totalDue.toLocaleString("en-IN")}
                           </div>
+                          <span className="text-[9px] text-muted-foreground block">Final Settlement</span>
                         </TableCell>
 
                         {/* 8. Total Paid Amount */}
