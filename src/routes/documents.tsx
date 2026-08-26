@@ -97,6 +97,15 @@ const detectDocumentType = (fileName: string, mimeType: string): string => {
   return "Document";
 };
 
+// Rows deliberately kept out of the folder listing (and its file counts):
+//   • Location Tag .txt — the green GPS card above the list already shows the
+//     coordinates and the Get Directions link, so the raw text file is noise.
+//   • Payment invoices/receipts (doc-pay-*) — payments belong in the Payments
+//     section; a rental binder only carries its agreement paperwork.
+// The records themselves are untouched — this only hides their cards here.
+const isHiddenFolderDoc = (doc: DocumentItem) =>
+  doc.type === "Location Tag" || doc.id.startsWith("doc-pay-");
+
 function DocsPage() {
   const dbVersion = useDatabaseTrigger();
   
@@ -219,14 +228,14 @@ function DocsPage() {
 
   // Unassociated files (files with no rentalId)
   const generalDocsCount = useMemo(() => {
-    return docsList.filter(d => !d.rentalId).length;
+    return docsList.filter(d => !d.rentalId && !isHiddenFolderDoc(d)).length;
   }, [docsList]);
 
   // Get dynamic file count inside each agreement folder
   // Only counts: Rental Agreement, Customer KYC (ID Proof), Location Tag, Return Agreement
   const getFolderFileCount = (rental: any) => {
     // 1. All documents saved directly inside this rental folder
-    const rentalFilesCount = docsList.filter(d => d.rentalId === rental.id).length;
+    const rentalFilesCount = docsList.filter(d => d.rentalId === rental.id && !isHiddenFolderDoc(d)).length;
     // 2. Customer KYC (ID Proofs) of the rental's customer not already linked by rentalId
     const kycFilesCount = docsList.filter(d => d.customerId === rental.customerId && d.type === "ID Proof" && d.rentalId !== rental.id).length;
     
@@ -273,13 +282,14 @@ function DocsPage() {
     if (!selectedFolderId) return [];
 
     if (selectedFolderId === "general") {
-      return docsList.filter(d => !d.rentalId);
+      return docsList.filter(d => !d.rentalId && !isHiddenFolderDoc(d));
     }
 
     const rental = rentalsList.find(r => r.id === selectedFolderId);
     if (!rental) return [];
 
     return docsList.filter(d => {
+      if (isHiddenFolderDoc(d)) return false;
       const isRentalDoc = d.rentalId === selectedFolderId;
       const isCustomerKYC = Boolean(rental.customerId && d.customerId === rental.customerId && d.type === "ID Proof");
       return isRentalDoc || isCustomerKYC;
