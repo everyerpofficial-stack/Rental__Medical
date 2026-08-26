@@ -2072,9 +2072,9 @@ function DuesPage() {
                   <TabsTrigger value="returns" className="text-[12px] h-7 px-3 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold data-[state=active]:bg-amber-600 data-[state=active]:text-white">
                     Return Dues ({pendingReturnDues.length})
                   </TabsTrigger>
-                  <TabsTrigger value="1-10" className="text-[12px] h-7 px-3">1–10 Days</TabsTrigger>
-                  <TabsTrigger value="11-20" className="text-[12px] h-7 px-3">11–20 Days</TabsTrigger>
-                  <TabsTrigger value="21-31" className="text-[12px] h-7 px-3">21–31 Days</TabsTrigger>
+                  <TabsTrigger value="1-10" className="text-[12px] h-7 px-3">1–10 Days ({due1To10List.length})</TabsTrigger>
+                  <TabsTrigger value="11-20" className="text-[12px] h-7 px-3">11–20 Days ({due11To20List.length})</TabsTrigger>
+                  <TabsTrigger value="21-31" className="text-[12px] h-7 px-3">21–31 Days ({due21To31List.length})</TabsTrigger>
                 </TabsList>
               </Tabs>
 
@@ -2096,7 +2096,15 @@ function DuesPage() {
                   onClick={() => setActiveTab(tab)}
                   className={`mobile-chip shrink-0 ${activeTab === tab ? "active" : ""}`}
                 >
-                  {tab === "all" ? `All (${combinedDues.length})` : tab === "returns" ? `Return Dues (${pendingReturnDues.length})` : `${tab} Days`}
+                  {tab === "all"
+                    ? `All (${combinedDues.length})`
+                    : tab === "returns"
+                    ? `Return Dues (${pendingReturnDues.length})`
+                    : tab === "1-10"
+                    ? `1–10 Days (${due1To10List.length})`
+                    : tab === "11-20"
+                    ? `11–20 Days (${due11To20List.length})`
+                    : `21–31 Days (${due21To31List.length})`}
                 </button>
               ))}
             </div>
