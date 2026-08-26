@@ -1081,7 +1081,7 @@ function OwnersPage() {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 mb-6">
         <Card className="relative overflow-hidden hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all">
-          <CardContent className="p-5">
+          <CardContent className="p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65">
@@ -1103,7 +1103,7 @@ function OwnersPage() {
         </Card>
 
         <Card className="relative overflow-hidden hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all">
-          <CardContent className="p-5">
+          <CardContent className="p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65">
@@ -1125,7 +1125,7 @@ function OwnersPage() {
         </Card>
 
         <Card className="relative overflow-hidden hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all">
-          <CardContent className="p-5">
+          <CardContent className="p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65">
@@ -1147,7 +1147,7 @@ function OwnersPage() {
         </Card>
 
         <Card className="relative overflow-hidden hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all">
-          <CardContent className="p-5">
+          <CardContent className="p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65">

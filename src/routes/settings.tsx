@@ -604,7 +604,7 @@ function applyHeaderFormat(sh) {
     <div className="space-y-5">
       {/* Setup Guide */}
       <Card>
-        <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="metric-icon h-9 w-9 bg-success/10 text-success border-success/20">
               <Database className="h-4.5 w-4.5" />
@@ -617,7 +617,7 @@ function applyHeaderFormat(sh) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-5">
+        <CardContent className="p-3 sm:p-6 space-y-5">
           {/* Step-by-step guide */}
           <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
             <p className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">Setup Guide</p>
@@ -865,7 +865,7 @@ function applyHeaderFormat(sh) {
       {/* Danger Zone — Admin Only */}
       {typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin" ? (
         <Card className="border-destructive/30 bg-destructive/5 mt-6">
-          <CardHeader className="border-b border-destructive/10 px-6 py-4">
+          <CardHeader className="border-b border-destructive/10 px-3 sm:px-6 py-3 sm:py-4">
             <div className="flex items-center gap-3">
               <div className="metric-icon h-9 w-9 shrink-0 bg-destructive/10 text-destructive border-destructive/20">
                 <Trash2 className="h-4.5 w-4.5 text-destructive" />
@@ -878,7 +878,7 @@ function applyHeaderFormat(sh) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-6 space-y-4">
+          <CardContent className="p-3 sm:p-6 space-y-4">
             <p className="text-[12px] text-muted-foreground leading-normal">
               This will permanently delete all records (Customers, Equipment, Rentals, Payments, Returns, Owners, Documents) from your local browser.
               If Google Sheets is connected, you can also choose to clear all rows in the connected spreadsheets.
@@ -896,7 +896,7 @@ function applyHeaderFormat(sh) {
         </Card>
       ) : (
         <Card className="border-border/30 mt-6">
-          <CardContent className="p-6">
+          <CardContent className="p-3 sm:p-6">
             <p className="text-[12px] text-muted-foreground flex items-center gap-2">
               <Shield className="h-4 w-4 text-primary shrink-0" />
               Database reset operations are restricted to Administrator accounts only.
@@ -929,7 +929,7 @@ function CompanySettingsTab() {
 
   return (
     <Card>
-      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+      <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center gap-3">
           <div className="metric-icon h-9 w-9 bg-primary/10 text-primary border-primary/20">
             <Building2 className="h-4.5 w-4.5" />
@@ -940,7 +940,7 @@ function CompanySettingsTab() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-6 grid gap-5 sm:grid-cols-2">
+      <CardContent className="p-3 sm:p-6 grid gap-5 sm:grid-cols-2">
         <ControlledField label="Company Name" value={settings.companyName} onChange={update("companyName")} />
         <ControlledField label="GSTIN" value={settings.gstin} onChange={update("gstin")} />
         <ControlledField label="Contact Email" value={settings.contactEmail} onChange={update("contactEmail")} type="email" />
@@ -1107,7 +1107,7 @@ function UserLoginCredentials() {
 
   return (
     <Card>
-      <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+      <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="metric-icon h-9 w-9 bg-primary/10 text-primary border-primary/20">
@@ -1358,7 +1358,7 @@ function BackupSettingsTab() {
   return (
     <>
       <Card>
-        <CardHeader className="border-b border-border/60 bg-muted/20 px-6 py-4">
+        <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="metric-icon h-9 w-9 bg-primary/10 border-primary/20">
               <HardDriveDownload className="h-4.5 w-4.5 text-primary" />
@@ -1372,7 +1372,7 @@ function BackupSettingsTab() {
           </div>
         </CardHeader>
 
-        <CardContent className="p-6 space-y-5">
+        <CardContent className="p-3 sm:p-6 space-y-5">
           {/* Daily backup status */}
           <div
             className={`rounded-xl border p-4 ${
@@ -1492,7 +1492,7 @@ function BackupSettingsTab() {
 
       {/* Restore */}
       <Card className="mt-6 border-amber-300/50">
-        <CardHeader className="border-b border-amber-200/40 bg-amber-50/40 px-6 py-4 dark:bg-amber-950/20">
+        <CardHeader className="border-b border-amber-200/40 bg-amber-50/40 px-3 sm:px-6 py-3 sm:py-4 dark:bg-amber-950/20">
           <div className="flex items-center gap-3">
             <div className="metric-icon h-9 w-9 bg-amber-100 border-amber-200 dark:bg-amber-950/40 dark:border-amber-900">
               <HardDriveUpload className="h-4.5 w-4.5 text-amber-700 dark:text-amber-400" />
@@ -1505,7 +1505,7 @@ function BackupSettingsTab() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-6 space-y-4">
+        <CardContent className="p-3 sm:p-6 space-y-4">
           <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3.5 dark:border-amber-900/50 dark:bg-amber-950/25">
             <p className="flex items-start gap-2 text-[12px] text-amber-800 dark:text-amber-300">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />

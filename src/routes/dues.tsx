@@ -651,7 +651,7 @@ function PayDialog({
             <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-4xl lg:max-w-5xl w-[95vw] p-0 gap-0 border-border/60 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
           {/* Header Bar */}
-          <div className="py-3 px-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="py-3 px-3 sm:px-5 border-b border-border/40 bg-gradient-to-r from-muted/30 via-background to-muted/20 flex flex-wrap items-center justify-between gap-3 shrink-0">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold shrink-0 border border-emerald-500/20">
                 <CreditCard className="h-5 w-5" />
@@ -1257,7 +1257,7 @@ function PayReturnDueDialog({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg w-[95vw] p-0 border-border/60 shadow-2xl overflow-hidden">
-          <div className="py-3 px-5 border-b border-border/40 bg-gradient-to-r from-amber-500/10 via-background to-amber-500/5 flex items-center justify-between">
+          <div className="py-3 px-3 sm:px-5 border-b border-border/40 bg-gradient-to-r from-amber-500/10 via-background to-amber-500/5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0 border border-amber-500/20">
                 <AlertCircle className="h-5 w-5" />

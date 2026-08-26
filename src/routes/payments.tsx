@@ -1399,7 +1399,7 @@ function PaymentsPage() {
       <div className="w-full">
         {/* Recent Payments table */}
         <Card className="overflow-hidden">
-          <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-3">
+          <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-5 py-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <CardTitle>Payments</CardTitle>

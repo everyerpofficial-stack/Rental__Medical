@@ -819,7 +819,7 @@ function Dashboard() {
             ].map((item) => (
               <div
                 key={item.label}
-                className={`rounded-xl border ${item.borderColor} bg-card p-6 transition-all hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5`}
+                className={`rounded-xl border ${item.borderColor} bg-card p-4 sm:p-6 transition-all hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5`}
               >
                 <div className="metric-icon h-9 w-9 mb-4">
                   <item.icon className={`h-4 w-4 ${item.color}`} />

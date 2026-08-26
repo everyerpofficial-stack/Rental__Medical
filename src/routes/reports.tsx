@@ -1765,7 +1765,7 @@ function ReportsPage() {
 
         {/* Top Customers list */}
         <Card className="overflow-hidden flex flex-col justify-between">
-          <CardHeader className="border-b border-border/60 bg-muted/20 px-5 py-4 flex flex-row items-center gap-3">
+          <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-5 py-3 sm:py-4 flex flex-row items-center gap-3">
             <div className="metric-icon h-9 w-9 shrink-0 bg-accent/10 text-accent border-accent/20">
               <Users2 className="h-4.5 w-4.5" />
             </div>
@@ -1855,7 +1855,7 @@ function ReportsPage() {
               }`}
               onClick={() => handleCardClick(r.title)}
             >
-              <CardContent className="flex items-center gap-3 p-4">
+              <CardContent className="flex items-center gap-3 p-3 sm:p-4">
                 <div className={`metric-icon h-9 w-9 shrink-0 border border-transparent ${r.color}`}>
                   <r.icon className="h-4.5 w-4.5" />
                 </div>
@@ -1880,7 +1880,7 @@ function ReportsPage() {
       {/* Dynamic Statement Viewer Section */}
       <div ref={viewerRef} className="scroll-mt-6">
         <Card className="overflow-hidden border border-border/80 shadow-soft">
-          <CardHeader className="border-b border-border bg-muted/15 px-5 py-4">
+          <CardHeader className="border-b border-border bg-muted/15 px-3 sm:px-5 py-3 sm:py-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">

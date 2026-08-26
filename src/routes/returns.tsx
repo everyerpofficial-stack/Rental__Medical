@@ -1603,7 +1603,7 @@ function ReturnsPage() {
         <Card className="overflow-hidden shadow-card border-border/50 relative bg-gradient-to-b from-card to-card/95">
 
           
-          <CardContent className="p-6 space-y-6.5">
+          <CardContent className="p-3 sm:p-6 space-y-5 sm:space-y-6.5">
             
             {/* Input Row 1: Pick Agreement, return date, and equipment condition */}
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -1668,7 +1668,7 @@ function ReturnsPage() {
                 {/* Left Column: Customer details, Equipment check, Adjustments, Calculations (col-span-7) */}
                 <div className="lg:col-span-7 space-y-4">
                   {/* Compact Customer Info Row */}
-                  <div className="rounded-xl border border-border/40 bg-muted/15 py-2 px-3 flex flex-wrap items-center justify-between gap-3 text-[11.5px] text-muted-foreground font-semibold">
+                  <div className="rounded-xl border border-border/40 bg-muted/15 py-2 px-3 flex flex-wrap items-start sm:items-center justify-between gap-2 sm:gap-3 text-[11.5px] text-muted-foreground font-semibold overflow-hidden min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-foreground">{selectedRental.customer}</span>
                       <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-primary/10 text-primary border border-primary/20">{selectedRental.id}</span>
@@ -1691,7 +1691,7 @@ function ReturnsPage() {
                         addr = addr ? `${addr} - ${custPincode}` : custPincode;
                       }
                       return (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 min-w-0 overflow-hidden">
                           {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
                           {addr && <span>Address: <span className="text-foreground/80 font-medium">{addr}</span></span>}
                           <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="text-foreground/80 font-bold">{returnDate ? formatDateDDMMYYYY(returnDate) : "—"}</span></span>
@@ -1818,27 +1818,27 @@ function ReturnsPage() {
                       </Label>
                     </div>
                     
-                    <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-4 bg-muted/20 p-3 rounded-xl border border-border/40">
+                    <div className="grid gap-2 sm:gap-2.5 grid-cols-2 sm:grid-cols-4 bg-muted/20 p-2 sm:p-3 rounded-xl border border-border/40">
                       {/* Duration */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Duration</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Duration</Label>
                         </div>
-                        <div className="text-[11.5px] font-bold text-foreground h-8.5 flex items-center px-2.5 bg-muted/30 rounded-md border border-border/50 truncate">
+                        <div className="text-[10.5px] sm:text-[11.5px] font-bold text-foreground h-8 sm:h-8.5 flex items-center px-2 sm:px-2.5 bg-muted/30 rounded-md border border-border/50 truncate">
                           {selectedRental ? formatRentalDuration(selectedRental.start, returnDate, rentalEquipments[0]?.rentCycle) : "0 Days"}
                         </div>
                       </div>
 
                       {/* Total Rent Payable */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Payable</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Payable</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-8 sm:h-8.5 pl-5 sm:pl-6 pr-1 text-[10px] sm:text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={finalRent}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1852,15 +1852,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Total Rent Paid */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold border-border focus-visible:ring-primary/20"
+                            className="h-8 sm:h-8.5 pl-5 sm:pl-6 pr-1 text-[10px] sm:text-[11px] font-semibold border-border focus-visible:ring-primary/20"
                             value={totalPaidAmount}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -1874,15 +1874,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Outstanding Rent */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Outstanding Rent</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className={`h-8.5 pl-6 pr-1 text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
+                            className={`h-8 sm:h-8.5 pl-5 sm:pl-6 pr-1 text-[10px] sm:text-[11px] font-semibold ${cleanNum(pendingBalance) > 0 ? "text-rose-600 bg-rose-50/20 border-rose-200" : "text-foreground"}`}
                             value={pendingBalance}
                             onChange={(e) => setPendingBalance(e.target.value)}
                           />
@@ -1890,15 +1890,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Damage Charges */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Damage Charges</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Damage Charges</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
+                            className="h-8 sm:h-8.5 pl-5 sm:pl-6 pr-1 text-[10px] sm:text-[11px] font-semibold text-rose-600 bg-rose-50/20 border-rose-200 focus-visible:ring-rose-500"
                             value={damageCharges}
                             onChange={(e) => setDamageCharges(e.target.value)}
                           />
@@ -1906,15 +1906,15 @@ function ReturnsPage() {
                       </div>
 
                       {/* Return Discount */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Return Discount</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Return Discount</Label>
                         </div>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-[11px] font-bold text-muted-foreground">₹</span>
+                          <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
                           <Input
                             placeholder="0.00"
-                            className="h-8.5 pl-6 pr-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
+                            className="h-8 sm:h-8.5 pl-5 sm:pl-6 pr-1 text-[10px] sm:text-[11px] font-semibold text-emerald-600 bg-emerald-50/20 border-emerald-200 focus-visible:ring-emerald-500"
                             value={discount}
                             onChange={(e) => setDiscount(e.target.value)}
                           />
@@ -1922,32 +1922,32 @@ function ReturnsPage() {
                       </div>
 
                       {/* Unpaid Accessories */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
                         </div>
-                        <div className="h-8.5 flex items-center px-2 bg-muted/30 rounded-md border border-border/50 overflow-hidden">
+                        <div className="h-8 sm:h-8.5 flex items-center px-2 bg-muted/30 rounded-md border border-border/50 overflow-hidden">
                           {unpaidItems.length > 0 ? (
                             <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
                               {unpaidItems.map((item: any, idx: number) => (
                                 <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
-                                  <span className="truncate max-w-[70px]">{item.name}</span>
+                                  <span className="truncate max-w-[60px] sm:max-w-[70px]">{item.name}</span>
                                   <span>₹{cleanNum(item.amount)}</span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[11px] font-semibold text-muted-foreground">₹0</span>
+                            <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">₹0</span>
                           )}
                         </div>
                       </div>
 
                       {/* Security Deposit */}
-                      <div className="bg-background rounded-lg p-2.5 border border-border flex flex-col justify-between h-[76px]">
-                        <div className="h-7 flex items-center">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</Label>
+                      <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</Label>
                         </div>
-                        <div className="text-[11.5px] font-bold text-blue-600 h-8.5 flex items-center px-2.5 bg-blue-50/20 rounded-md border border-blue-200/60 truncate">
+                        <div className="text-[10.5px] sm:text-[11.5px] font-bold text-blue-600 h-8 sm:h-8.5 flex items-center px-2 sm:px-2.5 bg-blue-50/20 rounded-md border border-blue-200/60 truncate">
                           ₹{deposit.toLocaleString("en-IN")}
                         </div>
                       </div>
@@ -2294,7 +2294,7 @@ function ReturnsPage() {
                   })()}
 
                   {/* Remarks & Collector */}
-                  <div className="grid gap-2.5 grid-cols-2 bg-muted/10 p-3 rounded-xl border border-border/40">
+                  <div className="grid gap-2.5 grid-cols-1 sm:grid-cols-2 bg-muted/10 p-2 sm:p-3 rounded-xl border border-border/40">
                     <div className="space-y-1">
                       <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
                       <div className="relative">
@@ -2320,7 +2320,7 @@ function ReturnsPage() {
                 </div>
 
                 {/* Right Column: WhatsApp Message & Payment Ledger (col-span-5) */}
-                <div className="lg:col-span-5 space-y-4 font-semibold">
+                <div className="lg:col-span-5 space-y-4 font-semibold min-w-0 overflow-hidden">
                   {/* WhatsApp Preview Box */}
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-50/10 p-3 space-y-2">
                     <div className="flex items-center justify-between gap-2 border-b border-emerald-500/20 pb-1.5">
@@ -2475,17 +2475,17 @@ function ReturnsPage() {
             )}
 
             {/* Footer buttons row */}
-            <div className="flex items-center justify-between border-t border-border/50 pt-4 shrink-0">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-border/50 pt-4 shrink-0">
               <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                 <span>Processing automatically sets returning serials to Available / Maintenance.</span>
               </p>
-              <div className="flex gap-2">
-                <Button variant="outline" type="button" size="sm" onClick={handleGenerateReceipt} disabled={!selectedAgreement} className="h-8.5 text-[11px] font-bold">
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button variant="outline" type="button" size="sm" onClick={handleGenerateReceipt} disabled={!selectedAgreement} className="h-8.5 text-[11px] font-bold flex-1 sm:flex-none">
                   <Receipt className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
                   Print Receipt
                 </Button>
-                <Button type="button" size="sm" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting} className="h-8.5 text-[11px] font-bold">
+                <Button type="button" size="sm" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting} className="h-8.5 text-[11px] font-bold flex-1 sm:flex-none">
                   <RotateCcw className="mr-1 h-3.5 w-3.5" />
                   {isSubmitting ? "Processing..." : "Process Return"}
                 </Button>
@@ -2497,7 +2497,7 @@ function ReturnsPage() {
 
         {/* Return History Section */}
         <Card className="shadow-card border-border/50 overflow-hidden">
-          <CardHeader className="border-b border-border/50 bg-muted/15 px-6 py-4.5">
+          <CardHeader className="border-b border-border/50 bg-muted/15 px-3 sm:px-6 py-3 sm:py-4.5">
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div className="flex items-center gap-3">
                 <div className="metric-icon h-9 w-9 bg-accent/10 text-accent border-accent/20 rounded-lg">
@@ -2510,7 +2510,7 @@ function ReturnsPage() {
               </div>
 
               {/* Advanced search and filters */}
-              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
                 <Button
                   type="button"
                   variant={showReturnDuesOnly ? "default" : "outline"}

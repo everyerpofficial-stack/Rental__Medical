@@ -837,7 +837,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border border-border/80 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-background">
         {/* Banner header */}
-        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-card p-6 border-b border-border/60 relative">
+        <div className="bg-gradient-to-r from-primary/10 via-accent/5 to-card p-3 sm:p-6 border-b border-border/60 relative">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <Avatar className="h-16 w-16 border-2 border-background shadow-sm">
@@ -883,7 +883,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
 
         {/* Content Tabs */}
         <Tabs defaultValue="overview" className="w-full flex flex-col">
-          <div className="border-b border-border/50 bg-muted/15 px-6 overflow-x-auto">
+          <div className="border-b border-border/50 bg-muted/15 px-3 sm:px-6 overflow-x-auto">
             <TabsList className="bg-transparent border-0 gap-2 h-11 p-0 justify-start flex-nowrap w-max min-w-full">
               <TabsTrigger value="overview" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Overview & KYC</TabsTrigger>
               <TabsTrigger value="rentals" className="data-[state=active]:bg-background data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-11 px-4 text-[12.5px] font-semibold whitespace-nowrap">Rentals ({custRentals.length})</TabsTrigger>
@@ -892,7 +892,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
             </TabsList>
           </div>
 
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             {/* Overview & KYC Tab */}
             <TabsContent value="overview" className="mt-0 focus-visible:ring-0 focus-visible:outline-none">
               <div className="grid gap-6 md:grid-cols-3">
@@ -1313,7 +1313,7 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
         </Tabs>
         
         {/* Footer */}
-        <div className="border-t border-border/60 bg-muted/20 px-6 py-4 flex justify-end gap-2.5 rounded-b-2xl">
+        <div className="border-t border-border/60 bg-muted/20 px-3 sm:px-6 py-3 sm:py-4 flex justify-end gap-2.5 rounded-b-2xl">
           <Button variant="outline" className="h-9.5 text-[13px] font-medium" onClick={onClose}>
             Close Window
           </Button>

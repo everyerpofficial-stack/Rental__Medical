@@ -239,6 +239,7 @@ input[type="number"] {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     font-variant-numeric: tabular-nums;
     line-height: 1.6;
+    overflow-x: hidden;
     /* Subtler background — barely visible, not vivid */
     background-image:
       radial-gradient(ellipse 70% 40% at 15% -5%, oklch(0.50 0.20 252 / 0.025) 0%, transparent 55%),
