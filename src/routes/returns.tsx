@@ -182,6 +182,7 @@ function generateWhatsAppPickupMessage(params: {
   /** ITEM-5: the exact equipment being picked up. When supplied, the model is
    *  resolved from these unit ids instead of guessing from a category name. */
   equipmentIds?: string[];
+  isPartialReturn?: boolean;
 }) {
   const name = params.customerName ? String(params.customerName) : "Customer";
   
@@ -319,11 +320,29 @@ function generateWhatsAppPickupMessage(params: {
   const line5 = mapLink;
 
   // Line 6: Collect Amount or Refund Amount
+  // If selecting 1 or more equipment items from 2 or more total items (partial return),
+  // format refund as: "[amount] refund will be adjusted to existing machine rent"
+  const unreturnedInRental = rentalItems.filter((it: any) => !it.returned);
+  const totalAvailableItems = unreturnedInRental.length > 0 
+    ? unreturnedInRental.length 
+    : (rentalItems.length > 0 
+        ? rentalItems.length 
+        : (params.rental?.equipmentId ? String(params.rental.equipmentId).split(",").map(s => s.trim()).filter(Boolean).length : 1));
+
+  const selectedCount = params.equipmentIds && params.equipmentIds.length > 0 
+    ? params.equipmentIds.length 
+    : 1;
+
+  const computedIsPartial = totalAvailableItems >= 2 && selectedCount < totalAvailableItems;
+  const isPartialReturn = params.isPartialReturn !== undefined ? params.isPartialReturn : computedIsPartial;
+
   let line6 = "";
   if (params.collectAmount && params.collectAmount > 0) {
     line6 = `Collect ${params.collectAmount}`;
   } else if (params.refundAmount && params.refundAmount > 0) {
-    line6 = `Refund ${params.refundAmount}`;
+    line6 = isPartialReturn
+      ? `${params.refundAmount} Refund will be adjusted to existing machine rent`
+      : `Refund ${params.refundAmount}`;
   } else {
     line6 = `No Amount`;
   }
