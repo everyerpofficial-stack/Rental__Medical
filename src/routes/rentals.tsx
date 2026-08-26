@@ -21,7 +21,7 @@ import {
   Plus, Search, Download, FileText, Mail, CalendarDays, MessageCircle,
   MoreHorizontal, Edit, Trash2, XCircle, FileCheck2, Clock, AlertTriangle,
   ShieldCheck, Fingerprint, PenTool, Camera, FileUp, CheckCircle2, MapPin,
-  X, QrCode, Phone, Info
+  X, QrCode, Phone, Info, Eye
 } from "lucide-react";
 import {
   getRentals,
@@ -4305,12 +4305,14 @@ function CustomerIDProofDialog({
   );
 }
 
-export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, trigger }: {
+export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, trigger, onApproveSuccess }: {
   rental?: any;
   signatureUrl?: string | null;
   thumbprintUrl?: string | null;
   trigger: React.ReactNode;
+  onApproveSuccess?: () => void;
 }) {
+  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
   // Helper to convert numbers to words (Indian numbering format)
   const convertNumberToWords = (amount: number): string => {
     if (amount <= 0 || isNaN(amount)) return "N/A";
@@ -4589,7 +4591,22 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-muted/20">
         <div className="flex flex-row items-center justify-between mb-4 mt-2">
           <DialogTitle className="text-lg font-bold">Agreement Preview</DialogTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 font-semibold">
+            {!isStaff && rental?.id && rental?.status === "Pending Approval" && (
+              <DialogClose asChild>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                  onClick={() => {
+                    approveRental(rental.id);
+                    if (onApproveSuccess) onApproveSuccess();
+                    toast.success(`Agreement ${rental.id} approved successfully!`);
+                  }}
+                >
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Approve
+                </Button>
+              </DialogClose>
+            )}
             <Button variant="outline" size="sm" onClick={() => { downloadAgreementFile(rental); toast.success(`Agreement PDF downloaded successfully.`); }}>
               <Download className="mr-1.5 h-3.5 w-3.5" /> PDF / Download
             </Button>
@@ -4888,7 +4905,7 @@ function RentalsPage() {
   // Pending Dues". These cut across the raw status label (Pending Dues spans
   // Active and Overdue agreements that carry a real unpaid balance), so they
   // are a separate control from the status dropdown rather than more options in it.
-  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues" | "cancelled">("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues" | "cancelled" | "pending">("all");
   const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
   // PERF: render the first page only; the rest load on demand.
@@ -4997,6 +5014,9 @@ function RentalsPage() {
       }
       if (quickFilter === "cancelled") {
         return r.status === "Cancelled";
+      }
+      if (quickFilter === "pending") {
+        return r.status === "Pending Approval";
       }
       if (quickFilter === "dues") {
         return (outstandingByRental.get(r.id) || 0) > 0;
@@ -5150,6 +5170,9 @@ function RentalsPage() {
               { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
               { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
               { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
+              ...(rentalsList.some((r) => r.status === "Pending Approval")
+                ? [{ key: "pending", label: "Pending Approval", count: rentalsList.filter((r) => r.status === "Pending Approval").length }]
+                : []),
               ...(rentalsList.some((r) => r.status === "Cancelled")
                 ? [{ key: "cancelled", label: "Cancelled", count: rentalsList.filter((r) => r.status === "Cancelled").length }]
                 : []),
@@ -5456,6 +5479,20 @@ function RentalsPage() {
                             <Edit className="h-3.5 w-3.5" />
                           </Button>
                         )}
+                        <AgreementPreviewDialog
+                          rental={r}
+                          onApproveSuccess={refresh}
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              title="View/Preview Agreement"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </Button>
+                          }
+                        />
                         <Button
                           variant="ghost"
                           size="icon"
@@ -5585,6 +5622,20 @@ function RentalsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-2.5">
+                      <AgreementPreviewDialog
+                        rental={r}
+                        onApproveSuccess={refresh}
+                        trigger={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2 text-slate-600 hover:text-slate-800 border-slate-200 bg-slate-50/50 hover:bg-slate-50 shrink-0"
+                            title="View Agreement"
+                          >
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                        }
+                      />
                       <Button
                         variant="outline"
                         size="sm"
