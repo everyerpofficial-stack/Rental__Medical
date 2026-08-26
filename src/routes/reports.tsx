@@ -1912,9 +1912,11 @@ function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all-owners">All Owners</SelectItem>
-                      {ownerOptions.map(name => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
-                      ))}
+                      {ownerOptions.map(name => {
+                        const ownerRecord = ownersList.find(o => o.name === name);
+                        const displayLabel = ownerRecord?.ownerName ? `${name} (${ownerRecord.ownerName})` : name;
+                        return <SelectItem key={name} value={name}>{displayLabel}</SelectItem>;
+                      })}
                     </SelectContent>
                   </Select>
                 )}
