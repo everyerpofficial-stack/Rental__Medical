@@ -2746,7 +2746,8 @@ export function downloadExcel(filename: string, headers: string[], rows: (string
       const safeCell = String(cell ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+        .replace(/>/g, "&gt;")
+        .replace(/\r?\n/g, '<br style="mso-data-placement:same-cell;"/>');
       html += `\n        <td>${safeCell}</td>`;
     });
     html += `\n      </tr>`;

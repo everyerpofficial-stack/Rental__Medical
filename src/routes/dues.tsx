@@ -2058,11 +2058,12 @@ function DuesPage() {
         rentDateLines.push(formatDateDDMMYYYY(itemStartDate));
 
         const { unpaidText } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-        pendingDurationLines.push(unpaidText || "0m");
+        const durationStr = (!unpaidText || unpaidText === "0m" || unpaidText === "0d") ? "—" : unpaidText;
+        pendingDurationLines.push(durationStr);
       });
 
       const eqCell = eqLines.join("\n");
-      const rentDateCell = Array.from(new Set(rentDateLines)).join("\n");
+      const rentDateCell = rentDateLines.join("\n");
       const rateCell = rateLines.join("\n");
       const pendingDurationCell = pendingDurationLines.join("\n");
 
