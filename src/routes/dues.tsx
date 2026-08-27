@@ -1970,15 +1970,15 @@ function DuesPage() {
 
     const headers = [
       "Sl.No",
-      "Customer Name & contact numbers in coloum",
-      "Equipment name only. Model not required",
+      "Customer Name",
+      "Equipment",
       "Rent Date",
       "Rent (₹)",
       "Deposit (₹)",
       "Pending Duration",
       "Payment Due status",
       "Remaining Due (₹)",
-      "Remarks (below remarks entedred for your reference only)"
+      "Remarks"
     ];
 
     const rows = listToExport.map((item, index) => {
