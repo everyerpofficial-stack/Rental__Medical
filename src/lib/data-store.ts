@@ -2687,25 +2687,48 @@ export function downloadFile(filename: string, content: string, mimeType: string
   }, 100);
 }
 
+export interface ExcelTitleInfo {
+  company?: string;
+  subtitle?: string;
+}
+
 // Helper to download a styled Excel (.xls) file with bold headings and custom widths
-export function downloadExcel(filename: string, headers: string[], rows: (string | number)[][], colWidths?: number[]) {
+export function downloadExcel(filename: string, headers: string[], rows: (string | number)[][], colWidths?: number[], titleInfo?: ExcelTitleInfo) {
   if (typeof window === "undefined" || typeof document === "undefined") return;
   
   const xlsName = filename.endsWith(".csv") ? filename.replace(".csv", ".xls") : (filename.endsWith(".xls") ? filename : filename + ".xls");
+
+  const colSpan = headers.length || 1;
+  const headerBg = titleInfo ? "#ffffff" : "#1e3a8a";
+  const headerColor = titleInfo ? "#000000" : "#ffffff";
 
   let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Sheet1</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
 <meta charset="UTF-8">
 <style>
-  th { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #1e3a8a; color: #ffffff; border: 0.5pt solid #cbd5e1; text-align: left; padding: 6px; font-size: 10pt; }
-  td { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px; font-size: 9.5pt; color: #334155; white-space: pre-wrap; mso-number-format:"\\@"; vertical-align: top; }
+  th { font-family: 'Calibri', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: ${headerBg}; color: ${headerColor}; border: 0.5pt solid #cbd5e1; text-align: left; padding: 6px 8px; font-size: 10pt; vertical-align: middle; }
+  td { font-family: 'Calibri', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 0.5pt solid #cbd5e1; padding: 6px 8px; font-size: 9.5pt; color: #334155; white-space: pre-wrap; mso-number-format:"\\@"; vertical-align: top; }
+  .title-company { font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 14pt; font-weight: bold; text-align: center; color: #0f172a; padding: 6px; border: none; }
+  .title-subtitle { font-family: 'Calibri', 'Segoe UI', sans-serif; font-size: 11pt; font-weight: bold; text-align: center; color: #1e293b; padding: 4px; border: none; }
 </style>
 </head>
 <body>
   <table>
-    <thead>
-      <tr>`;
+    <thead>`;
+
+  if (titleInfo) {
+    html += `\n      <tr style="border:none;"><td colspan="${colSpan}" style="border:none; height: 10px;"></td></tr>`;
+    html += `\n      <tr style="border:none;"><td colspan="${colSpan}" style="border:none; height: 10px;"></td></tr>`;
+    if (titleInfo.company) {
+      html += `\n      <tr style="border:none;"><td colspan="${colSpan}" class="title-company">${escapeHtml(titleInfo.company)}</td></tr>`;
+    }
+    if (titleInfo.subtitle) {
+      html += `\n      <tr style="border:none;"><td colspan="${colSpan}" class="title-subtitle">${escapeHtml(titleInfo.subtitle)}</td></tr>`;
+    }
+  }
+
+  html += `\n      <tr>`;
   
   headers.forEach((h, i) => {
     const widthStyle = colWidths && colWidths[i] ? ` style="width: ${Number(colWidths[i]) || 0}px;"` : "";

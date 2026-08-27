@@ -1884,6 +1884,69 @@ function DuesPage() {
     },
   ];
 
+  const getPaymentDueStatus = (r: any, totalOutstanding: number) => {
+    if (!r?.start || totalOutstanding <= 0) return "";
+    const startDate = parseLocalDate(r.start);
+    if (isNaN(startDate.getTime())) return "";
+
+    const dayOfMonth = startDate.getDate();
+    const eqItems = r.equipmentItems || [
+      {
+        equipmentId: r.equipmentId,
+        monthlyRent: Number(r.monthlyRent) || 0,
+        dailyRent: Number(r.dailyRent) || 0,
+        returned: false
+      }
+    ];
+
+    const activeMonthlyItems = eqItems.filter(
+      (it: any) => !it.returned && Number(it.monthlyRent || it.rentRate) > 0
+    );
+    const totalMonthlyRent = activeMonthlyItems.reduce(
+      (sum: number, it: any) => sum + (Number(it.monthlyRent || it.rentRate) || 0),
+      0
+    );
+
+    if (totalMonthlyRent <= 0) {
+      return `₹${totalOutstanding.toLocaleString("en-IN")}/- due`;
+    }
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const maxDayThisMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const cycleDayThisMonth = Math.min(dayOfMonth, maxDayThisMonth);
+    const currentCycleDate = new Date(currentYear, currentMonth, cycleDayThisMonth);
+
+    const nextMonth = currentMonth + 1;
+    const nextMonthYear = nextMonth > 11 ? currentYear + 1 : currentYear;
+    const nextMonthNormalized = nextMonth % 12;
+    const maxDayNextMonth = new Date(nextMonthYear, nextMonthNormalized + 1, 0).getDate();
+    const cycleDayNextMonth = Math.min(dayOfMonth, maxDayNextMonth);
+    const nextCycleDate = new Date(nextMonthYear, nextMonthNormalized, cycleDayNextMonth);
+
+    const formatShortDate = (d: Date) => {
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yy = String(d.getFullYear()).slice(-2);
+      return `${dd}-${mm}-${yy}`;
+    };
+
+    const currentCycleStr = formatShortDate(currentCycleDate);
+    const nextCycleStr = formatShortDate(nextCycleDate);
+
+    let currentDue = totalOutstanding;
+    let nextDue = totalOutstanding + totalMonthlyRent;
+
+    if (now < currentCycleDate) {
+      nextDue = totalOutstanding;
+      currentDue = Math.max(0, totalOutstanding - totalMonthlyRent);
+    }
+
+    return `${nextDue.toLocaleString("en-IN")}/- due upto ${nextCycleStr} 'or'\n${currentDue.toLocaleString("en-IN")}/- due upto ${currentCycleStr}`;
+  };
+
   const handleExportExcel = () => {
     const listToExport = filteredRentals.length > 0 ? filteredRentals : combinedDues;
     if (listToExport.length === 0) {
@@ -1891,37 +1954,65 @@ function DuesPage() {
       return;
     }
 
+    let periodText = "All Pending Dues";
+    if (activeTab === "1-10") periodText = "1st to 10th";
+    else if (activeTab === "11-20") periodText = "11th to 20th";
+    else if (activeTab === "21-31") periodText = "21st to 31st";
+    else if (activeTab === "returns") periodText = "Return Dues";
+
+    const now = new Date();
+    const fullMonthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const monthYearStr = `${fullMonthNames[now.getMonth()]}-${now.getFullYear()}`;
+    const subtitleText = `Statement generated for the month of ${monthYearStr} in the period of ${periodText}`;
+
     const headers = [
-      "Customer Name",
-      "Phone Number",
-      "Equipment",
-      "Deposit Amount (₹)",
-      "Start Date",
-      "Rent Rate / Type (₹)",
-      "Pending Duration / Status",
-      "Total Paid Amount (₹)",
-      "Remaining Due (₹)"
+      "Sl.No",
+      "Customer Name & contact numbers in coloum",
+      "Equipment name only. Model not required",
+      "Rent Date",
+      "Rent (₹)",
+      "Deposit (₹)",
+      "Pending Duration",
+      "Payment Due status",
+      "Remaining Due (₹)",
+      "Remarks (below remarks entedred for your reference only)"
     ];
 
-    const rows = listToExport.map((item) => {
+    const rows = listToExport.map((item, index) => {
+      const slNo = index + 1;
+
       if (item.isReturnDue) {
-        const cust = customersList.find((c: any) => c.id === item.customerId || (c.name && item.customer && c.name.toLowerCase() === item.customer.toLowerCase()));
+        const cust = customersList.find(
+          (c: any) =>
+            c.id === item.customerId ||
+            (c.name && item.customer && c.name.toLowerCase() === item.customer.toLowerCase())
+        );
         const p1 = cust?.phone || "";
         const p2 = cust?.altPhone || "";
         const p3 = cust?.contactNumber3 || "";
         const phoneList = [p1, p2, p3].map((p) => String(p || "").trim()).filter(Boolean);
-        const allPhones = Array.from(new Set(phoneList)).join("\n");
+        const uniquePhones = Array.from(new Set(phoneList)).join("\n");
+        const custName = item.customer || cust?.name || "Unknown";
+        const custCell = uniquePhones ? `${custName}\n${uniquePhones}` : custName;
+
+        const eqText = item.equipment || "Equipment";
+        const rentDateFormatted = item.rentDate ? formatDateDDMMYYYY(item.rentDate) : formatDateDDMMYYYY(item.date);
+        const remarkText = item.returnObj?.notes || item.returnObj?.remarks || "";
 
         return [
-          item.customer || "Unknown",
-          allPhones || "—",
-          `${item.equipment}`,
-          item.deposit,
-          item.rentDate ? formatDateDDMMYYYY(item.rentDate) : formatDateDDMMYYYY(item.date),
+          slNo,
+          custCell,
+          eqText,
+          rentDateFormatted,
           item.rentRateText || "—",
+          item.deposit || 0,
+          "Return Due",
           `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
-          item.totalPaid,
-          item.totalOutstanding
+          item.totalOutstanding || 0,
+          remarkText
         ];
       }
 
@@ -1932,7 +2023,9 @@ function DuesPage() {
       const p2 = r.altPhone || cust?.altPhone || "";
       const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
       const phoneList = [p1, p2, p3].map((p) => String(p || "").trim()).filter(Boolean);
-      const allPhones = Array.from(new Set(phoneList)).join("\n");
+      const uniquePhones = Array.from(new Set(phoneList)).join("\n");
+      const custName = r.customer || cust?.name || "Unknown";
+      const custCell = uniquePhones ? `${custName}\n${uniquePhones}` : custName;
 
       const eqItems = r.equipmentItems || [
         {
@@ -1940,47 +2033,68 @@ function DuesPage() {
           serial: r.serial,
           monthlyRent: Number(r.monthlyRent) || 0,
           deposit: Number(r.deposit) || 0,
+          returned: false
         }
       ];
 
-      const eqNames = eqItems.map((ei: any) => {
+      const eqLines: string[] = [];
+      const rentDateLines: string[] = [];
+      const rateLines: string[] = [];
+      const pendingDurationLines: string[] = [];
+
+      eqItems.forEach((ei: any) => {
         const eq = equipmentById.get(ei.equipmentId);
         const name = ei.name || getEquipmentName(ei.equipmentId);
-        const model = ei.model || eq?.model || "";
-        return model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
-      }).join("\n");
+        const model = ei.model || eq?.model || (eqItems.length === 1 ? r.model : undefined);
+        
+        const eqLabel = model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
+        eqLines.push(eqLabel);
+
+        const isMonthly = Number(ei.monthlyRent || ei.rentRate) > 0;
+        const rateVal = isMonthly ? Number(ei.monthlyRent || ei.rentRate) : Number(ei.dailyRent || 0);
+        rateLines.push(`₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}`);
+
+        const itemStartDate = ei.startDate || r.start;
+        rentDateLines.push(formatDateDDMMYYYY(itemStartDate));
+
+        const { unpaidText } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
+        pendingDurationLines.push(unpaidText || "0m");
+      });
+
+      const eqCell = eqLines.join("\n");
+      const rentDateCell = Array.from(new Set(rentDateLines)).join("\n");
+      const rateCell = rateLines.join("\n");
+      const pendingDurationCell = pendingDurationLines.join("\n");
 
       const depositVal = eqItems.reduce((sum: number, ei: any) => sum + (Number(ei.deposit) || 0), 0) || Number(r.deposit) || 0;
-      const startDateFormatted = formatDateDDMMYYYY(r.start);
 
-      const rates = eqItems.map((ei: any) => {
-        const isMonthly = Number(ei.monthlyRent) > 0;
-        const rate = isMonthly ? Number(ei.monthlyRent) : Number(ei.dailyRent || ei.rentRate || 0);
-        return `₹${rate.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}`;
-      }).join("\n");
+      const paymentDueStatusCell = getPaymentDueStatus(r, item.totalOutstanding);
 
-      const pendingDurations = eqItems.map((ei: any) => {
-        const { unpaidText } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-        return unpaidText;
-      }).filter((t: string) => t && t !== "—").join("\n");
+      const remarkText = r.notes || r.remarks || cust?.notes || "";
 
       return [
-        r.customer || "Unknown",
-        allPhones || "—",
-        eqNames || r.equipment || "Equipment",
+        slNo,
+        custCell,
+        eqCell,
+        rentDateCell,
+        rateCell,
         depositVal,
-        startDateFormatted,
-        rates,
-        pendingDurations || "0m",
-        item.totalPaid,
-        item.totalOutstanding
+        pendingDurationCell,
+        paymentDueStatusCell,
+        item.totalOutstanding || 0,
+        remarkText
       ];
     });
 
     const tabLabel = activeTab === "all" ? "All_Dues" : activeTab === "returns" ? "Return_Dues" : `${activeTab}_Days`;
     const filename = `rent_due_statement_${tabLabel}_${getLocalYYYYMMDD()}.xls`;
 
-    downloadExcel(filename, headers, rows, [180, 220, 260, 130, 110, 140, 130, 140, 140]);
+    const colWidths = [60, 220, 360, 110, 120, 100, 130, 240, 130, 250];
+
+    downloadExcel(filename, headers, rows, colWidths, {
+      company: "Relife Medical Technologies - Mysore",
+      subtitle: subtitleText
+    });
     toast.success(`Excel report "${filename}" generated & downloaded successfully!`);
   };
 
