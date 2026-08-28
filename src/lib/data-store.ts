@@ -2305,17 +2305,37 @@ export function getCustomerDueBalance(customerId: string, customerName?: string)
   const returns = getReturns();
   const rentals = getRentals();
 
-  const customerRentals = rentals.filter((r: any) =>
-    (r.customerId && r.customerId === customerId) ||
-    (!r.customerId && r.customer && customerName && r.customer.toLowerCase() === customerName.toLowerCase())
-  );
+  // Pre-compute agreement → customerId map from rentals for fast lookup
+  const agrToCustomerId = new Map<string, string>();
+  for (const r of rentals) {
+    if (r.id && r.customerId) {
+      agrToCustomerId.set(r.id, r.customerId);
+    }
+  }
+
+  const customerRentals = rentals.filter((r: any) => {
+    // Direct customerId match — definitive
+    if (r.customerId) return r.customerId === customerId;
+    // No customerId on rental — legacy data, fall back to name
+    return r.customer && customerName && r.customer.toLowerCase() === customerName.toLowerCase();
+  });
   const customerAgrIds = new Set(customerRentals.map((r: any) => r.id));
 
-  const customerReturns = returns.filter((ret: any) => 
-    (ret.customerId && ret.customerId === customerId) || 
-    (!ret.customerId && ret.customer && customerName && ret.customer.toLowerCase() === customerName.toLowerCase()) ||
-    (ret.agreement && customerAgrIds.has(ret.agreement))
-  );
+  const customerReturns = returns.filter((ret: any) => {
+    // 1. Direct customerId match — definitive
+    if (ret.customerId && ret.customerId === customerId) return true;
+    // 2. customerId set but doesn't match — definitive exclusion
+    if (ret.customerId && ret.customerId !== customerId) return false;
+    // 3. No customerId on return — resolve via rental agreement's customerId
+    if (ret.agreement) {
+      const rentalCustId = agrToCustomerId.get(ret.agreement);
+      if (rentalCustId) return rentalCustId === customerId;
+    }
+    // 4. Neither return nor rental has customerId — last resort: agreement set or name match
+    if (ret.agreement && customerAgrIds.has(ret.agreement)) return true;
+    if (ret.customer && customerName && ret.customer.toLowerCase() === customerName.toLowerCase()) return true;
+    return false;
+  });
 
   const unpaidReturns = customerReturns.filter((ret: any) => {
     const pendingDue = ret.duePendingBalance !== undefined 
