@@ -5061,7 +5061,7 @@ function RentalsPage() {
               onClick={() => {
                 const headers = ["Customer", "Address", "Equipment", "Rent Date", "Rent Rate", "Deposit", "Return Date", "Status"];
                 const rows = rentalsList.map(r => {
-                  const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                  const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
                   const fullAddress = cust ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ") : "—";
                   const eqNameWithModel = getRentalEquipmentLabels(r).join(" | ");
                   const rentRateDisplay = (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0)
@@ -5229,7 +5229,7 @@ function RentalsPage() {
                         </span>
                         <p className="font-semibold text-[13px]">{r.customer}</p>
                         {(() => {
-                          const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                          const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
                           const p1 = r.phone || cust?.phone || "";
                           const p2 = r.altPhone || cust?.altPhone || "";
                           const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
@@ -5262,7 +5262,7 @@ function RentalsPage() {
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                        const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
                         if (!cust) return <span className="text-muted-foreground text-[12px]">—</span>;
                         const fullAddress = [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ");
                         return <p className="text-[12px] text-foreground/80 max-w-[180px] break-words whitespace-normal leading-normal">{fullAddress || "—"}</p>;
@@ -5568,7 +5568,7 @@ function RentalsPage() {
                         </span>
                         <p className="font-semibold text-[13.5px] mt-1">{r.customer}</p>
                         {(() => {
-                          const cust = customersList.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                          const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
                           const p1 = r.phone || cust?.phone || "";
                           const p2 = r.altPhone || cust?.altPhone || "";
                           const p3 = r.contactNumber3 || cust?.contactNumber3 || "";
