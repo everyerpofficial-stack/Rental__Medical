@@ -923,8 +923,8 @@ function ReturnsPage() {
   const selectedRental = rentals.find((r) => r.id === selectedAgreement);
   const selectedCustomer = useMemo(() => {
     if (!selectedRental) return null;
-    return customers.find(
-      (c) => c.id === selectedRental.customerId || (c.name && selectedRental.customer && c.name.toLowerCase() === selectedRental.customer.toLowerCase())
+    return (selectedRental.customerId && customers.find((c) => c.id === selectedRental.customerId)) ||
+      customers.find((c) => c.name && selectedRental.customer && c.name.toLowerCase() === selectedRental.customer.toLowerCase()
     );
   }, [selectedRental, customers]);
   // PERF FIX: Memoize equipment inventory — previously called getEquipment() on every render
@@ -1014,8 +1014,9 @@ function ReturnsPage() {
       
       const rental = rentalsById.get(ret.agreement);
       const customer =
-        customersByName.get(String(ret.customer || "").toLowerCase()) ||
-        (rental ? customersById.get(rental.customerId) : undefined);
+        (ret.customerId ? customersById.get(ret.customerId) : undefined) ||
+        (rental ? customersById.get(rental.customerId) : undefined) ||
+        customersByName.get(String(ret.customer || "").toLowerCase());
 
       // Search query filter
       const searchLower = debouncedHistorySearch.toLowerCase().trim();
@@ -1083,8 +1084,8 @@ function ReturnsPage() {
         return true;
       })
       .map((r) => {
-        const cust = customers.find(
-          (c) => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase())
+        const cust = (r.customerId && customers.find((c) => c.id === r.customerId)) ||
+          customers.find((c) => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()
         );
         const phone1 = r.phone || cust?.phone || "";
         const phone2 = r.altPhone || cust?.altPhone || "";
@@ -2590,7 +2591,7 @@ function ReturnsPage() {
                     visibleReturns.map((ret) => {
                       const info = getReturnOwnerAndCategory(ret);
                       const rental = rentals.find((r) => r.id === ret.agreement);
-                      const cust = customers.find((c) => c.id === ret.customerId || c.name === ret.customer || c.id === rental?.customerId);
+                      const cust = (ret.customerId && customers.find((c) => c.id === ret.customerId)) || (rental?.customerId && customers.find((c) => c.id === rental.customerId)) || customers.find((c) => c.name === ret.customer);
                       const fullAddress = cust
                         ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ")
                         : rental?.address || "No address provided";
@@ -2777,7 +2778,7 @@ function ReturnsPage() {
                               <WhatsAppReturnMessageModal
                                 ret={ret}
                                 rental={rentals.find((r) => r.id === ret.agreement)}
-                                customer={customers.find((c) => c.name === ret.customer || c.id === rentals.find((r) => r.id === ret.agreement)?.customerId)}
+                                customer={(ret.customerId && customers.find((c) => c.id === ret.customerId)) || customers.find((c) => c.id === rentals.find((r) => r.id === ret.agreement)?.customerId) || customers.find((c) => c.name === ret.customer)}
                               />
                               {ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
                                 <PayReturnDueDialog ret={ret} onSave={refresh} />
