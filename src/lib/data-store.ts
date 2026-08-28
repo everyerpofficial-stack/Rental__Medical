@@ -2307,13 +2307,13 @@ export function getCustomerDueBalance(customerId: string, customerName?: string)
 
   const customerRentals = rentals.filter((r: any) =>
     (r.customerId && r.customerId === customerId) ||
-    (r.customer && customerName && r.customer.toLowerCase() === customerName.toLowerCase())
+    (!r.customerId && r.customer && customerName && r.customer.toLowerCase() === customerName.toLowerCase())
   );
   const customerAgrIds = new Set(customerRentals.map((r: any) => r.id));
 
   const customerReturns = returns.filter((ret: any) => 
     (ret.customerId && ret.customerId === customerId) || 
-    (ret.customer && customerName && ret.customer.toLowerCase() === customerName.toLowerCase()) ||
+    (!ret.customerId && ret.customer && customerName && ret.customer.toLowerCase() === customerName.toLowerCase()) ||
     (ret.agreement && customerAgrIds.has(ret.agreement))
   );
 
