@@ -43,6 +43,16 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
   }
 }
 
+function isInitialRentPaidHelper(r: any, paymentsList: any[]): boolean {
+  if (!r) return false;
+  if (r.rentalPaymentStatus === "Paid" || Number(r.rentPaidAmount || 0) > 0) return true;
+  const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
+  return payments.some(
+    (p: any) =>
+      p.paymentType === "Initial Rent" || String(p.notes || "").toLowerCase().includes("initial")
+  );
+}
+
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
   component: DuesPage,
@@ -2004,11 +2014,22 @@ function DuesPage() {
     const currentDue = Math.max(0, currentBilled - totalPaid);
     const nextDue = Math.max(0, nextBilled - totalPaid);
 
-    if (totalOutstanding <= 0 && nextDue <= 0) {
-      return `Paid upto ${nextCycleStr}`;
-    }
+    const initialPaid = isInitialRentPaidHelper(r, paymentsList);
+    const monthsPaid = totalMonthlyRent > 0 ? Math.floor(totalPaid / totalMonthlyRent) : 0;
 
-    return `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
+    if (initialPaid) {
+      if (nextDue <= 0) {
+        const paidUntilDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsPaid, startDate.getDate());
+        return `Paid upto ${formatShortDate(paidUntilDate)}`;
+      }
+      return `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
+    } else {
+      if (currentDue <= 0) {
+        const paidUntilDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsPaid, startDate.getDate());
+        return `Paid upto ${formatShortDate(paidUntilDate)}`;
+      }
+      return `${currentDue}/- due upto ${currentCycleStr}`;
+    }
   };
 
   const handleExportExcel = () => {
@@ -2247,7 +2268,7 @@ function DuesPage() {
             const durationMonths = rateVal > 0 ? Math.round(nextDue / rateVal) : 0;
             pendingDurationCell = `${durationMonths}m`;
             paymentDueStatusCell = `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
-            remainingDueCell = nextDue;
+            remainingDueCell = currentDue > 0 ? currentDue : nextDue;
           }
         } else {
           const currentBilled = m1 * rateVal;
