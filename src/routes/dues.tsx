@@ -1971,6 +1971,13 @@ function DuesPage() {
       return;
     }
 
+    // Sort by Rent Date in ASCENDING order (oldest on top, newest at bottom)
+    eligibleList.sort((a, b) => {
+      const dateA = parseLocalDate(a.start || (a as any).rentDate || (a as any).date).getTime() || 0;
+      const dateB = parseLocalDate(b.start || (b as any).rentDate || (b as any).date).getTime() || 0;
+      return dateA - dateB;
+    });
+
     const isInitialRentPaid = (r: any) => {
       if (!r) return false;
       if (r.rentalPaymentStatus === "Paid" || Number(r.rentPaidAmount || 0) > 0) return true;
@@ -2012,6 +2019,9 @@ function DuesPage() {
     let slNo = 1;
 
     eligibleList.forEach((item) => {
+      // Operator notes column should be empty for manual entry
+      const remarkText = "";
+
       if (item.isReturnDue) {
         const cust = customersList.find(
           (c: any) =>
@@ -2026,18 +2036,20 @@ function DuesPage() {
         const custName = item.customer || cust?.name || "Unknown";
         const custCell = uniquePhones ? `${custName}\n${uniquePhones}` : custName;
 
-        const eqText = item.equipment || "Equipment";
-        const rentDateFormatted = item.rentDate ? formatDateDDMMYYYY(item.rentDate) : formatDateDDMMYYYY(item.date);
-        const remarkText = item.returnObj?.notes || item.returnObj?.remarks || "";
+        const rawEq = item.equipment || "Equipment";
+        const eqText = rawEq.replace(/\s*-\s*.*$/i, "").trim();
+        const retDateRaw = item.date || item.rentDate || "";
+        const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
+        const returnDurationCell = retDateFormatted ? `Return on ${retDateFormatted}` : "Return Due";
 
         rows.push([
           slNo++,
           custCell,
           eqText,
-          rentDateFormatted,
+          retDateFormatted,
           item.rentRateText || "—",
           item.deposit || 0,
-          "Return Due",
+          returnDurationCell,
           `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
           item.totalOutstanding || 0,
           remarkText
@@ -2067,10 +2079,9 @@ function DuesPage() {
       ];
 
       const initialPaid = isInitialRentPaid(r);
-      const remarkText = r.notes || r.remarks || cust?.notes || "";
       const hasReturnedItem = eqItems.some((it: any) => it.returned);
 
-      // Note Point 4: Single line if all equipment items are ONGOING (none returned)
+      // Single line if all equipment items are ONGOING (none returned)
       if (!hasReturnedItem) {
         const eqLines: string[] = [];
         let combinedMonthlyRent = 0;
@@ -2079,10 +2090,8 @@ function DuesPage() {
 
         eqItems.forEach((ei: any) => {
           const eq = equipmentById.get(ei.equipmentId);
-          const name = ei.name || getEquipmentName(ei.equipmentId);
-          const model = ei.model || eq?.model || (eqItems.length === 1 ? r.model : undefined);
-          const eqLabel = model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
-          eqLines.push(eqLabel);
+          const eqName = ei.name || ei.equipment || getEquipmentName(ei.equipmentId) || eq?.name || "Equipment";
+          eqLines.push(eqName);
 
           const mRent = Number(ei.monthlyRent || ei.rentRate || 0);
           const dRent = Number(ei.dailyRent || 0);
@@ -2099,16 +2108,14 @@ function DuesPage() {
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        // Note Point 1 & 2: If initial rent paid, add 1 more month; if initial rent not paid, do not add extra month
         let totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
-        if (item.totalOutstanding <= 0) totalDue = 0;
+        if (item.totalOutstanding <= 0 && !initialPaid) totalDue = 0;
 
         let pendingDurationCell = "0m";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        // Note Point 3: Paid before generating statement -> duration 0m & due status 'Paid'
-        if (totalDue <= 0 || item.totalOutstanding <= 0) {
+        if (totalDue <= 0 || (item.totalOutstanding <= 0 && !initialPaid)) {
           pendingDurationCell = "0m";
           paymentDueStatusCell = "Paid";
           remainingDueCell = 0;
@@ -2133,12 +2140,10 @@ function DuesPage() {
           remarkText
         ]);
       } else {
-        // Note Point 5: Separate lines if partial returned
+        // Separate lines if partial returned
         eqItems.forEach((ei: any) => {
           const eq = equipmentById.get(ei.equipmentId);
-          const name = ei.name || getEquipmentName(ei.equipmentId);
-          const model = ei.model || eq?.model || (eqItems.length === 1 ? r.model : undefined);
-          const eqLabel = model && model.toLowerCase() !== name.toLowerCase() ? `${name} - ${model}` : name;
+          const eqName = ei.name || ei.equipment || getEquipmentName(ei.equipmentId) || eq?.name || "Equipment";
 
           const isMonthly = Number(ei.monthlyRent || ei.rentRate || 0) > 0;
           const rateVal = isMonthly ? Number(ei.monthlyRent || ei.rentRate || 0) : Number(ei.dailyRent || 0);
@@ -2148,14 +2153,18 @@ function DuesPage() {
 
           if (ei.returned) {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
+            let retDateRaw = ei.returnedDate || ei.returnDate || r.end;
+            const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
+            const returnDurationCell = retDateFormatted ? `Return on ${retDateFormatted}` : "Return Due";
+
             rows.push([
               slNo++,
               custCell,
-              eqLabel,
+              eqName,
               formatDateDDMMYYYY(itemStartDate),
               rateCell,
               depVal,
-              "Return Due",
+              returnDurationCell,
               `₹${outstanding.toLocaleString("en-IN")} (Final Settlement)`,
               outstanding || 0,
               remarkText
@@ -2163,13 +2172,13 @@ function DuesPage() {
           } else {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
             let totalDue = initialPaid ? outstanding + rateVal : outstanding;
-            if (outstanding <= 0) totalDue = 0;
+            if (outstanding <= 0 && !initialPaid) totalDue = 0;
 
             let pendingDurationCell = "0m";
             let paymentDueStatusCell = "Paid";
             let remainingDueCell: any = 0;
 
-            if (totalDue <= 0 || outstanding <= 0) {
+            if (totalDue <= 0 || (outstanding <= 0 && !initialPaid)) {
               pendingDurationCell = "0m";
               paymentDueStatusCell = "Paid";
               remainingDueCell = 0;
@@ -2184,7 +2193,7 @@ function DuesPage() {
             rows.push([
               slNo++,
               custCell,
-              eqLabel,
+              eqName,
               formatDateDDMMYYYY(itemStartDate),
               rateCell,
               depVal,
