@@ -2108,14 +2108,18 @@ function DuesPage() {
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        let totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
-        if (item.totalOutstanding <= 0 && !initialPaid) totalDue = 0;
+        let totalDue = 0;
+        if (item.totalOutstanding > 0) {
+          totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
+        } else {
+          totalDue = 0;
+        }
 
         let pendingDurationCell = "0m";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        if (totalDue <= 0 || (item.totalOutstanding <= 0 && !initialPaid)) {
+        if (totalDue <= 0) {
           pendingDurationCell = "0m";
           paymentDueStatusCell = "Paid";
           remainingDueCell = 0;
@@ -2171,14 +2175,18 @@ function DuesPage() {
             ]);
           } else {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-            let totalDue = initialPaid ? outstanding + rateVal : outstanding;
-            if (outstanding <= 0 && !initialPaid) totalDue = 0;
+            let totalDue = 0;
+            if (outstanding > 0) {
+              totalDue = initialPaid ? outstanding + rateVal : outstanding;
+            } else {
+              totalDue = 0;
+            }
 
             let pendingDurationCell = "0m";
             let paymentDueStatusCell = "Paid";
             let remainingDueCell: any = 0;
 
-            if (totalDue <= 0 || (outstanding <= 0 && !initialPaid)) {
+            if (totalDue <= 0) {
               pendingDurationCell = "0m";
               paymentDueStatusCell = "Paid";
               remainingDueCell = 0;
