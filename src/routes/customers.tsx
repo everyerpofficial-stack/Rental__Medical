@@ -785,7 +785,13 @@ const getDocDetails = (type: string) => {
   }
 };
 
-function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer | null; open: boolean; onClose: () => void }) {
+function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSave }: { customer: Customer | null; open: boolean; onClose: () => void; onSave?: () => void }) {
+  const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
+
+  useEffect(() => {
+    setCustomer(initialCustomer);
+  }, [initialCustomer]);
+
   if (!customer) return null;
   const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
   const rentals = getRentals();
@@ -856,7 +862,28 @@ function CustomerProfileDialog({ customer, open, onClose }: { customer: Customer
             </div>
             
             {/* Quick action buttons */}
-            <div className="flex gap-2 self-start sm:self-center">
+            <div className="flex gap-2 flex-wrap self-start sm:self-center">
+              {!isStaff && (
+                <CustomerFormDialog
+                  title="Edit Customer"
+                  customer={customer}
+                  onSave={() => {
+                    const updated = getCustomers().find((c) => c.id === customer.id);
+                    if (updated) setCustomer(updated);
+                    if (onSave) onSave();
+                  }}
+                  trigger={
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="h-8.5 rounded-lg text-[12px] gap-1.5 font-bold shadow-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      <Edit className="h-3.5 w-3.5" />
+                      Edit Customer
+                    </Button>
+                  }
+                />
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -2210,17 +2237,34 @@ function CustomersPage() {
                       {(() => {
                         const dueInfo = getCustomerDueBalance(c.id, c.name);
                         return (
-                          <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/40">
-                            <p className="text-[11px] font-medium">
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 gap-2">
+                            <p className="text-[11px] font-medium min-w-0 truncate">
                               Due Balance:{" "}
                               {dueInfo.totalDue > 0 ? (
-                                <strong className="text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")} (Pending)</strong>
+                                <strong className="text-rose-600">₹{dueInfo.totalDue.toLocaleString("en-IN")}</strong>
                               ) : (
-                                <span className="text-emerald-600 font-semibold">₹0 (Paid)</span>
+                                <span className="text-emerald-600 font-semibold">₹0</span>
                               )}
                             </p>
-                            <div onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <CustomerPayDueDialog customer={c} onSave={refresh} />
+                              {!isStaff && (
+                                <CustomerFormDialog
+                                  title="Edit Customer"
+                                  customer={c}
+                                  onSave={refresh}
+                                  trigger={
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-[11px] font-semibold gap-1 px-2.5 text-primary border-primary/30 hover:bg-primary/10 shadow-xs"
+                                      title="Edit Customer"
+                                    >
+                                      <Edit className="h-3 w-3" /> Edit
+                                    </Button>
+                                  }
+                                />
+                              )}
                             </div>
                           </div>
                         );
@@ -2256,6 +2300,7 @@ function CustomersPage() {
         customer={profileCustomer}
         open={profileOpen}
         onClose={() => setProfileOpen(false)}
+        onSave={refresh}
       />
     </AppShell>
   );
