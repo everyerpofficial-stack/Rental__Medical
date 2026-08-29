@@ -1963,8 +1963,9 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
     );
 
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const currentYear = todayDate.getFullYear();
+    const currentMonth = todayDate.getMonth();
 
     const maxDayThisMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const cycleDayThisMonth = Math.min(dayOfMonth, maxDayThisMonth);
@@ -1988,23 +1989,23 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
     const nextCycleStr = formatShortDate(nextCycleDate);
 
     if (totalOutstanding <= 0) {
-      const paidUntilDate = now <= currentCycleDate ? currentCycleDate : nextCycleDate;
+      const paidUntilDate = todayDate.getTime() <= currentCycleDate.getTime() ? currentCycleDate : nextCycleDate;
       return `Paid upto ${formatShortDate(paidUntilDate)}`;
     }
 
     if (totalMonthlyRent <= 0) {
-      return `₹${totalOutstanding.toLocaleString("en-IN")}/- due`;
+      return `${totalOutstanding}/- due`;
     }
 
     let currentDue = totalOutstanding;
     let nextDue = totalOutstanding + totalMonthlyRent;
 
-    if (now <= currentCycleDate) {
+    if (todayDate.getTime() <= currentCycleDate.getTime()) {
       nextDue = totalOutstanding;
       currentDue = Math.max(0, totalOutstanding - totalMonthlyRent);
     }
 
-    return `${nextDue.toLocaleString("en-IN")}/- due upto ${nextCycleStr} 'or'\n${currentDue.toLocaleString("en-IN")}/- due upto ${currentCycleStr}`;
+    return `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
   };
 
   const handleExportExcel = () => {
