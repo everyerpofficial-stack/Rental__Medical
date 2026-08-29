@@ -106,7 +106,7 @@ export interface Rental {
   [key: string]: unknown;
 }
 
-export async function sendWhatsAppCloudApiMessage(toPhone: string, textMessage: string) {
+export async function sendWhatsAppCloudApiMessage(toPhone: string, textMessage: string, templateName?: string) {
   const phoneId = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID || "1193201143885448";
   const token = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
   if (!token) throw new Error("WhatsApp Access Token is missing");
@@ -114,19 +114,31 @@ export async function sendWhatsAppCloudApiMessage(toPhone: string, textMessage: 
   const cleanPhone = String(toPhone).replace(/\D/g, "");
   const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-  const response = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+  const payload = templateName
+    ? {
+        messaging_product: "whatsapp",
+        to: targetPhone,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: "en_US" }
+        }
+      }
+    : {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: targetPhone,
+        type: "text",
+        text: { preview_url: false, body: textMessage },
+      };
+
+  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: targetPhone,
-      type: "text",
-      text: { preview_url: false, body: textMessage },
-    }),
+    body: JSON.stringify(payload),
   });
 
   const json = await response.json();
