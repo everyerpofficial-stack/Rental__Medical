@@ -1992,14 +1992,14 @@ function DuesPage() {
       return `${totalOutstanding}/- due`;
     }
 
-    const currentCycles = countCommencedCycles(r.start, currentCycleDate);
-    const nextCycles = currentCycles + 1;
+    const m1 = Math.max(0, (currentCycleDate.getFullYear() - startDate.getFullYear()) * 12 + (currentCycleDate.getMonth() - startDate.getMonth()));
+    const m2 = m1 + 1;
 
     const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
     const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) + Number(r.rentPaidAmount || 0);
 
-    const currentBilled = currentCycles * totalMonthlyRent;
-    const nextBilled = nextCycles * totalMonthlyRent;
+    const currentBilled = m1 * totalMonthlyRent;
+    const nextBilled = m2 * totalMonthlyRent;
 
     const currentDue = Math.max(0, currentBilled - totalPaid);
     const nextDue = Math.max(0, nextBilled - totalPaid);
