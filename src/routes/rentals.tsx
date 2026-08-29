@@ -106,6 +106,36 @@ export interface Rental {
   [key: string]: unknown;
 }
 
+export async function sendWhatsAppCloudApiMessage(toPhone: string, textMessage: string) {
+  const phoneId = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID || "1193201143885448";
+  const token = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
+  if (!token) throw new Error("WhatsApp Access Token is missing");
+
+  const cleanPhone = String(toPhone).replace(/\D/g, "");
+  const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+  const response = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: targetPhone,
+      type: "text",
+      text: { preview_url: false, body: textMessage },
+    }),
+  });
+
+  const json = await response.json();
+  if (!response.ok || json.error) {
+    throw new Error(json.error?.message || "WhatsApp Cloud API request failed");
+  }
+  return json;
+}
+
 export function sendWhatsAppDocument(rental: any, customersList: any[] = []) {
   if (!rental) return;
   const cust = customersList.find((c: any) => c.id === rental.customerId || c.name === rental.customer);
@@ -117,10 +147,6 @@ export function sendWhatsAppDocument(rental: any, customersList: any[] = []) {
   const rentDisplay = rental.rentRate || (rental.monthlyRent ? `₹${rental.monthlyRent.toLocaleString("en-IN")}/mo` : "—");
   const depositDisplay = `₹${(rental.deposit || 0).toLocaleString("en-IN")}`;
 
-  // ITEM-5 FIX: this template printed only `rental.equipment` (the category
-  // name) plus the legacy top-level serial, so the model never appeared and a
-  // multi-item agreement showed only one serial. Build the lines from the
-  // rental's real equipment items, each as `Name - Model (S/N: Serial)`.
   const equipmentLabels = getRentalEquipmentLabels(rental);
   const equipmentBlock = equipmentLabels.length > 0
     ? equipmentLabels.map((label) => `📦 *Equipment:* ${label}\n`).join("")
@@ -141,6 +167,14 @@ export function sendWhatsAppDocument(rental: any, customersList: any[] = []) {
 
   if (cleanPhone) {
     const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    
+    // Attempt sending via Meta Cloud API background call if token is configured
+    if (import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN) {
+      sendWhatsAppCloudApiMessage(targetPhone, message)
+        .then(() => toast.success(`Sent WhatsApp message via Cloud API to ${cust?.name || rental.customer}`))
+        .catch((err) => console.warn("WhatsApp Cloud API send notice:", err));
+    }
+    
     window.open(`https://wa.me/${targetPhone}?text=${textEncoded}`, "_blank");
     toast.success(`Opening WhatsApp to send document for ${rental.id} to ${cust?.name || rental.customer} (${rawPhone})`);
   } else {
