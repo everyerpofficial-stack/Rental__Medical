@@ -1502,17 +1502,34 @@ function DuesPage() {
       }
     }
 
+function countCommencedCycles(startDateStr: string, endDate: Date): number {
+  const start = parseLocalDate(startDateStr);
+  if (isNaN(start.getTime())) return 1;
+  if (endDate < start) return 0;
+
+  const startYear = start.getFullYear();
+  const startMonth = start.getMonth();
+  const startDay = start.getDate();
+
+  const endYear = endDate.getFullYear();
+  const endMonth = endDate.getMonth();
+  const endDay = endDate.getDate();
+
+  let monthDiff = (endYear - startYear) * 12 + (endMonth - startMonth);
+  if (endDay >= startDay) {
+    return monthDiff + 1;
+  } else {
+    return monthDiff;
+  }
+}
+
     if (isMonthly) {
-      const diffTime = Math.max(0, billingEndDate.getTime() - start.getTime());
-      const totalDaysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      // Monthly billing: calculate only complete months elapsed
-      const monthsElapsed = Math.floor(totalDaysElapsed / 30);
-      totalDue = monthsElapsed * monthlyRent;
+      const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
+      totalDue = cyclesCommenced * monthlyRent;
       
       outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidMonths = monthlyRent > 0 ? Math.round(outstanding / monthlyRent) : 0;
-      unpaidText = item?.returned ? (returnDueOutstanding > 0 ? "Return Due" : "—") : `${unpaidMonths}m`;
+      unpaidText = item?.returned ? (returnDueOutstanding > 0 ? "Return Due" : "—") : (outstanding <= 0 ? "0m" : `${unpaidMonths}m`);
       rateText = `₹${monthlyRent.toLocaleString("en-IN")}/mo`;
     } else {
       // Daily billing: calculate purely by days elapsed
@@ -2108,27 +2125,21 @@ function DuesPage() {
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        let totalDue = 0;
-        if (item.totalOutstanding > 0) {
-          totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
-        } else {
-          totalDue = 0;
-        }
-
+        const outstandingVal = item.totalOutstanding || 0;
         let pendingDurationCell = "0m";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        if (totalDue <= 0) {
+        if (outstandingVal <= 0) {
           pendingDurationCell = "0m";
           paymentDueStatusCell = "Paid";
           remainingDueCell = 0;
         } else {
-          const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
+          const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
           pendingDurationCell = `${durationMonths}m`;
-          const rawStatus = getPaymentDueStatus(r, item.totalOutstanding);
-          paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
-          remainingDueCell = totalDue;
+          const rawStatus = getPaymentDueStatus(r, outstandingVal);
+          paymentDueStatusCell = rawStatus || `${outstandingVal.toLocaleString("en-IN")}/- due`;
+          remainingDueCell = outstandingVal;
         }
 
         rows.push([
@@ -2175,27 +2186,21 @@ function DuesPage() {
             ]);
           } else {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-            let totalDue = 0;
-            if (outstanding > 0) {
-              totalDue = initialPaid ? outstanding + rateVal : outstanding;
-            } else {
-              totalDue = 0;
-            }
-
+            const outstandingVal = outstanding || 0;
             let pendingDurationCell = "0m";
             let paymentDueStatusCell = "Paid";
             let remainingDueCell: any = 0;
 
-            if (totalDue <= 0) {
+            if (outstandingVal <= 0) {
               pendingDurationCell = "0m";
               paymentDueStatusCell = "Paid";
               remainingDueCell = 0;
             } else {
-              const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
+              const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
               pendingDurationCell = `${durationMonths}m`;
-              const rawStatus = getPaymentDueStatus(r, outstanding);
-              paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
-              remainingDueCell = totalDue;
+              const rawStatus = getPaymentDueStatus(r, outstandingVal);
+              paymentDueStatusCell = rawStatus || `${outstandingVal.toLocaleString("en-IN")}/- due`;
+              remainingDueCell = outstandingVal;
             }
 
             rows.push([
