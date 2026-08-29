@@ -2072,180 +2072,38 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
     
     // Update rental equipment items array
     if (rental.equipmentItems && rental.equipmentItems.length > 0) {
-      const eqList = getEquipment();
-      
-      const returnedItems = rental.equipmentItems.filter((item: any) => returnedIds.includes(item.equipmentId));
-      const remainingItems = rental.equipmentItems.filter((item: any) => !returnedIds.includes(item.equipmentId) && !item.returned);
-
-      if (remainingItems.length > 0) {
-        // --- SPLIT AGREEMENT GENERATION ---
-        // 1. Generate new agreement ID
-        newAgreementId = getNextAgreementNumber();
-
-        // 2. Compute monthly rent and deposit split
-        const totalRentalMonthlyRent = rental.equipmentItems.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-        const remainingItemsRent = remainingItems.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-        const returnedItemsRent = returnedItems.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-        
-        const totalRentalDeposit = rental.equipmentItems.reduce((sum: number, it: any) => sum + cleanNum(it.deposit), 0);
-        const remainingItemsDeposit = remainingItems.reduce((sum: number, it: any) => sum + cleanNum(it.deposit), 0);
-        const returnedItemsDeposit = returnedItems.reduce((sum: number, it: any) => sum + cleanNum(it.deposit), 0);
-
-        // Apportion upfront paid amounts
-        const originalRentPaid = cleanNum(rental.rentPaidAmount);
-        const originalDepositPaid = cleanNum(rental.depositPaidAmount);
-
-        const remainingRentPaidShare = Math.round(originalRentPaid * (totalRentalMonthlyRent > 0 ? (remainingItemsRent / totalRentalMonthlyRent) : 1));
-        const returnedRentPaidShare = Math.max(0, originalRentPaid - remainingRentPaidShare);
-
-        const remainingDepositPaidShare = Math.round(originalDepositPaid * (totalRentalDeposit > 0 ? (remainingItemsDeposit / totalRentalDeposit) : 1));
-        const returnedDepositPaidShare = Math.max(0, originalDepositPaid - remainingDepositPaidShare);
-
-        // Partition additional items if specified
-        const returnedAddNames = (ret as any).returnedAdditionalItemNames as string[] | undefined;
-        let remainingAdditionalItems = rental.additionalItems;
-        let returnedAdditionalItems = rental.additionalItems;
-
-        if (Array.isArray(rental.additionalItems)) {
-          if (returnedAddNames && Array.isArray(returnedAddNames)) {
-            returnedAdditionalItems = rental.additionalItems.map((item: any) => {
-              if (returnedAddNames.includes(item.name)) {
-                return { ...item, status: "Paid" };
-              }
-              return item;
-            });
-
-            remainingAdditionalItems = rental.additionalItems.filter((item: any) => {
-              return !returnedAddNames.includes(item.name);
-            });
-          }
+      // Mark selected equipment items as returned
+      rental.equipmentItems = rental.equipmentItems.map((item: any) => {
+        if (returnedIds.includes(item.equipmentId)) {
+          return { ...item, returned: true, returnedDate: ret.date };
         }
+        return item;
+      });
 
-        // 3. Create the new agreement for remaining items
-        const newRental = {
-          ...rental,
-          id: newAgreementId,
-          equipmentId: remainingItems.map((item: any) => item.equipmentId).join(", "),
-          serial: remainingItems.map((item: any) => item.serial).join(", "),
-          equipment: remainingItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", "),
-          monthlyRent: remainingItemsRent,
-          deposit: remainingItemsDeposit,
-          equipmentItems: remainingItems.map((item: any) => ({ ...item, returned: false })),
-          additionalItems: remainingAdditionalItems || rental.additionalItems,
-          rentPaidAmount: remainingRentPaidShare,
-          depositPaidAmount: remainingDepositPaidShare,
-          status: rental.status === "Overdue" ? "Overdue" : "Active"
-        };
-        
-        // Push the new rental into rentalsList
-        rentalsList.unshift(newRental);
+      // Check if there are still active (unreturned) equipment items on this agreement
+      const hasActiveItems = rental.equipmentItems.some((item: any) => !item.returned);
 
-        // 4. Split payments:
-        const paymentsList = getPayments();
-        let paymentsChanged = false;
-        // Rows created by the apportionment, and existing rows it rewrote.
-        // Both sets need pushing to Sheets — see the write below.
-        const newApportionedPayments: any[] = [];
-        const changedPayments: any[] = [];
-
-        const updatedPaymentsList = paymentsList.map((p: any) => {
-          if (p.agreement !== rental.id) return p;
-          
-          if (p.equipmentId) {
-            if (remainingItems.some((item: any) => item.equipmentId === p.equipmentId)) {
-              paymentsChanged = true;
-              const reassigned = { ...p, agreement: newAgreementId };
-              changedPayments.push(reassigned);
-              return reassigned;
-            }
-            return p;
-          } else {
-            paymentsChanged = true;
-            const originalAmount = cleanNum(p.amount);
-            const remainingShare = Math.round(originalAmount * (totalRentalMonthlyRent > 0 ? (remainingItemsRent / totalRentalMonthlyRent) : 1));
-            const returnedShare = Math.max(0, originalAmount - remainingShare);
-            
-            if (remainingShare > 0) {
-              // Collected synchronously and merged into the single write below.
-              // This used to be written from a setTimeout(…, 0), which landed
-              // after the list write, was never pushed to Sheets, and was lost
-              // outright if the tab navigated inside that window.
-              newApportionedPayments.push({
-                ...p,
-                id: getNextPaymentNumber(),
-                agreement: newAgreementId,
-                amount: remainingShare,
-                notes: `${p.notes || ''} (Apportioned share for remaining items in agreement ${newAgreementId})`
-              });
-            }
-
-            const reapportioned = {
-              ...p,
-              amount: returnedShare,
-              notes: `${p.notes || ''} (Apportioned share for returned items in agreement ${rental.id})`
-            };
-            changedPayments.push(reapportioned);
-            return reapportioned;
-          }
-        });
-
-        if (paymentsChanged || newApportionedPayments.length > 0) {
-          // Go through setStorageItem, not a raw localStorage write: the raw
-          // write skipped the pending-sync registration, so the next pull from
-          // Sheets — which rebuilds each key as (remote + pending − tombstones)
-          // — deleted these rows outright. batchDatabaseWrites (wrapped around
-          // the whole of saveReturn) still collapses this into one
-          // medirent-db-updated event, which is what the raw write was for.
-          setStorageItem("medirent-payments", [...newApportionedPayments, ...updatedPaymentsList]);
-          if (isGSheetsEnabled()) {
-            [...newApportionedPayments, ...changedPayments].forEach((p) =>
-              syncRowToSheet(SHEETS.PAYMENTS, p as Record<string, unknown>)
-            );
-          }
-        }
-
-        // 5. Update the original agreement to contain ONLY the returned items
-        rental.equipmentItems = returnedItems.map((item: any) => ({ ...item, returned: true, returnedDate: ret.date }));
-        if (returnedAdditionalItems) {
-          rental.additionalItems = returnedAdditionalItems;
-        }
-        rental.equipmentId = returnedItems.map((item: any) => item.equipmentId).join(", ");
-        rental.serial = returnedItems.map((item: any) => item.serial).join(", ");
-        rental.equipment = returnedItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");
-        rental.monthlyRent = returnedItemsRent;
-        rental.deposit = returnedItemsDeposit;
-        rental.rentPaidAmount = returnedRentPaidShare;
-        rental.depositPaidAmount = returnedDepositPaidShare;
-        rental.status = "Completed";
-        rental.end = ret.date;
-
+      if (hasActiveItems) {
+        rental.status = rental.status === "Overdue" ? "Overdue" : "Active";
       } else {
-        // Normal case (all items returned). Keep equipmentId/serial/equipment/
-        // monthlyRent/deposit as-is — they're the historical record of what this
-        // completed agreement was for (shown on the customer's rental history,
-        // the Rentals list/export, and reports). Wiping them to "" / 0 here used
-        // to make that data vanish from every screen the moment a return was filed.
-        rental.equipmentItems = rental.equipmentItems.map((item: any) => {
-          if (returnedIds.includes(item.equipmentId)) {
-            return { ...item, returned: true };
-          }
-          return item;
-        });
         rental.status = "Completed";
         rental.end = ret.date;
       }
     } else {
-      // Fallback for legacy rentals (no equipmentItems array to fall back on —
-      // these top-level fields are the ONLY record of what was rented, so they
-      // must be preserved, not wiped).
+      // Fallback for legacy rentals
       rental.status = "Completed";
       rental.end = ret.date;
     }
 
-    // Mark any selected "Not Paid" additional items as "Paid" since they are now settled in this return
+    // Mark returned/settled additional items as "Paid"
     if (rental.additionalItems && Array.isArray(rental.additionalItems)) {
+      const returnedAddNames = (ret as any).returnedAdditionalItemNames as string[] | undefined;
       rental.additionalItems = rental.additionalItems.map((item: any) => {
-        if (item.selected && item.status === "Not Paid") {
+        if (returnedAddNames && returnedAddNames.length > 0) {
+          if (returnedAddNames.includes(item.name)) {
+            return { ...item, status: "Paid" };
+          }
+        } else if (item.selected && item.status === "Not Paid") {
           return { ...item, status: "Paid" };
         }
         return item;

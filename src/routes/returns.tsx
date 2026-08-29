@@ -1532,34 +1532,18 @@ function ReturnsPage() {
     const formattedPending = remainingPendingDue.toLocaleString("en-IN");
     const formattedRefund = Math.abs(netRefund).toLocaleString("en-IN");
 
-    if (saveResult && saveResult.newAgreementId) {
-      if (outstandingPayable > 0) {
-        if (actualPaidAmount >= outstandingPayable) {
-          toast.success(`Return processed! Received full payment of ₹${formattedPaid} via ${duePaymentMode}. Remaining items split into new agreement ${saveResult.newAgreementId}.`);
-        } else if (actualPaidAmount > 0) {
-          toast.success(`Return processed! Received partial payment of ₹${formattedPaid} (${duePaymentMode}). Remaining pending due of ₹${formattedPending} recorded in Rent Dues.`);
-        } else {
-          toast.warning(`Return processed! Unpaid due of ₹${formattedTotalDues} recorded in Rent Dues. Remaining items split into new agreement ${saveResult.newAgreementId}.`);
-        }
-      } else if (netRefund > 0) {
-        toast.success(`Return processed successfully! Refunded total amount: ₹${formattedRefund}. Remaining items split into new agreement ${saveResult.newAgreementId}.`);
+    if (outstandingPayable > 0) {
+      if (actualPaidAmount >= outstandingPayable) {
+        toast.success(`Return processed! Received full payment of ₹${formattedPaid} (${duePaymentMode}) for ${selectedRental?.customer || "customer"}.`);
+      } else if (actualPaidAmount > 0) {
+        toast.success(`Return processed! Received partial payment of ₹${formattedPaid} (${duePaymentMode}). Pending balance of ₹${formattedPending} recorded.`);
       } else {
-        toast.success(`Return processed successfully! Remaining items split into new agreement ${saveResult.newAgreementId}.`);
+        toast.warning(`Return processed! Unpaid due of ₹${formattedTotalDues} recorded as pending for ${selectedRental?.customer || "customer"}.`);
       }
+    } else if (netRefund > 0) {
+      toast.success(`Return processed successfully! Refunded total amount: ₹${formattedRefund} for ${selectedRental?.customer || "customer"}.`);
     } else {
-      if (outstandingPayable > 0) {
-        if (actualPaidAmount >= outstandingPayable) {
-          toast.success(`Return processed! Received full payment of ₹${formattedPaid} (${duePaymentMode}) for ${selectedRental?.customer || "customer"}.`);
-        } else if (actualPaidAmount > 0) {
-          toast.success(`Return processed! Received partial payment of ₹${formattedPaid} (${duePaymentMode}). Pending balance of ₹${formattedPending} recorded.`);
-        } else {
-          toast.warning(`Return processed! Unpaid due of ₹${formattedTotalDues} recorded as pending for ${selectedRental?.customer || "customer"}.`);
-        }
-      } else if (netRefund > 0) {
-        toast.success(`Return processed successfully! Refunded total amount: ₹${formattedRefund} for ${selectedRental?.customer || "customer"}.`);
-      } else {
-        toast.success(`Return processed successfully for ${selectedRental?.customer || "customer"}!`);
-      }
+      toast.success(`Return processed successfully for ${selectedRental?.customer || "customer"}!`);
     }
     setSubmitted(true);
     refresh();
