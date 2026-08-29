@@ -1826,7 +1826,7 @@ function ReturnsPage() {
                         </span>
                       </div>
                       <p className="text-[10.5px] text-muted-foreground leading-snug">
-                        Unselected accessories will remain attached to the remaining equipment on the new split agreement.
+                        Unselected accessories will remain attached to this agreement for the remaining equipment.
                       </p>
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
                         {allUnpaidAdditionalItems.map((item: any, idx: number) => {
