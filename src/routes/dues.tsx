@@ -2005,8 +2005,10 @@ function DuesPage() {
     const m1 = Math.max(0, (currentCycleDate.getFullYear() - startDate.getFullYear()) * 12 + (currentCycleDate.getMonth() - startDate.getMonth()));
     const m2 = m1 + 1;
 
-    const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
-    const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) + Number(r.rentPaidAmount || 0);
+    let totalPaid = 0;
+    eqItems.forEach((ei: any) => {
+      totalPaid += getPaidForEquipment(r, ei.equipmentId, paymentsList, false);
+    });
 
     const currentBilled = m1 * totalMonthlyRent;
     const nextBilled = m2 * totalMonthlyRent;
@@ -2065,15 +2067,7 @@ function DuesPage() {
       return dateA - dateB;
     });
 
-    const isInitialRentPaid = (r: any) => {
-      if (!r) return false;
-      if (r.rentalPaymentStatus === "Paid" || Number(r.rentPaidAmount || 0) > 0) return true;
-      const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
-      return payments.some(
-        (p: any) =>
-          p.paymentType === "Initial Rent" || String(p.notes || "").toLowerCase().includes("initial")
-      );
-    };
+    const isInitialRentPaid = (r: any) => isInitialRentPaidHelper(r, paymentsList);
 
     let periodText = "All Pending Dues";
     if (activeTab === "1-10") periodText = "1st to 10th";
@@ -2172,8 +2166,11 @@ function DuesPage() {
 
       const initialPaid = isInitialRentPaid(r);
       const hasReturnedItem = eqItems.some((it: any) => it.returned);
-      const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
-      const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) + Number(r.rentPaidAmount || 0);
+
+      let totalPaid = 0;
+      eqItems.forEach((ei: any) => {
+        totalPaid += getPaidForEquipment(r, ei.equipmentId, paymentsList, false);
+      });
 
       // Single line if all equipment items are ONGOING (none returned)
       if (!hasReturnedItem) {
@@ -2307,7 +2304,8 @@ function DuesPage() {
           const isMonthly = Number(ei.monthlyRent || ei.rentRate || 0) > 0;
           const rateVal = isMonthly ? Number(ei.monthlyRent || ei.rentRate || 0) : Number(ei.dailyRent || 0);
 
-          const monthsPaid = rateVal > 0 ? Math.floor(totalPaid / rateVal) : 0;
+          const itemTotalPaid = getPaidForEquipment(r, ei.equipmentId, paymentsList, false);
+          const monthsPaid = rateVal > 0 ? Math.floor(itemTotalPaid / rateVal) : 0;
           let initialStatusText = "";
           if (initialPaid && monthsPaid >= 2) {
             const extraMonths = monthsPaid - 1;
