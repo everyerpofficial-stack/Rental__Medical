@@ -1874,9 +1874,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   };
 
     return (
-    <div className="space-y-4 animate-[fade-in_0.3s_ease-out]">
+    <div className="space-y-4 animate-[fade-in_0.3s_ease-out] w-full max-w-full min-w-0 overflow-x-hidden">
       {/* Header Bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-border bg-gradient-to-r from-muted/30 via-background to-muted/20 px-4 py-3 rounded-xl border">
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 pb-3 border-b border-border bg-gradient-to-r from-muted/30 via-background to-muted/20 px-4 py-3 rounded-xl border w-full max-w-full">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0 border border-primary/20">
             <PenTool className="h-5 w-5" />
@@ -1891,9 +1891,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         </Button>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 mt-4 items-start relative">
+      <div className="flex flex-col lg:flex-row gap-6 mt-4 items-start relative w-full max-w-full min-w-0">
         {/* Left Column: Scrollable Form */}
-        <div className="flex-1 space-y-4">
+        <div className="flex-1 space-y-4 w-full max-w-full min-w-0">
             {hasDraft && (
               <div className="flex items-center justify-between bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg text-xs font-semibold mb-2">
                 <span>We found a saved draft. Would you like to restore your progress?</span>
@@ -2108,7 +2108,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       options={customerOptions}
                     />
                     {selectedCustomer && (
-                      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3">
+                      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3 min-w-0 max-w-full overflow-hidden">
                         <ReadOnlyField label="Full Name" value={selectedCustomer.name} />
                         <ReadOnlyField label="Primary Number" value={selectedCustomer.phone} />
                         <ReadOnlyField label="Alternative Phone" value={selectedCustomer.altPhone || "—"} />
@@ -2212,13 +2212,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
 
               {/* Equipment Items Header & Add button */}
-              <div className="sm:col-span-2 flex items-center justify-between border-b border-border pb-1.5 mt-2">
+              <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-1.5 mt-2 gap-2 w-full max-w-full">
                 <div className="flex flex-col">
                   <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
                     Equipment Items Selection
                   </Label>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <EquipmentFormDialog
                     title="Register New Equipment"
                     trigger={
@@ -2297,7 +2297,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   );
 
                   return (
-                    <div key={idx} className="grid gap-3 sm:grid-cols-6 items-end p-3 rounded-lg border border-border bg-card/50 relative group">
+                    <div key={idx} className="grid gap-3 sm:grid-cols-6 items-end p-3 rounded-lg border border-border bg-card/50 relative group min-w-0 max-w-full overflow-hidden">
                       {selectedEquipments.length > 1 && (
                         <Button
                           variant="ghost"
@@ -2514,15 +2514,15 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         if (!eqItem.equipmentId && !serialVal && !modelVal && !ownerVal) return null;
 
                         return (
-                          <div className="sm:col-span-6 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[11.5px] bg-primary/5 border border-primary/15 rounded-lg px-3.5 py-2 mt-0.5 font-medium animate-[fade-in_0.2s_ease-out]">
-                            <span className="text-foreground">
-                              <span className="text-muted-foreground font-semibold">Model Number:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{modelVal || "—"}</span>
+                          <div className="sm:col-span-6 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] bg-primary/5 border border-primary/15 rounded-lg px-3.5 py-2 mt-0.5 font-medium animate-[fade-in_0.2s_ease-out] w-full max-w-full overflow-hidden">
+                            <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
+                              <span className="text-muted-foreground font-semibold shrink-0">Model Number:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px] break-all">{modelVal || "—"}</span>
                             </span>
-                            <span className="text-foreground">
-                              <span className="text-muted-foreground font-semibold">S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px]">{serialVal || "—"}</code>
+                            <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
+                              <span className="text-muted-foreground font-semibold shrink-0">S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px] break-all">{serialVal || "—"}</code>
                             </span>
-                            <span className="text-foreground">
-                              <span className="text-muted-foreground font-semibold">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px]">{ownerVal || "—"}</span>
+                            <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
+                              <span className="text-muted-foreground font-semibold shrink-0">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px] break-all">{ownerVal || "—"}</span>
                             </span>
                           </div>
                         );
@@ -2533,12 +2533,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
 
               {/* Predefined Additional Amount Checklist */}
-              <div className="sm:col-span-2 space-y-3 rounded-xl border border-border/60 bg-muted/5 p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1.5 border-b border-border/50 gap-2">
+              <div className="sm:col-span-2 space-y-3 rounded-xl border border-border/60 bg-muted/5 p-4 min-w-0 max-w-full overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-1.5 border-b border-border/50 gap-2 w-full max-w-full">
                   <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
                     Additional Amount Items Checklist
                   </Label>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
@@ -3178,7 +3178,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           </div>
 
           {/* Right Column: Sticky Summary & Actions */}
-          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-h-0 lg:sticky lg:top-4 lg:self-start">
+          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-w-0 max-w-full overflow-hidden lg:sticky lg:top-4 lg:self-start">
             {/* ITEM-11: pin the breakdown to the top of the summary column. The
                 column scrolls independently (lg:overflow-y-auto), so once the
                 agreement had a few accessories the Total Collected row slid out
@@ -5726,9 +5726,9 @@ function Field({ label, placeholder, type = "text", className, defaultValue }: {
 
 function ReadOnlyField({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className={`space-y-1 ${className ?? ""}`}>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-[13px] font-medium text-foreground">{value}</p>
+    <div className={`space-y-1 min-w-0 max-w-full overflow-hidden ${className ?? ""}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">{label}</p>
+      <p className="text-[13px] font-medium text-foreground break-words overflow-wrap-anywhere">{value}</p>
     </div>
   );
 }
