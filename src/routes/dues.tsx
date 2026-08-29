@@ -2265,7 +2265,7 @@ function DuesPage() {
             const durationMonths = rateVal > 0 ? Math.round(nextDue / rateVal) : 0;
             pendingDurationCell = `${durationMonths}m`;
             paymentDueStatusCell = `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
-            remainingDueCell = currentDue > 0 ? currentDue : nextDue;
+            remainingDueCell = nextDue;
           }
         } else {
           const currentBilled = m1 * rateVal;
