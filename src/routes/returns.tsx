@@ -307,19 +307,19 @@ function generateWhatsAppPickupMessage(params: {
     }
 
     if (foundModel) {
-      line3 = foundModel;
+      line3 = `${foundModel} will Return`;
     } else if (modelStr && modelStr.toLowerCase() !== "standard" && modelStr !== serialStr) {
-      line3 = modelStr;
+      line3 = `${modelStr} will Return`;
     } else if (foundName) {
-      line3 = foundName;
+      line3 = `${foundName} will Return`;
     } else if (eqStr && eqStr !== serialStr) {
-      line3 = eqStr;
+      line3 = `${eqStr} will Return`;
     } else {
-      line3 = "Medical Equipment";
+      line3 = "Medical Equipment will Return";
     }
   }
 
-  // Line 4: "Return at Area Name"
+  // Line 4: "At Area Name"
   const areaStr = params.area != null ? String(params.area).trim() : "";
   const addrStr = params.address != null ? String(params.address).trim() : "";
 
@@ -333,7 +333,8 @@ function generateWhatsAppPickupMessage(params: {
     }
   }
   const rawArea = displayArea || "Customer Location";
-  const line4 = rawArea.toLowerCase().startsWith("return at") ? rawArea : `Return at ${rawArea}`;
+  const cleanArea = rawArea.replace(/^(return\s+at|at)\s+/i, "").trim();
+  const line4 = `At ${cleanArea}`;
 
   // Line 5: Map location link (extracted from latitude/longitude, locationAddress, address, or tagged documents)
   const mapLink = extractMapLink(params.locationAddress, params.address, params.latitude, params.longitude, params.rental, params.customer);
