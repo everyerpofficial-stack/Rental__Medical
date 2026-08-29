@@ -2453,12 +2453,15 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                           placeholder="Select equipment"
                           searchPlaceholder="Search equipment by series number, name, owner..."
                           emptyText="No equipment found."
-                          options={itemsForSelect.map((e) => ({
-                            value: e.id,
-                            label: formatEquipmentLabel({ name: e.name || e.category, serial: e.serial, model: e.model }),
-                            selectedLabel: e.name || e.category,
-                            searchTerms: `${e.serial || ""} ${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.owner || ""}`,
-                          }))}
+                          options={itemsForSelect.map((e) => {
+                            const fullLabel = formatEquipmentLabel({ name: e.name || e.category, model: e.model, serial: e.serial });
+                            return {
+                              value: e.id,
+                              label: fullLabel,
+                              selectedLabel: fullLabel,
+                              searchTerms: `${e.name || ""} ${e.category || ""} ${e.model || ""} ${e.serial || ""} ${e.owner || ""}`,
+                            };
+                          })}
                           className="h-9"
                         />
                       </div>
