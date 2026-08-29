@@ -62,6 +62,14 @@ function unauthorized() {
 // ─── GET handler ────────────────────────────────────────────────────────────
 
 function doGet(e) {
+  // Meta WhatsApp Cloud API Webhook Verification handler
+  if (e && e.parameter && e.parameter["hub.mode"] === "subscribe") {
+    if (e.parameter["hub.verify_token"] === TOKEN) {
+      return ContentService.createTextOutput(e.parameter["hub.challenge"]);
+    }
+    return unauthorized();
+  }
+
   if (e.parameter.token !== TOKEN) return unauthorized();
 
   const action = e.parameter.action;

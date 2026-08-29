@@ -5647,6 +5647,19 @@ function RentalsPage() {
                       >
                         <FileText className="h-3 w-3 mr-1" /> PDF
                       </Button>
+                      {!isStaff && r.status !== "Cancelled" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] px-2.5 text-blue-600 border-blue-200 bg-blue-50/50 hover:bg-blue-50"
+                          onClick={() => {
+                            setEditingRental(r);
+                            setActiveView("edit");
+                          }}
+                        >
+                          <Edit className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                      )}
                       {!isStaff && r.status === "Pending Approval" && (
                         <Button
                           variant="outline"
