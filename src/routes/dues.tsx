@@ -2128,7 +2128,6 @@ function DuesPage() {
         ]);
         return;
       }
-
       const r = item.rental;
       const cust = customersList.find((c: any) => c.id === r.customerId);
 
@@ -2151,8 +2150,9 @@ function DuesPage() {
       ];
 
       const initialPaid = isInitialRentPaid(r);
-      const initialPaidTag = initialPaid ? "(initial rent paid)" : "(initial rent not paid)";
       const hasReturnedItem = eqItems.some((it: any) => it.returned);
+      const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
+      const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) + Number(r.rentPaidAmount || 0);
 
       // Single line if all equipment items are ONGOING (none returned)
       if (!hasReturnedItem) {
@@ -2177,26 +2177,93 @@ function DuesPage() {
 
         const isMonthlyCombined = combinedMonthlyRent > 0;
         const rateVal = isMonthlyCombined ? combinedMonthlyRent : combinedDailyRent;
-        const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}\n${initialPaidTag}`;
+
+        const monthsPaid = rateVal > 0 ? Math.floor(totalPaid / rateVal) : 0;
+
+        let initialStatusText = "";
+        if (initialPaid && monthsPaid >= 2) {
+          const extraMonths = monthsPaid - 1;
+          const word = extraMonths === 1 ? "one month" : `${extraMonths} month`;
+          initialStatusText = `(initial rent paid)\nthen ${word} rent also paid`;
+        } else if (initialPaid) {
+          initialStatusText = "(initial rent paid)";
+        } else if (!initialPaid && monthsPaid >= 1) {
+          const word = monthsPaid === 1 ? "one month" : `${monthsPaid} month`;
+          initialStatusText = `(initial rent not paid)\nthen ${word} rent paid`;
+        } else {
+          initialStatusText = "(initial rent not paid)";
+        }
+
+        const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}\n${initialStatusText}`;
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        const outstandingVal = item.totalOutstanding || 0;
-        let pendingDurationCell = "0m";
+        const startDate = parseLocalDate(r.start);
+        const dayOfMonth = startDate.getDate();
+        const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const currentYear = todayDate.getFullYear();
+        const currentMonth = todayDate.getMonth();
+
+        const maxDayThisMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const cycleDayThisMonth = Math.min(dayOfMonth, maxDayThisMonth);
+        const currentCycleDate = new Date(currentYear, currentMonth, cycleDayThisMonth);
+
+        const nextMonth = currentMonth + 1;
+        const nextMonthYear = nextMonth > 11 ? currentYear + 1 : currentYear;
+        const nextMonthNormalized = nextMonth % 12;
+        const maxDayNextMonth = new Date(nextMonthYear, nextMonthNormalized + 1, 0).getDate();
+        const cycleDayNextMonth = Math.min(dayOfMonth, maxDayNextMonth);
+        const nextCycleDate = new Date(nextMonthYear, nextMonthNormalized, cycleDayNextMonth);
+
+        const formatDateDDMMYY = (d: Date) => {
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = String(d.getFullYear()).slice(-2);
+          return `${dd}-${mm}-${yy}`;
+        };
+
+        const currentCycleStr = formatDateDDMMYY(currentCycleDate);
+        const nextCycleStr = formatDateDDMMYY(nextCycleDate);
+
+        const m1 = Math.max(0, (currentCycleDate.getFullYear() - startDate.getFullYear()) * 12 + (currentCycleDate.getMonth() - startDate.getMonth()));
+        const m2 = m1 + 1;
+
+        let pendingDurationCell = "0";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        const statusStr = getPaymentDueStatus(r, outstandingVal);
+        if (initialPaid) {
+          const nextBilled = m2 * rateVal;
+          const currentBilled = m1 * rateVal;
+          const nextDue = Math.max(0, nextBilled - totalPaid);
+          const currentDue = Math.max(0, currentBilled - totalPaid);
 
-        if (outstandingVal <= 0) {
-          pendingDurationCell = "0m";
-          paymentDueStatusCell = statusStr || "Paid";
-          remainingDueCell = 0;
+          if (totalPaid >= nextBilled) {
+            pendingDurationCell = "0";
+            const paidUntilDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsPaid, startDate.getDate());
+            paymentDueStatusCell = `Paid upto ${formatDateDDMMYY(paidUntilDate)}`;
+            remainingDueCell = 0;
+          } else {
+            const durationMonths = rateVal > 0 ? Math.round(nextDue / rateVal) : 0;
+            pendingDurationCell = `${durationMonths}m`;
+            paymentDueStatusCell = `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
+            remainingDueCell = nextDue;
+          }
         } else {
-          const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
-          pendingDurationCell = `${durationMonths}m`;
-          paymentDueStatusCell = statusStr || `${outstandingVal.toLocaleString("en-IN")}/- due`;
-          remainingDueCell = outstandingVal;
+          const currentBilled = m1 * rateVal;
+          const currentDue = Math.max(0, currentBilled - totalPaid);
+
+          if (totalPaid >= currentBilled) {
+            pendingDurationCell = "0";
+            const paidUntilDate = new Date(startDate.getFullYear(), startDate.getMonth() + monthsPaid, startDate.getDate());
+            paymentDueStatusCell = `Paid upto ${formatDateDDMMYY(paidUntilDate)}`;
+            remainingDueCell = 0;
+          } else {
+            const durationMonths = rateVal > 0 ? Math.round(currentDue / rateVal) : 0;
+            pendingDurationCell = `${durationMonths}m`;
+            paymentDueStatusCell = `${currentDue}/- due upto ${currentCycleStr}`;
+            remainingDueCell = currentDue;
+          }
         }
 
         rows.push([
@@ -2216,10 +2283,24 @@ function DuesPage() {
         eqItems.forEach((ei: any) => {
           const eq = equipmentById.get(ei.equipmentId);
           const eqName = ei.name || ei.equipment || getEquipmentName(ei.equipmentId) || eq?.name || "Equipment";
-
           const isMonthly = Number(ei.monthlyRent || ei.rentRate || 0) > 0;
           const rateVal = isMonthly ? Number(ei.monthlyRent || ei.rentRate || 0) : Number(ei.dailyRent || 0);
-          const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}\n${initialPaidTag}`;
+
+          const monthsPaid = rateVal > 0 ? Math.floor(totalPaid / rateVal) : 0;
+          let initialStatusText = "";
+          if (initialPaid && monthsPaid >= 2) {
+            const extraMonths = monthsPaid - 1;
+            const word = extraMonths === 1 ? "one month" : `${extraMonths} month`;
+            initialStatusText = `(initial rent paid)\nthen ${word} rent also paid`;
+          } else if (initialPaid) {
+            initialStatusText = "(initial rent paid)";
+          } else if (!initialPaid && monthsPaid >= 1) {
+            const word = monthsPaid === 1 ? "one month" : `${monthsPaid} month`;
+            initialStatusText = `(initial rent not paid)\nthen ${word} rent paid`;
+          } else {
+            initialStatusText = "(initial rent not paid)";
+          }
+          const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}\n${initialStatusText}`;
           const depVal = Number(ei.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
           const itemStartDate = ei.startDate || r.start;
 
