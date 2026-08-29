@@ -21,7 +21,7 @@ import {
   Plus, Search, Download, FileText, Mail, CalendarDays, MessageCircle,
   MoreHorizontal, Edit, Trash2, XCircle, FileCheck2, Clock, AlertTriangle,
   ShieldCheck, Fingerprint, PenTool, Camera, FileUp, CheckCircle2, MapPin,
-  X, QrCode, Phone, Info, Eye
+  X, QrCode, Phone, Info, Eye, User
 } from "lucide-react";
 import {
   getRentals,
@@ -1082,7 +1082,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         return {
           value: c.id,
           label: parts.join(" | "),
-          searchTerms: `${c.phone || ""} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
+          selectedLabel: `${c.name} (${primary || c.id})`,
+          searchTerms: `${c.name} ${c.id} ${c.phone || ""} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
         };
       }),
     [customersList]
@@ -1971,15 +1972,15 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
 
               {/* Customer Selection or Creation */}
-              <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 mb-2">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-border/60 bg-muted/20 p-3 mb-2 min-w-0 max-w-full">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2 w-full">
+                  <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground shrink-0">
                     {isNewCustomer ? "New Customer Details" : "Customer Selection"}
                   </Label>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 text-[11px] text-primary hover:bg-primary/10 px-2"
+                    className="h-7 text-[11px] text-primary hover:bg-primary/10 px-2 shrink-0 font-semibold"
                     onClick={(e) => { e.preventDefault(); setIsNewCustomer(!isNewCustomer); }}
                   >
                     {isNewCustomer ? "Choose Existing Customer" : "+ Add New Customer"}
@@ -2154,26 +2155,73 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       options={customerOptions}
                     />
                     {selectedCustomer && (
-                      <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 rounded-lg border border-border/50 bg-background/50 p-4 mt-3 min-w-0 max-w-full overflow-hidden">
-                        <ReadOnlyField label="Full Name" value={selectedCustomer.name} />
-                        <ReadOnlyField label="Primary Number" value={selectedCustomer.phone} />
-                        <ReadOnlyField label="Alternative Phone" value={selectedCustomer.altPhone || "—"} />
-                        <ReadOnlyField label="Alternative Phone 1" value={selectedCustomer.contactNumber3 || "—"} />
-                        <ReadOnlyField label="Email" value={selectedCustomer.email || "—"} />
-                        <ReadOnlyField label="Aadhaar Number" value={selectedCustomer.aadhaar || "—"} />
-                        <ReadOnlyField label="PAN Number" value={selectedCustomer.pan || "—"} />
-                        <ReadOnlyField label="Address" value={selectedCustomer.address} />
-                        <ReadOnlyField label="Area" value={selectedCustomer.area || "—"} />
-                        <ReadOnlyField label="City" value={selectedCustomer.city} />
-                        <ReadOnlyField label="State" value={selectedCustomer.state} />
-                        <ReadOnlyField label="Pincode" value={selectedCustomer.pincode} />
-                        <ReadOnlyField label="Notes" value={selectedCustomer.notes || "—"} className="sm:col-span-2" />
+                      <div className="rounded-xl border border-border/60 bg-card p-3 sm:p-4 mt-3 space-y-3 min-w-0 max-w-full overflow-hidden shadow-xs">
+                        {/* Header Banner */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border/50">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-[12px] shrink-0 border border-primary/20">
+                              <User className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-[13px] font-bold text-foreground truncate">{selectedCustomer.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">ID: {selectedCustomer.id}</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shrink-0">
+                            Selected Customer
+                          </span>
+                        </div>
 
-                        {/* Uploaded KYC documents already on file for this
-                            customer. Previously only the Documents page showed
-                            these, so editing an agreement looked as if nothing
-                            had ever been uploaded. */}
-                        <div className="sm:col-span-2 space-y-1.5 border-t border-border/50 pt-3">
+                        {/* Details Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-[11.5px]">
+                          <div className="bg-muted/30 p-2 rounded-lg border border-border/40 min-w-0">
+                            <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Primary Phone</span>
+                            <span className="font-semibold font-mono text-foreground">{selectedCustomer.phone || "—"}</span>
+                          </div>
+                          {(selectedCustomer.altPhone || selectedCustomer.contactNumber3) && (
+                            <div className="bg-muted/30 p-2 rounded-lg border border-border/40 min-w-0">
+                              <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Alt Phone(s)</span>
+                              <span className="font-semibold font-mono text-foreground">
+                                {[selectedCustomer.altPhone, selectedCustomer.contactNumber3].filter(Boolean).join(", ") || "—"}
+                              </span>
+                            </div>
+                          )}
+                          {selectedCustomer.email && (
+                            <div className="bg-muted/30 p-2 rounded-lg border border-border/40 min-w-0">
+                              <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Email</span>
+                              <span className="font-medium text-foreground truncate block">{selectedCustomer.email}</span>
+                            </div>
+                          )}
+                          {(selectedCustomer.aadhaar || selectedCustomer.pan) && (
+                            <div className="bg-muted/30 p-2 rounded-lg border border-border/40 min-w-0">
+                              <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">ID Proof Numbers</span>
+                              <span className="font-semibold font-mono text-foreground text-[11px]">
+                                {selectedCustomer.aadhaar ? `Aadhaar: ${selectedCustomer.aadhaar}` : ""}
+                                {selectedCustomer.aadhaar && selectedCustomer.pan ? " • " : ""}
+                                {selectedCustomer.pan ? `PAN: ${selectedCustomer.pan}` : ""}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Address */}
+                        <div className="bg-muted/20 p-2.5 rounded-lg border border-border/50 space-y-0.5">
+                          <span className="text-[9.5px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-primary shrink-0" /> Delivery Address
+                          </span>
+                          <p className="text-[12px] font-medium text-foreground leading-snug">
+                            {[selectedCustomer.address, selectedCustomer.area, selectedCustomer.city, selectedCustomer.state, selectedCustomer.pincode].filter(Boolean).join(", ") || "—"}
+                          </p>
+                        </div>
+
+                        {selectedCustomer.notes && (
+                          <div className="text-[11px] text-muted-foreground bg-amber-500/5 border border-amber-500/20 p-2 rounded-lg">
+                            <strong className="text-amber-700 dark:text-amber-500">Notes:</strong> {selectedCustomer.notes}
+                          </div>
+                        )}
+
+                        {/* Uploaded KYC Documents */}
+                        <div className="space-y-1.5 border-t border-border/50 pt-3">
                           <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between gap-2">
                             <span className="flex items-center gap-1.5">
                               <FileCheck2 className="h-3.5 w-3.5 text-primary" /> Uploaded KYC Documents
@@ -2258,13 +2306,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
 
               {/* Equipment Items Header & Add button */}
-              <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-1.5 mt-2 gap-2 w-full max-w-full">
+              <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-2 mt-2 gap-2.5 w-full max-w-full">
                 <div className="flex flex-col">
                   <Label className="text-[11.5px] font-bold uppercase tracking-wider text-foreground">
                     Equipment Items Selection
                   </Label>
                 </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full sm:w-auto">
                   <EquipmentFormDialog
                     title="Register New Equipment"
                     trigger={
@@ -2272,9 +2320,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         variant="outline"
                         size="sm"
                         type="button"
-                        className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                        className="h-8 text-[11px] font-semibold text-primary border-primary/20 hover:bg-primary/5 px-2.5 w-full sm:w-auto justify-center"
                       >
-                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Register New Equipment
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Register New
                       </Button>
                     }
                     onSave={(newEq) => {
@@ -2309,7 +2357,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     variant="outline"
                     size="sm"
                     type="button"
-                    className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                    className="h-8 text-[11px] font-semibold text-primary border-primary/20 hover:bg-primary/5 px-2.5 w-full sm:w-auto justify-center"
                     onClick={(e) => {
                       e.preventDefault();
                       const updated = [...selectedEquipments, { equipmentId: "", serial: "", rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" }];
@@ -2323,7 +2371,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     variant="outline"
                     size="sm"
                     type="button"
-                    className="h-7 text-[11px] text-primary border-primary/20 hover:bg-primary/5 px-2"
+                    className="col-span-2 sm:col-span-1 h-8 text-[11px] font-semibold text-primary border-primary/20 hover:bg-primary/5 px-2.5 w-full sm:w-auto justify-center"
                     onClick={(e) => {
                       e.preventDefault();
                       setIsBulkScannerOpen(true);
@@ -2673,8 +2721,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             <span className="font-medium text-foreground text-[13px] flex-1 min-w-0 truncate">{item.name}</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 pl-9">
-                          <div className="flex-1 min-w-0">
+                        <div className="grid grid-cols-2 gap-2 mt-1">
+                          <div className="min-w-0">
                             <span className="text-[10px] uppercase tracking-wide font-bold text-muted-foreground mb-1 block">Cost (₹)</span>
                             <Input
                               type="number"
@@ -2686,10 +2734,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                 setAdditionalItems(newItems);
                                 updateCalculatedCharges(newItems, item.name);
                               }}
-                              className="h-9 text-[12.5px] p-2 bg-background disabled:opacity-50 disabled:bg-muted/30"
+                              className="h-9 text-[12.5px] p-2 bg-background disabled:opacity-50 disabled:bg-muted/30 w-full"
                             />
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0">
                             <span className="text-[10px] uppercase tracking-wide font-bold text-muted-foreground mb-1 block">Status</span>
                             <Select
                               disabled={!item.selected}
@@ -2701,7 +2749,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                 updateCalculatedCharges(newItems, item.name);
                               }}
                             >
-                              <SelectTrigger className="h-9 text-[12px] bg-background disabled:opacity-50 disabled:bg-muted/30">
+                              <SelectTrigger className="h-9 text-[12px] bg-background disabled:opacity-50 disabled:bg-muted/30 w-full px-2">
                                 <SelectValue placeholder="Status" />
                               </SelectTrigger>
                               <SelectContent>
@@ -2950,7 +2998,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   <ShieldCheck className="h-4 w-4 text-primary" />
                   <h4 className="text-[13px] font-semibold text-foreground">Security & Verification</h4>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="space-y-1.5">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
                       <Fingerprint className="h-3.5 w-3.5" /> Thumbprint Scan
@@ -3089,7 +3137,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       }
                     />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 col-span-2 sm:col-span-1">
                     <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1 h-8">
                       <MapPin className="h-3.5 w-3.5" /> Location Tag
                     </Label>
@@ -3398,13 +3446,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               <Button variant="outline" type="button" className="w-full justify-start" onClick={() => toast.success(`Agreement emailed successfully to customer.`)}><Mail className="mr-1.5 h-3.5 w-3.5" />Email Agreement</Button>
               
               <div className="flex gap-2 w-full mt-2">
-                                <Button variant="outline" type="button" className="flex-1" onClick={onClose}>Cancel</Button>
+                <Button variant="outline" type="button" className="flex-1" onClick={onClose}>Cancel</Button>
                 {!isStaff && rental && rental.status === "Pending Approval" && (
                   <Button 
                     type="button" 
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] px-2" 
                     onClick={() => {
-                                            approveRental(rental.id);
+                      approveRental(rental.id);
                       toast.success(`Agreement ${rental.id} approved successfully!`);
                       setOpen(false);
                       if (onClose) onClose();
@@ -3415,9 +3463,37 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     Approve
                   </Button>
                 )}
-                <Button type="button" className="flex-1" onClick={handleSave} disabled={isSubmitting}><FileText className="mr-1.5 h-3.5 w-3.5" />Save</Button>
+                <Button type="button" className="flex-1 font-bold bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleSave} disabled={isSubmitting}>
+                  <FileText className="mr-1.5 h-3.5 w-3.5" />
+                  {isSubmitting ? "Saving..." : (rental ? "Update Agreement" : "Save Agreement")}
+                </Button>
               </div>
-                        </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Mobile Fixed/Sticky Bottom Action Bar */}
+        <div className="block lg:hidden sticky bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur border-t border-border p-3 shadow-xl -mx-4 -mb-4 mt-6">
+          <div className="flex items-center justify-between gap-3 max-w-full">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Upfront</span>
+              <span className="text-[15px] font-bold text-primary font-display truncate">₹{totalUpfrontPaid.toLocaleString("en-IN")}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="outline" size="sm" type="button" className="h-9 text-xs px-2.5" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 text-xs font-bold px-3.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                onClick={handleSave}
+                disabled={isSubmitting}
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" />
+                {isSubmitting ? "Saving..." : (rental ? "Update Agreement" : "Save Agreement")}
+              </Button>
+            </div>
           </div>
         </div>
 
