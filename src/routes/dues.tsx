@@ -22,6 +22,27 @@ import {
 } from "lucide-react";
 import { getRentals, getCustomers, getPayments, savePayment, saveRental, saveReturn, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
 
+function countCommencedCycles(startDateStr: string, endDate: Date): number {
+  const start = parseLocalDate(startDateStr);
+  if (isNaN(start.getTime())) return 1;
+  if (endDate < start) return 0;
+
+  const startYear = start.getFullYear();
+  const startMonth = start.getMonth();
+  const startDay = start.getDate();
+
+  const endYear = endDate.getFullYear();
+  const endMonth = endDate.getMonth();
+  const endDay = endDate.getDate();
+
+  let monthDiff = (endYear - startYear) * 12 + (endMonth - startMonth);
+  if (endDay >= startDay) {
+    return monthDiff + 1;
+  } else {
+    return monthDiff;
+  }
+}
+
 export const Route = createFileRoute("/dues")({
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
   component: DuesPage,
@@ -1542,27 +1563,6 @@ function DuesPage() {
       }
     }
 
-function countCommencedCycles(startDateStr: string, endDate: Date): number {
-  const start = parseLocalDate(startDateStr);
-  if (isNaN(start.getTime())) return 1;
-  if (endDate < start) return 0;
-
-  const startYear = start.getFullYear();
-  const startMonth = start.getMonth();
-  const startDay = start.getDate();
-
-  const endYear = endDate.getFullYear();
-  const endMonth = endDate.getMonth();
-  const endDay = endDate.getDate();
-
-  let monthDiff = (endYear - startYear) * 12 + (endMonth - startMonth);
-  if (endDay >= startDay) {
-    return monthDiff + 1;
-  } else {
-    return monthDiff;
-  }
-}
-
     if (isMonthly) {
       const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
       totalDue = cyclesCommenced * monthlyRent;
@@ -1988,21 +1988,24 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
     const currentCycleStr = formatShortDate(currentCycleDate);
     const nextCycleStr = formatShortDate(nextCycleDate);
 
-    if (totalOutstanding <= 0) {
-      const paidUntilDate = todayDate.getTime() <= currentCycleDate.getTime() ? currentCycleDate : nextCycleDate;
-      return `Paid upto ${formatShortDate(paidUntilDate)}`;
-    }
-
     if (totalMonthlyRent <= 0) {
       return `${totalOutstanding}/- due`;
     }
 
-    let currentDue = totalOutstanding;
-    let nextDue = totalOutstanding + totalMonthlyRent;
+    const currentCycles = countCommencedCycles(r.start, currentCycleDate);
+    const nextCycles = currentCycles + 1;
 
-    if (todayDate.getTime() <= currentCycleDate.getTime()) {
-      nextDue = totalOutstanding;
-      currentDue = Math.max(0, totalOutstanding - totalMonthlyRent);
+    const payments = paymentsList.filter((p: any) => p.agreementId === r.id);
+    const totalPaid = payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0) + Number(r.rentPaidAmount || 0);
+
+    const currentBilled = currentCycles * totalMonthlyRent;
+    const nextBilled = nextCycles * totalMonthlyRent;
+
+    const currentDue = Math.max(0, currentBilled - totalPaid);
+    const nextDue = Math.max(0, nextBilled - totalPaid);
+
+    if (totalOutstanding <= 0 && nextDue <= 0) {
+      return `Paid upto ${nextCycleStr}`;
     }
 
     return `${nextDue}/- due upto ${nextCycleStr} 'or'\n${currentDue}/- due upto ${currentCycleStr}`;
@@ -2148,6 +2151,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
       ];
 
       const initialPaid = isInitialRentPaid(r);
+      const initialPaidTag = initialPaid ? "(initial rent paid)" : "(initial rent not paid)";
       const hasReturnedItem = eqItems.some((it: any) => it.returned);
 
       // Single line if all equipment items are ONGOING (none returned)
@@ -2163,7 +2167,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
           eqLines.push(eqName);
 
           const mRent = Number(ei.monthlyRent || ei.rentRate || 0);
-          const dRent = Number(ei.dailyRent || 0);
+          const dRent = Number(ei.dailyRent) || 0;
           combinedMonthlyRent += mRent;
           combinedDailyRent += dRent;
           combinedDeposit += Number(ei.deposit || 0);
@@ -2173,7 +2177,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
 
         const isMonthlyCombined = combinedMonthlyRent > 0;
         const rateVal = isMonthlyCombined ? combinedMonthlyRent : combinedDailyRent;
-        const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}`;
+        const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}\n${initialPaidTag}`;
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
@@ -2215,7 +2219,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
 
           const isMonthly = Number(ei.monthlyRent || ei.rentRate || 0) > 0;
           const rateVal = isMonthly ? Number(ei.monthlyRent || ei.rentRate || 0) : Number(ei.dailyRent || 0);
-          const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}`;
+          const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}\n${initialPaidTag}`;
           const depVal = Number(ei.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
           const itemStartDate = ei.startDate || r.start;
 
