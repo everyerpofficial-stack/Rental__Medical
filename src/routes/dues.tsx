@@ -1940,9 +1940,9 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
   ];
 
   const getPaymentDueStatus = (r: any, totalOutstanding: number) => {
-    if (!r?.start) return "";
+    if (!r?.start) return "Paid";
     const startDate = parseLocalDate(r.start);
-    if (isNaN(startDate.getTime())) return "";
+    if (isNaN(startDate.getTime())) return "Paid";
 
     const dayOfMonth = startDate.getDate();
     const eqItems = r.equipmentItems || [
@@ -1961,10 +1961,6 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
       (sum: number, it: any) => sum + (Number(it.monthlyRent || it.rentRate) || 0),
       0
     );
-
-    if (totalMonthlyRent <= 0) {
-      return `₹${totalOutstanding.toLocaleString("en-IN")}/- due`;
-    }
 
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -1991,10 +1987,19 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
     const currentCycleStr = formatShortDate(currentCycleDate);
     const nextCycleStr = formatShortDate(nextCycleDate);
 
+    if (totalOutstanding <= 0) {
+      const paidUntilDate = now <= currentCycleDate ? currentCycleDate : nextCycleDate;
+      return `Paid upto ${formatShortDate(paidUntilDate)}`;
+    }
+
+    if (totalMonthlyRent <= 0) {
+      return `₹${totalOutstanding.toLocaleString("en-IN")}/- due`;
+    }
+
     let currentDue = totalOutstanding;
     let nextDue = totalOutstanding + totalMonthlyRent;
 
-    if (now < currentCycleDate) {
+    if (now <= currentCycleDate) {
       nextDue = totalOutstanding;
       currentDue = Math.max(0, totalOutstanding - totalMonthlyRent);
     }
@@ -2095,7 +2100,13 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
 
         const rawEq = item.equipment || "Equipment";
         const eqText = rawEq.replace(/\s*-\s*.*$/i, "").trim();
-        const retDateRaw = item.date || item.rentDate || "";
+
+        // Rent Date column must show the original Rent Start Date!
+        const rentStartDateRaw = item.start || (item as any).rental?.start || item.rentDate || "";
+        const rentDateFormatted = rentStartDateRaw ? formatDateDDMMYYYY(rentStartDateRaw) : "";
+
+        // Pending Duration column shows Return on DD-MM-YYYY
+        const retDateRaw = item.date || item.returnObj?.date || item.rentDate || "";
         const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
         const returnDurationCell = retDateFormatted ? `Return on ${retDateFormatted}` : "Return Due";
 
@@ -2103,7 +2114,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
           slNo++,
           custCell,
           eqText,
-          retDateFormatted,
+          rentDateFormatted,
           item.rentRateText || "—",
           item.deposit || 0,
           returnDurationCell,
@@ -2165,23 +2176,22 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        let totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
-        if (item.totalOutstanding <= 0 && !initialPaid) totalDue = 0;
-
+        const outstandingVal = item.totalOutstanding || 0;
         let pendingDurationCell = "0m";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        if (totalDue <= 0 || (item.totalOutstanding <= 0 && !initialPaid)) {
+        const statusStr = getPaymentDueStatus(r, outstandingVal);
+
+        if (outstandingVal <= 0) {
           pendingDurationCell = "0m";
-          paymentDueStatusCell = "Paid";
+          paymentDueStatusCell = statusStr || "Paid";
           remainingDueCell = 0;
         } else {
-          const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
+          const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
           pendingDurationCell = `${durationMonths}m`;
-          const rawStatus = getPaymentDueStatus(r, item.totalOutstanding);
-          paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
-          remainingDueCell = totalDue;
+          paymentDueStatusCell = statusStr || `${outstandingVal.toLocaleString("en-IN")}/- due`;
+          remainingDueCell = outstandingVal;
         }
 
         rows.push([
@@ -2228,23 +2238,21 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
             ]);
           } else {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-            let totalDue = initialPaid ? outstanding + rateVal : outstanding;
-            if (outstanding <= 0 && !initialPaid) totalDue = 0;
-
+            const outstandingVal = outstanding || 0;
             let pendingDurationCell = "0m";
             let paymentDueStatusCell = "Paid";
             let remainingDueCell: any = 0;
 
-            if (totalDue <= 0 || (outstanding <= 0 && !initialPaid)) {
+            if (outstandingVal <= 0) {
               pendingDurationCell = "0m";
               paymentDueStatusCell = "Paid";
               remainingDueCell = 0;
             } else {
-              const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
+              const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
               pendingDurationCell = `${durationMonths}m`;
-              const rawStatus = getPaymentDueStatus(r, outstanding);
-              paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
-              remainingDueCell = totalDue;
+              const rawStatus = getPaymentDueStatus(r, outstandingVal);
+              paymentDueStatusCell = rawStatus || `${outstandingVal.toLocaleString("en-IN")}/- due`;
+              remainingDueCell = outstandingVal;
             }
 
             rows.push([
