@@ -2101,18 +2101,27 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
         const remainingDepositPaidShare = Math.round(originalDepositPaid * (totalRentalDeposit > 0 ? (remainingItemsDeposit / totalRentalDeposit) : 1));
         const returnedDepositPaidShare = Math.max(0, originalDepositPaid - remainingDepositPaidShare);
 
-        // 3. Create the new agreement for remaining items
-        const isAccessorySettled = (ret as any).settleUnpaidAccessories !== false;
+        // Partition additional items if specified
+        const returnedAddNames = (ret as any).returnedAdditionalItemNames as string[] | undefined;
+        let remainingAdditionalItems = rental.additionalItems;
+        let returnedAdditionalItems = rental.additionalItems;
 
-        const remainingAdditionalItems = (rental.additionalItems || []).map((item: any) => {
-          if (item.selected && item.status === "Not Paid") {
-            if (isAccessorySettled) {
-              return { ...item, status: "Paid" };
-            }
+        if (Array.isArray(rental.additionalItems)) {
+          if (returnedAddNames && Array.isArray(returnedAddNames)) {
+            returnedAdditionalItems = rental.additionalItems.map((item: any) => {
+              if (returnedAddNames.includes(item.name)) {
+                return { ...item, status: "Paid" };
+              }
+              return item;
+            });
+
+            remainingAdditionalItems = rental.additionalItems.filter((item: any) => {
+              return !returnedAddNames.includes(item.name);
+            });
           }
-          return item;
-        });
+        }
 
+        // 3. Create the new agreement for remaining items
         const newRental = {
           ...rental,
           id: newAgreementId,
@@ -2122,9 +2131,9 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
           monthlyRent: remainingItemsRent,
           deposit: remainingItemsDeposit,
           equipmentItems: remainingItems.map((item: any) => ({ ...item, returned: false })),
+          additionalItems: remainingAdditionalItems || rental.additionalItems,
           rentPaidAmount: remainingRentPaidShare,
           depositPaidAmount: remainingDepositPaidShare,
-          additionalItems: remainingAdditionalItems,
           status: rental.status === "Overdue" ? "Overdue" : "Active"
         };
         
@@ -2197,6 +2206,9 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
 
         // 5. Update the original agreement to contain ONLY the returned items
         rental.equipmentItems = returnedItems.map((item: any) => ({ ...item, returned: true, returnedDate: ret.date }));
+        if (returnedAdditionalItems) {
+          rental.additionalItems = returnedAdditionalItems;
+        }
         rental.equipmentId = returnedItems.map((item: any) => item.equipmentId).join(", ");
         rental.serial = returnedItems.map((item: any) => item.serial).join(", ");
         rental.equipment = returnedItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");
@@ -2204,13 +2216,6 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
         rental.deposit = returnedItemsDeposit;
         rental.rentPaidAmount = returnedRentPaidShare;
         rental.depositPaidAmount = returnedDepositPaidShare;
-        if (isAccessorySettled) {
-          rental.additionalItems = (rental.additionalItems || []).map((item: any) => (
-            item.selected && item.status === "Not Paid" ? { ...item, status: "Paid" } : item
-          ));
-        } else {
-          rental.additionalItems = (rental.additionalItems || []).filter((item: any) => item.status === "Paid");
-        }
         rental.status = "Completed";
         rental.end = ret.date;
 
@@ -2226,9 +2231,6 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
           }
           return item;
         });
-        rental.additionalItems = (rental.additionalItems || []).map((item: any) => (
-          item.selected && item.status === "Not Paid" ? { ...item, status: "Paid" } : item
-        ));
         rental.status = "Completed";
         rental.end = ret.date;
       }
@@ -2236,9 +2238,6 @@ function saveReturnInner(ret: typeof initialReturns[number] & { returnedEquipmen
       // Fallback for legacy rentals (no equipmentItems array to fall back on —
       // these top-level fields are the ONLY record of what was rented, so they
       // must be preserved, not wiped).
-      rental.additionalItems = (rental.additionalItems || []).map((item: any) => (
-        item.selected && item.status === "Not Paid" ? { ...item, status: "Paid" } : item
-      ));
       rental.status = "Completed";
       rental.end = ret.date;
     }

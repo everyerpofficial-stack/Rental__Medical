@@ -853,7 +853,7 @@ function ReturnsPage() {
   
   // Track selected equipment items for return
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
-  const [settleUnpaidAccessories, setSettleUnpaidAccessories] = useState<boolean>(true);
+  const [selectedAdditionalItemNames, setSelectedAdditionalItemNames] = useState<string[]>([]);
   const [discount, setDiscount] = useState("0");
   const [duePaymentStatus, setDuePaymentStatus] = useState<"Paid" | "Partial" | "Not Paid">("Paid");
   const [duePaymentMode, setDuePaymentMode] = useState<string>("Cash");
@@ -1192,6 +1192,14 @@ function ReturnsPage() {
           scanned && activeIds.includes(scanned) ? [scanned] : activeIds
         );
         scannedEquipmentRef.current = null;
+
+        // Initialize unpaid additional items selection
+        const unpaidNames = selectedRental.additionalItems
+          ? (selectedRental.additionalItems as any[])
+              .filter((item: any) => item.selected && item.status === "Not Paid")
+              .map((item: any) => item.name)
+          : [];
+        setSelectedAdditionalItemNames(unpaidNames);
       } else {
         setReturnDate("");
         setFinalRent("");
@@ -1199,6 +1207,7 @@ function ReturnsPage() {
         setPendingBalance("");
         setTotalPaidAmount("");
         setSelectedEquipmentIds([]);
+        setSelectedAdditionalItemNames([]);
         setCollectedBy("");
         setDuePaymentStatus("Paid");
         setDuePaymentMode("Cash");
@@ -1266,9 +1275,6 @@ function ReturnsPage() {
   }, [selectedRental, returnDate, selectedEquipmentIds, dbVersion]);
 
   const returningItems = rentalEquipments.filter((item: any) => selectedEquipmentIds.includes(item.equipmentId) && !item.returned);
-  const unreturnedItems = rentalEquipments.filter((item: any) => !item.returned);
-  const isPartialReturn = selectedRental && unreturnedItems.length > 1 && returningItems.length < unreturnedItems.length;
-
   const returnedNames = returningItems
     .map((item: any) => getEquipment().find((e) => e.id === item.equipmentId)?.name || item.equipmentId)
     .join(", ") || selectedRental?.equipment || "Unknown Equipment";
@@ -1295,16 +1301,23 @@ function ReturnsPage() {
   const pend = cleanNum(pendingBalance);
   const fRent = cleanNum(finalRent);
 
-  const unpaidItems = selectedRental && selectedRental.additionalItems 
+  const activeUnreturnedEquipments = rentalEquipments.filter((item: any) => !item.returned);
+  const isPartialEquipmentReturn = activeUnreturnedEquipments.length > 1 && selectedEquipmentIds.length < activeUnreturnedEquipments.length;
+
+  const allUnpaidAdditionalItems = selectedRental && selectedRental.additionalItems 
     ? (selectedRental.additionalItems as any[]).filter(
         (item) => item.selected && item.status === "Not Paid"
       )
     : [];
-  const rawUnpaidAccessoryTotal = unpaidItems.reduce(
+
+  const unpaidItems = isPartialEquipmentReturn
+    ? allUnpaidAdditionalItems.filter((item) => selectedAdditionalItemNames.includes(item.name))
+    : allUnpaidAdditionalItems;
+
+  const unpaidAccessoryTotal = unpaidItems.reduce(
     (sum: number, item: any) => sum + (Number(item.amount) || 0),
     0
   );
-  const unpaidAccessoryTotal = (settleUnpaidAccessories || !isPartialReturn) ? rawUnpaidAccessoryTotal : 0;
 
   const paidAmt = cleanNum(totalPaidAmount);
 
@@ -1426,8 +1439,8 @@ function ReturnsPage() {
       refund: netRefund,
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
+      returnedAdditionalItemNames: unpaidItems.map((item: any) => item.name),
       unpaidAccessoryTotal: unpaidAccessoryTotal,
-      settleUnpaidAccessories: settleUnpaidAccessories || !isPartialReturn,
       collectedBy: collectedBy,
       duePaymentStatus: outstandingPayable > 0 ? (actualPaidAmount >= outstandingPayable ? "Paid" : actualPaidAmount > 0 ? "Partial" : "Not Paid") : "Paid",
       duePaymentMode: outstandingPayable > 0 && actualPaidAmount > 0 ? duePaymentMode : undefined,
@@ -1585,8 +1598,8 @@ function ReturnsPage() {
       refund: netRefund,
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
+      returnedAdditionalItemNames: unpaidItems.map((item: any) => item.name),
       unpaidAccessoryTotal: unpaidAccessoryTotal,
-      settleUnpaidAccessories: settleUnpaidAccessories || !isPartialReturn,
       collectedBy: collectedBy,
     };
     printReturnReceipt(tempReturn);
@@ -1817,6 +1830,59 @@ function ReturnsPage() {
                     </div>
                   </div>
 
+                  {/* Select Additional Items / Accessories Checklist (Shown on Partial Equipment Return) */}
+                  {isPartialEquipmentReturn && allUnpaidAdditionalItems.length > 0 && (
+                    <div className="space-y-2 border border-amber-500/30 bg-amber-500/5 p-3 rounded-xl animate-[fade-in_0.2s_ease-out]">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <Label className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-500 flex items-center gap-1.5">
+                          <Package className="h-3.5 w-3.5" /> Select Accessories / Additional Items Being Returned Now
+                        </Label>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                          {unpaidItems.length} of {allUnpaidAdditionalItems.length} Selected
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-muted-foreground leading-snug">
+                        Unselected accessories will remain attached to the remaining equipment on the new split agreement.
+                      </p>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                        {allUnpaidAdditionalItems.map((item: any, idx: number) => {
+                          const isChecked = selectedAdditionalItemNames.includes(item.name);
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (isChecked) {
+                                  setSelectedAdditionalItemNames(selectedAdditionalItemNames.filter((n) => n !== item.name));
+                                } else {
+                                  setSelectedAdditionalItemNames([...selectedAdditionalItemNames, item.name]);
+                                }
+                              }}
+                              className={`flex items-center justify-between p-2.5 rounded-lg border text-[11px] font-semibold cursor-pointer transition-all ${
+                                isChecked
+                                  ? "bg-background border-amber-500/50 shadow-soft ring-1 ring-amber-500/20"
+                                  : "bg-background/60 border-border opacity-70 hover:opacity-100 hover:border-amber-500/30"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-all ${
+                                    isChecked
+                                      ? "bg-amber-600 border-amber-600 text-white"
+                                      : "border-border bg-background"
+                                  }`}
+                                >
+                                  {isChecked && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                                </div>
+                                <span className="truncate text-foreground">{item.name}</span>
+                              </div>
+                              <span className="font-mono text-rose-600 shrink-0 ml-1">₹{cleanNum(item.amount)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Adjustment Controls */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
@@ -1931,37 +1997,19 @@ function ReturnsPage() {
 
                       {/* Unpaid Accessories */}
                       <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
-                        <div className="h-6 sm:h-7 flex items-center justify-between gap-1">
-                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight truncate">Unpaid Accessories</Label>
-                          {unpaidItems.length > 0 && isPartialReturn && (
-                            <label className="flex items-center gap-1 cursor-pointer text-[9px] text-primary font-bold shrink-0" title="Uncheck to defer accessories to remaining equipment">
-                              <input
-                                type="checkbox"
-                                checked={settleUnpaidAccessories}
-                                onChange={(e) => setSettleUnpaidAccessories(e.target.checked)}
-                                className="h-3 w-3 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
-                              />
-                              <span>Settle Now</span>
-                            </label>
-                          )}
+                        <div className="h-6 sm:h-7 flex items-center">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
                         </div>
                         <div className="h-8 sm:h-8.5 flex items-center px-2 bg-muted/30 rounded-md border border-border/50 overflow-hidden">
                           {unpaidItems.length > 0 ? (
-                            settleUnpaidAccessories || !isPartialReturn ? (
-                              <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
-                                {unpaidItems.map((item: any, idx: number) => (
-                                  <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
-                                    <span className="truncate max-w-[60px] sm:max-w-[70px]">{item.name}</span>
-                                    <span>₹{cleanNum(item.amount)}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="w-full flex flex-col text-[9px] leading-tight">
-                                <span className="font-bold text-amber-700 dark:text-amber-400 truncate">₹0 (Deferred)</span>
-                                <span className="text-[8px] text-muted-foreground truncate">Return with next item</span>
-                              </div>
-                            )
+                            <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
+                              {unpaidItems.map((item: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
+                                  <span className="truncate max-w-[60px] sm:max-w-[70px]">{item.name}</span>
+                                  <span>₹{cleanNum(item.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
                           ) : (
                             <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">₹0</span>
                           )}
