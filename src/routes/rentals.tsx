@@ -1076,13 +1076,16 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       customersList.map((c: any) => {
         const primary = String(c.phone || "").trim();
         const alt = String(c.altPhone || "").trim();
+        const contact3 = String(c.contactNumber3 || "").trim();
         const parts = [c.name];
         if (primary) parts.push(`Ph: ${primary}`);
         if (alt) parts.push(`Alt: ${alt}`);
+        if (contact3) parts.push(`Alt 2: ${contact3}`);
+        const fullLabel = parts.join(" | ");
         return {
           value: c.id,
-          label: parts.join(" | "),
-          selectedLabel: `${c.name} (${primary || c.id})`,
+          label: fullLabel,
+          selectedLabel: fullLabel,
           searchTerms: `${c.name} ${c.id} ${c.phone || ""} ${c.altPhone || ""} ${c.contactNumber3 || ""} ${c.area || ""}`,
         };
       }),
@@ -1166,9 +1169,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
     const result: string[] = [];
 
-    // 1. Oxygen Concentrator 5LP & 10LPM -> Humidifier bottle, Oxygen Nasal Cannula
+    // 1. Oxygen Concentrator 5LP & 10LPM -> Humidifier bottle only
     if (matches(["5lp", "5l", "10lpm", "10l", "concentrator", "oxygen"])) {
-      result.push("Humidifier Bottle", "Oxygen Nasal Cannula");
+      result.push("Humidifier Bottle");
     }
     // 2. Bipap Machine & Auto CPAP Machine -> Bipap Mask, Bipap Hose Pipe
     if (matches(["bipap", "cpap", "auto cpap", "bi-pap", "c-pap"])) {
@@ -3275,12 +3278,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           </div>
 
           {/* Right Column: Sticky Summary & Actions */}
-          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-w-0 max-w-full overflow-hidden lg:sticky lg:top-4 lg:self-start">
-            {/* ITEM-11: pin the breakdown to the top of the summary column. The
-                column scrolls independently (lg:overflow-y-auto), so once the
-                agreement had a few accessories the Total Collected row slid out
-                of view exactly when the operator needed to check it. */}
-            <div className="rounded-xl border border-border/60 bg-muted/10 overflow-hidden lg:sticky lg:top-4 lg:z-10 lg:bg-card shadow-sm">
+          <div className="w-full lg:w-[340px] shrink-0 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 gap-4 min-w-0 max-w-full lg:sticky lg:top-20 lg:self-start">
+            {/* ITEM-11: pin the breakdown to the top of the summary column. */}
+            <div className="rounded-xl border border-border/60 bg-muted/10 lg:bg-card shadow-sm">
               <div className="px-4 py-2.5 border-b border-border/50 bg-muted/20">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Upfront Charges — Itemized Breakdown</span>
               </div>

@@ -110,7 +110,7 @@ export function Combobox({
         align="start"
         side="bottom"
         sideOffset={4}
-        style={{ width: popoverWidth || "var(--radix-popover-trigger-width)", minWidth: "min(100%, 520px)", maxWidth: "calc(100vw - 16px)" }}
+        style={{ width: popoverWidth || "auto", minWidth: "max(var(--radix-popover-trigger-width), 520px)", maxWidth: "calc(100vw - 24px)" }}
       >
         <Command className="w-full" shouldFilter={false}>
           <CommandInput 
@@ -135,7 +135,7 @@ export function Combobox({
                   title={option.label}
                   className="flex items-center justify-between text-[12.5px] px-2.5 py-2 cursor-pointer rounded-md hover:bg-accent hover:text-accent-foreground data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground transition-colors"
                 >
-                  <span className="flex-1 pr-2 break-words text-left leading-snug">{option.label}</span>
+                  <span className="flex-1 pr-2 whitespace-nowrap truncate text-left leading-snug">{option.label}</span>
                   <Check
                     className={cn(
                       "h-4 w-4 shrink-0 opacity-70 ml-1",
