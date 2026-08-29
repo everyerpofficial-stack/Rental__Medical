@@ -714,18 +714,58 @@ function PayDialog({
                       const isChecked = !isReturned && selectedEqIds.includes(item.equipmentId);
 
                       // Find last payment details for this equipment (sorted latest first)
+                      const cleanAgrId = (val: any) => String(val || "").trim().toUpperCase().replace(/^AGR-/i, "");
+                      const rAgrId = cleanAgrId(rental.id || rental.agreementNumber || rental.agreementId);
+
                       const itemPrevPayments = (paymentsList || []).filter((p: any) => {
-                        if (p.agreement !== rental.id || p.status === "Cancelled" || p.status === "Void") return false;
+                        const pAgrId = cleanAgrId(p.agreement || p.agreementId || p.rentalId);
+                        if (!pAgrId || pAgrId !== rAgrId) return false;
+                        if (p.status === "Cancelled" || p.status === "Void") return false;
+                        
                         if (eqItems.length === 1) return true;
-                        return !p.equipmentId || p.equipmentId === item.equipmentId || (p.notes && String(p.notes).toLowerCase().includes(String(item.serial || item.equipmentId).toLowerCase()));
+                        
+                        if (!p.equipmentId) {
+                          if (p.notes && eqItems.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()))) {
+                            return item.serial && String(p.notes).toLowerCase().includes(String(item.serial).toLowerCase());
+                          }
+                          return true;
+                        }
+                        
+                        const eqIds = String(p.equipmentId).split(",").map(s => s.trim().toLowerCase());
+                        const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
+                        const targetSerial = String(item.serial || "").trim().toLowerCase();
+                        
+                        if (eqIds.includes(targetEqId)) return true;
+                        if (targetSerial && eqIds.includes(targetSerial)) return true;
+                        
+                        if (p.notes) {
+                          const notesLower = String(p.notes).toLowerCase();
+                          if (targetSerial && notesLower.includes(targetSerial)) return true;
+                          if (targetEqId && notesLower.includes(targetEqId)) return true;
+                        }
+                        
+                        return false;
                       });
+
                       const sortedPrevPayments = [...itemPrevPayments].sort((a: any, b: any) => {
                         const tA = new Date(a.date).getTime() || 0;
                         const tB = new Date(b.date).getTime() || 0;
                         if (tB !== tA) return tB - tA;
                         return String(b.id || "").localeCompare(String(a.id || ""), undefined, { numeric: true });
                       });
-                      const lastPayment = sortedPrevPayments.length > 0 ? sortedPrevPayments[0] : null;
+
+                      let lastPayment = sortedPrevPayments.length > 0 ? sortedPrevPayments[0] : null;
+
+                      if (!lastPayment && (rental.rentalPaymentStatus === "Paid" || rental.rentalPaymentStatus === "Partial" || cleanNum(rental.rentPaidAmount) > 0)) {
+                        const initAmt = cleanNum(rental.rentPaidAmount) || cleanNum(rental.monthlyRent);
+                        if (initAmt > 0) {
+                          lastPayment = {
+                            amount: initAmt,
+                            date: rental.start || rental.createdAt || rental.date,
+                            mode: rental.paymentMode || rental.rentPaymentMode || "Advance",
+                          };
+                        }
+                      }
 
                       return (
                         <div
@@ -1900,7 +1940,7 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
   ];
 
   const getPaymentDueStatus = (r: any, totalOutstanding: number) => {
-    if (!r?.start || totalOutstanding <= 0) return "";
+    if (!r?.start) return "";
     const startDate = parseLocalDate(r.start);
     if (isNaN(startDate.getTime())) return "";
 
@@ -2125,21 +2165,23 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
-        const outstandingVal = item.totalOutstanding || 0;
+        let totalDue = initialPaid ? item.totalOutstanding + rateVal : item.totalOutstanding;
+        if (item.totalOutstanding <= 0 && !initialPaid) totalDue = 0;
+
         let pendingDurationCell = "0m";
         let paymentDueStatusCell = "Paid";
         let remainingDueCell: any = 0;
 
-        if (outstandingVal <= 0) {
+        if (totalDue <= 0 || (item.totalOutstanding <= 0 && !initialPaid)) {
           pendingDurationCell = "0m";
           paymentDueStatusCell = "Paid";
           remainingDueCell = 0;
         } else {
-          const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
+          const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
           pendingDurationCell = `${durationMonths}m`;
-          const rawStatus = getPaymentDueStatus(r, outstandingVal);
-          paymentDueStatusCell = rawStatus || `${outstandingVal.toLocaleString("en-IN")}/- due`;
-          remainingDueCell = outstandingVal;
+          const rawStatus = getPaymentDueStatus(r, item.totalOutstanding);
+          paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
+          remainingDueCell = totalDue;
         }
 
         rows.push([
@@ -2186,21 +2228,23 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
             ]);
           } else {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
-            const outstandingVal = outstanding || 0;
+            let totalDue = initialPaid ? outstanding + rateVal : outstanding;
+            if (outstanding <= 0 && !initialPaid) totalDue = 0;
+
             let pendingDurationCell = "0m";
             let paymentDueStatusCell = "Paid";
             let remainingDueCell: any = 0;
 
-            if (outstandingVal <= 0) {
+            if (totalDue <= 0 || (outstanding <= 0 && !initialPaid)) {
               pendingDurationCell = "0m";
               paymentDueStatusCell = "Paid";
               remainingDueCell = 0;
             } else {
-              const durationMonths = rateVal > 0 ? Math.round(outstandingVal / rateVal) : 0;
+              const durationMonths = rateVal > 0 ? Math.round(totalDue / rateVal) : 0;
               pendingDurationCell = `${durationMonths}m`;
-              const rawStatus = getPaymentDueStatus(r, outstandingVal);
-              paymentDueStatusCell = rawStatus || `${outstandingVal.toLocaleString("en-IN")}/- due`;
-              remainingDueCell = outstandingVal;
+              const rawStatus = getPaymentDueStatus(r, outstanding);
+              paymentDueStatusCell = rawStatus || `${totalDue.toLocaleString("en-IN")}/- due`;
+              remainingDueCell = totalDue;
             }
 
             rows.push([
