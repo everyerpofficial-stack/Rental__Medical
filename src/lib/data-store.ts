@@ -2645,11 +2645,20 @@ export function downloadExcel(filename: string, headers: string[], rows: (string
   rows.forEach(row => {
     html += `\n      <tr>`;
     row.forEach(cell => {
-      const safeCell = String(cell ?? "")
+      let safeCell = String(cell ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/\r?\n/g, '<br style="mso-data-placement:same-cell;"/>');
+      
+      safeCell = safeCell
+        .replace(/&lt;b&gt;/g, "<b>")
+        .replace(/&lt;\/b&gt;/g, "</b>")
+        .replace(/&lt;strong&gt;/g, "<strong>")
+        .replace(/&lt;\/strong&gt;/g, "</strong>")
+        .replace(/&lt;i&gt;/g, "<i>")
+        .replace(/&lt;\/i&gt;/g, "</i>");
+
       html += `\n        <td>${safeCell}</td>`;
     });
     html += `\n      </tr>`;

@@ -2124,21 +2124,21 @@ function DuesPage() {
         const rentStartDateRaw = item.start || (item as any).rental?.start || item.rentDate || "";
         const rentDateFormatted = rentStartDateRaw ? formatDateDDMMYYYY(rentStartDateRaw) : "";
 
-        // Pending Duration column shows Return on DD-MM-YYYY
+        // Pending Duration column shows Returned on\nDD-MM-YYYY
         const retDateRaw = item.date || item.returnObj?.date || item.rentDate || "";
         const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
-        const returnDurationCell = retDateFormatted ? `Return on ${retDateFormatted}` : "Return Due";
+        const returnDurationCell = retDateFormatted ? `Returned on\n${retDateFormatted}` : "Return Due";
 
         rows.push([
           slNo++,
           custCell,
           eqText,
           rentDateFormatted,
-          item.rentRateText || "—",
+          item.rentRateText ? `<b>${item.rentRateText}</b>` : "—",
           item.deposit || 0,
           returnDurationCell,
           `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
-          item.totalOutstanding || 0,
+          `<b>${item.totalOutstanding || 0}</b>`,
           remarkText
         ]);
         return;
@@ -2201,18 +2201,18 @@ function DuesPage() {
         let initialStatusText = "";
         if (initialPaid && monthsPaid >= 2) {
           const extraMonths = monthsPaid - 1;
-          const word = extraMonths === 1 ? "one month" : `${extraMonths} month`;
+          const word = `${extraMonths} month`;
           initialStatusText = `(initial rent paid)\nthen ${word} rent also paid`;
         } else if (initialPaid) {
           initialStatusText = "(initial rent paid)";
         } else if (!initialPaid && monthsPaid >= 1) {
-          const word = monthsPaid === 1 ? "one month" : `${monthsPaid} month`;
+          const word = `${monthsPaid} month`;
           initialStatusText = `(initial rent not paid)\nthen ${word} rent paid`;
         } else {
           initialStatusText = "(initial rent not paid)";
         }
 
-        const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}\n${initialStatusText}`;
+        const rateCell = `<b>₹${rateVal.toLocaleString("en-IN")}/${isMonthlyCombined ? "mo" : "day"}</b>\n${initialStatusText}`;
         const eqCell = eqLines.join("\n");
         const rentDateCell = formatDateDDMMYYYY(r.start);
 
@@ -2293,7 +2293,7 @@ function DuesPage() {
           combinedDeposit,
           pendingDurationCell,
           paymentDueStatusCell,
-          remainingDueCell,
+          `<b>${remainingDueCell}</b>`,
           remarkText
         ]);
       } else {
@@ -2309,17 +2309,17 @@ function DuesPage() {
           let initialStatusText = "";
           if (initialPaid && monthsPaid >= 2) {
             const extraMonths = monthsPaid - 1;
-            const word = extraMonths === 1 ? "one month" : `${extraMonths} month`;
+            const word = `${extraMonths} month`;
             initialStatusText = `(initial rent paid)\nthen ${word} rent also paid`;
           } else if (initialPaid) {
             initialStatusText = "(initial rent paid)";
           } else if (!initialPaid && monthsPaid >= 1) {
-            const word = monthsPaid === 1 ? "one month" : `${monthsPaid} month`;
+            const word = `${monthsPaid} month`;
             initialStatusText = `(initial rent not paid)\nthen ${word} rent paid`;
           } else {
             initialStatusText = "(initial rent not paid)";
           }
-          const rateCell = `₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}\n${initialStatusText}`;
+          const rateCell = `<b>₹${rateVal.toLocaleString("en-IN")}/${isMonthly ? "mo" : "day"}</b>\n${initialStatusText}`;
           const depVal = Number(ei.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
           const itemStartDate = ei.startDate || r.start;
 
@@ -2327,7 +2327,7 @@ function DuesPage() {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
             let retDateRaw = ei.returnedDate || ei.returnDate || r.end;
             const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
-            const returnDurationCell = retDateFormatted ? `Return on ${retDateFormatted}` : "Return Due";
+            const returnDurationCell = retDateFormatted ? `Returned on\n${retDateFormatted}` : "Return Due";
 
             rows.push([
               slNo++,
@@ -2338,7 +2338,7 @@ function DuesPage() {
               depVal,
               returnDurationCell,
               `₹${outstanding.toLocaleString("en-IN")} (Final Settlement)`,
-              outstanding || 0,
+              `<b>${outstanding || 0}</b>`,
               remarkText
             ]);
           } else {
@@ -2369,7 +2369,7 @@ function DuesPage() {
               depVal,
               pendingDurationCell,
               paymentDueStatusCell,
-              remainingDueCell,
+              `<b>${remainingDueCell}</b>`,
               remarkText
             ]);
           }
