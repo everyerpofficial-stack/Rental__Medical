@@ -241,62 +241,82 @@ function generateWhatsAppPickupMessage(params: {
     ? params.rental.equipmentItems
     : [];
 
-  // Narrowest set of units we can justify: an explicit selection, else the ids
-  // recorded on the return, else the items still out on the rental.
-  let targetItems: any[] = [];
-  if (params.equipmentIds && params.equipmentIds.length > 0) {
-    const wanted = new Set(params.equipmentIds);
-    targetItems = rentalItems.filter((it: any) => wanted.has(it.equipmentId));
-    if (targetItems.length === 0) {
-      targetItems = params.equipmentIds.map((id) => ({ equipmentId: id }));
-    }
-  } else if (rentalItems.length > 0) {
-    const unreturned = rentalItems.filter((it: any) => !it.returned);
-    targetItems = unreturned.length > 0 ? unreturned : rentalItems;
-  }
-
-  const modelsFromItems = targetItems
-    .map((item: any) => {
-      const eq = eqById.get(item.equipmentId);
-      // The line item recorded at signing time wins over the mutable master.
-      if (isUsableModel(item.model)) return String(item.model).trim();
-      if (isUsableModel(eq?.model)) return String(eq.model).trim();
-      // No model on record for this unit - name it so the line is not empty.
-      return String(eq?.name || item.name || "").trim();
-    })
-    .filter(Boolean);
-
-  const uniqueModels = Array.from(new Set(modelsFromItems));
-  let foundModel = uniqueModels.join(" & ");
-  let foundName = "";
-
-  if (!foundModel) {
-    // Legacy single-equipment rentals carry no equipmentItems at all. Match on
-    // the serial only (unique per unit); a bare category name cannot identify
-    // a unit, so it is used for the name fallback, never for the model.
-    const bySerial = serialStr
-      ? allEq.find((e: any) => String(e.serial || "").trim().toLowerCase() === serialStr.toLowerCase())
-      : undefined;
-    if (bySerial) {
-      if (isUsableModel(bySerial.model)) foundModel = String(bySerial.model).trim();
-      if (bySerial.name) foundName = String(bySerial.name).trim();
-    } else if (eqStr) {
-      const byName = allEq.find((e: any) => String(e.name || "").trim().toLowerCase() === eqStr.toLowerCase());
-      if (byName?.name) foundName = String(byName.name).trim();
-    }
-  }
+  const activeRentalItems = rentalItems.filter((it: any) => !it.returned);
+  const wantedSet = new Set(params.equipmentIds || []);
 
   let line3 = "";
-  if (foundModel) {
-    line3 = foundModel;
-  } else if (modelStr && modelStr.toLowerCase() !== "standard" && modelStr !== serialStr) {
-    line3 = modelStr;
-  } else if (foundName) {
-    line3 = foundName;
-  } else if (eqStr && eqStr !== serialStr) {
-    line3 = eqStr;
+
+  const getItemModelLabel = (item: any) => {
+    const eq = eqById.get(item.equipmentId);
+    if (isUsableModel(item.model)) return String(item.model).trim();
+    if (isUsableModel(eq?.model)) return String(eq.model).trim();
+    return String(eq?.name || item.name || "Equipment").trim();
+  };
+
+  if (activeRentalItems.length > 1 && wantedSet.size > 0 && wantedSet.size < activeRentalItems.length) {
+    const returningModels = activeRentalItems
+      .filter((it: any) => wantedSet.has(it.equipmentId))
+      .map(getItemModelLabel)
+      .filter(Boolean);
+
+    const notReturningModels = activeRentalItems
+      .filter((it: any) => !wantedSet.has(it.equipmentId))
+      .map(getItemModelLabel)
+      .filter(Boolean);
+
+    const returningStr = returningModels.length > 0
+      ? `${Array.from(new Set(returningModels)).join(", ")} will Return`
+      : "";
+    const notReturningStr = notReturningModels.length > 0
+      ? `${Array.from(new Set(notReturningModels)).join(", ")} will Not Return`
+      : "";
+
+    line3 = [returningStr, notReturningStr].filter(Boolean).join(" & ");
   } else {
-    line3 = "Medical Equipment";
+    // Narrowest set of units we can justify: an explicit selection, else the ids
+    // recorded on the return, else the items still out on the rental.
+    let targetItems: any[] = [];
+    if (params.equipmentIds && params.equipmentIds.length > 0) {
+      targetItems = rentalItems.filter((it: any) => wantedSet.has(it.equipmentId));
+      if (targetItems.length === 0) {
+        targetItems = params.equipmentIds.map((id) => ({ equipmentId: id }));
+      }
+    } else if (rentalItems.length > 0) {
+      targetItems = activeRentalItems.length > 0 ? activeRentalItems : rentalItems;
+    }
+
+    const modelsFromItems = targetItems
+      .map((item: any) => getItemModelLabel(item))
+      .filter(Boolean);
+
+    const uniqueModels = Array.from(new Set(modelsFromItems));
+    let foundModel = uniqueModels.join(" & ");
+    let foundName = "";
+
+    if (!foundModel) {
+      const bySerial = serialStr
+        ? allEq.find((e: any) => String(e.serial || "").trim().toLowerCase() === serialStr.toLowerCase())
+        : undefined;
+      if (bySerial) {
+        if (isUsableModel(bySerial.model)) foundModel = String(bySerial.model).trim();
+        if (bySerial.name) foundName = String(bySerial.name).trim();
+      } else if (eqStr) {
+        const byName = allEq.find((e: any) => String(e.name || "").trim().toLowerCase() === eqStr.toLowerCase());
+        if (byName?.name) foundName = String(byName.name).trim();
+      }
+    }
+
+    if (foundModel) {
+      line3 = foundModel;
+    } else if (modelStr && modelStr.toLowerCase() !== "standard" && modelStr !== serialStr) {
+      line3 = modelStr;
+    } else if (foundName) {
+      line3 = foundName;
+    } else if (eqStr && eqStr !== serialStr) {
+      line3 = eqStr;
+    } else {
+      line3 = "Medical Equipment";
+    }
   }
 
   // Line 4: "Return at Area Name"
@@ -1695,10 +1715,15 @@ function ReturnsPage() {
                       if (custPincode) {
                         addr = addr ? `${addr} - ${custPincode}` : custPincode;
                       }
+                      const hospital = (selectedRental as any)?.consultingHospital || (selectedCustomer as any)?.consultingHospital || (selectedRental as any)?.hospital || "";
+                      const refBy = (selectedRental as any)?.referredBy || (selectedCustomer as any)?.referredBy || (selectedRental as any)?.doctor || "";
+
                       return (
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 min-w-0 overflow-hidden">
                           {phones && <span>Contact: <span className="text-foreground/80 font-bold">{phones}</span></span>}
                           {addr && <span>Address: <span className="text-foreground/80 font-medium">{addr}</span></span>}
+                          {hospital && <span>Hospital: <span className="text-foreground/80 font-bold">{hospital}</span></span>}
+                          {refBy && <span>Referred By: <span className="text-foreground/80 font-bold">{refBy}</span></span>}
                           <span>Start: <span className="text-foreground/80 font-bold">{formatDateDDMMYYYY(selectedRental.start)}</span> to <span className="text-foreground/80 font-bold">{returnDate ? formatDateDDMMYYYY(returnDate) : "—"}</span></span>
                         </div>
                       );
