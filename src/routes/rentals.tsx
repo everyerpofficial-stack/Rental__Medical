@@ -1924,7 +1924,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   };
 
     return (
-    <div className="space-y-4 animate-[fade-in_0.3s_ease-out] w-full max-w-full min-w-0 overflow-x-hidden">
+    <div className="space-y-4 animate-[fade-in_0.3s_ease-out] w-full max-w-full min-w-0 overflow-x-clip">
       {/* Header Bar */}
       <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 pb-3 border-b border-border bg-gradient-to-r from-muted/30 via-background to-muted/20 px-4 py-3 rounded-xl border w-full max-w-full">
         <div className="flex items-center gap-3">

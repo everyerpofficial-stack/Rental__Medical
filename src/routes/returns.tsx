@@ -853,6 +853,7 @@ function ReturnsPage() {
   
   // Track selected equipment items for return
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
+  const [settleUnpaidAccessories, setSettleUnpaidAccessories] = useState<boolean>(true);
   const [discount, setDiscount] = useState("0");
   const [duePaymentStatus, setDuePaymentStatus] = useState<"Paid" | "Partial" | "Not Paid">("Paid");
   const [duePaymentMode, setDuePaymentMode] = useState<string>("Cash");
@@ -1265,6 +1266,9 @@ function ReturnsPage() {
   }, [selectedRental, returnDate, selectedEquipmentIds, dbVersion]);
 
   const returningItems = rentalEquipments.filter((item: any) => selectedEquipmentIds.includes(item.equipmentId) && !item.returned);
+  const unreturnedItems = rentalEquipments.filter((item: any) => !item.returned);
+  const isPartialReturn = selectedRental && unreturnedItems.length > 1 && returningItems.length < unreturnedItems.length;
+
   const returnedNames = returningItems
     .map((item: any) => getEquipment().find((e) => e.id === item.equipmentId)?.name || item.equipmentId)
     .join(", ") || selectedRental?.equipment || "Unknown Equipment";
@@ -1296,10 +1300,11 @@ function ReturnsPage() {
         (item) => item.selected && item.status === "Not Paid"
       )
     : [];
-  const unpaidAccessoryTotal = unpaidItems.reduce(
+  const rawUnpaidAccessoryTotal = unpaidItems.reduce(
     (sum: number, item: any) => sum + (Number(item.amount) || 0),
     0
   );
+  const unpaidAccessoryTotal = (settleUnpaidAccessories || !isPartialReturn) ? rawUnpaidAccessoryTotal : 0;
 
   const paidAmt = cleanNum(totalPaidAmount);
 
@@ -1422,6 +1427,7 @@ function ReturnsPage() {
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
       unpaidAccessoryTotal: unpaidAccessoryTotal,
+      settleUnpaidAccessories: settleUnpaidAccessories || !isPartialReturn,
       collectedBy: collectedBy,
       duePaymentStatus: outstandingPayable > 0 ? (actualPaidAmount >= outstandingPayable ? "Paid" : actualPaidAmount > 0 ? "Partial" : "Not Paid") : "Paid",
       duePaymentMode: outstandingPayable > 0 && actualPaidAmount > 0 ? duePaymentMode : undefined,
@@ -1580,6 +1586,7 @@ function ReturnsPage() {
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
       unpaidAccessoryTotal: unpaidAccessoryTotal,
+      settleUnpaidAccessories: settleUnpaidAccessories || !isPartialReturn,
       collectedBy: collectedBy,
     };
     printReturnReceipt(tempReturn);
@@ -1924,19 +1931,37 @@ function ReturnsPage() {
 
                       {/* Unpaid Accessories */}
                       <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
-                        <div className="h-6 sm:h-7 flex items-center">
-                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Unpaid Accessories</Label>
+                        <div className="h-6 sm:h-7 flex items-center justify-between gap-1">
+                          <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight truncate">Unpaid Accessories</Label>
+                          {unpaidItems.length > 0 && isPartialReturn && (
+                            <label className="flex items-center gap-1 cursor-pointer text-[9px] text-primary font-bold shrink-0" title="Uncheck to defer accessories to remaining equipment">
+                              <input
+                                type="checkbox"
+                                checked={settleUnpaidAccessories}
+                                onChange={(e) => setSettleUnpaidAccessories(e.target.checked)}
+                                className="h-3 w-3 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                              />
+                              <span>Settle Now</span>
+                            </label>
+                          )}
                         </div>
                         <div className="h-8 sm:h-8.5 flex items-center px-2 bg-muted/30 rounded-md border border-border/50 overflow-hidden">
                           {unpaidItems.length > 0 ? (
-                            <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
-                              {unpaidItems.map((item: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
-                                  <span className="truncate max-w-[60px] sm:max-w-[70px]">{item.name}</span>
-                                  <span>₹{cleanNum(item.amount)}</span>
-                                </div>
-                              ))}
-                            </div>
+                            settleUnpaidAccessories || !isPartialReturn ? (
+                              <div className="w-full max-h-8 overflow-y-auto space-y-0.5">
+                                {unpaidItems.map((item: any, idx: number) => (
+                                  <div key={idx} className="flex justify-between text-rose-600 text-[9px] font-semibold">
+                                    <span className="truncate max-w-[60px] sm:max-w-[70px]">{item.name}</span>
+                                    <span>₹{cleanNum(item.amount)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="w-full flex flex-col text-[9px] leading-tight">
+                                <span className="font-bold text-amber-700 dark:text-amber-400 truncate">₹0 (Deferred)</span>
+                                <span className="text-[8px] text-muted-foreground truncate">Return with next item</span>
+                              </div>
+                            )
                           ) : (
                             <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">₹0</span>
                           )}

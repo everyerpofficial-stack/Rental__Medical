@@ -664,7 +664,7 @@ export function AppShell({
         {/* ── Page Content ── */}
         {/* pb-24 on mobile to clear bottom nav bar + home indicator */}
         <main
-          className="px-3 py-5 sm:px-7 lg:px-8 pb-32 md:pb-8 max-w-full min-w-0 overflow-x-hidden"
+          className="px-3 py-5 sm:px-7 lg:px-8 pb-32 md:pb-8 max-w-full min-w-0 overflow-x-clip"
           style={{
             minHeight: "calc(100vh - 56px - env(safe-area-inset-top, 0px))",
             paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
