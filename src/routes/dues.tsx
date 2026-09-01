@@ -2656,9 +2656,6 @@ function DuesPage() {
                           <div className="text-[11.5px] font-extrabold text-right text-amber-600 dark:text-amber-400">
                             ₹{item.totalOutstanding.toLocaleString("en-IN")}
                           </div>
-                          <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
-                            As of today: ₹{item.totalOutstanding.toLocaleString("en-IN")}
-                          </div>
                         </TableCell>
 
                         {/* 10. Status */}
@@ -2801,8 +2798,8 @@ function DuesPage() {
                                     combinedAsOfToday += details.balanceAsOfToday;
                                   });
                                   return (
-                                    <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
-                                      As of today: ₹{combinedAsOfToday.toLocaleString("en-IN")}
+                                    <div className="text-[10.5px] font-medium text-muted-foreground text-right mt-0.5 whitespace-nowrap">
+                                      Today: ₹{combinedAsOfToday.toLocaleString("en-IN")}
                                     </div>
                                   );
                                 })()}
@@ -2903,9 +2900,11 @@ function DuesPage() {
                                       <div className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/40") : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
                                         ₹{outstanding.toLocaleString("en-IN")}
                                       </div>
-                                      <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
-                                        As of today: ₹{balanceAsOfToday.toLocaleString("en-IN")}
-                                      </div>
+                                      {!eqItem.returned && (
+                                        <div className="text-[10.5px] font-medium text-muted-foreground text-right mt-0.5 whitespace-nowrap">
+                                          Today: ₹{balanceAsOfToday.toLocaleString("en-IN")}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -3065,7 +3064,7 @@ function DuesPage() {
                               <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
                                 <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? (outstanding > 0 ? "Return Due" : "—") : unpaidText}</strong></span>
                                 <span>Paid: <strong className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
-                                <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong> <span className="text-[9.5px] text-muted-foreground font-normal">(Today: ₹{balanceAsOfToday.toLocaleString("en-IN")})</span></span>
+                                <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong> {!eqItem.returned && <span className="text-[10px] text-muted-foreground font-medium ml-1">(Today: ₹{balanceAsOfToday.toLocaleString("en-IN")})</span>}</span>
                               </div>
                             </div>
                           );
