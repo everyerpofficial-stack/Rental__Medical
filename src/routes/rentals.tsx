@@ -2208,13 +2208,47 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         </div>
 
                         {/* Address */}
-                        <div className="bg-muted/20 p-2.5 rounded-lg border border-border/50 space-y-0.5">
+                        <div className="bg-muted/20 p-2.5 rounded-lg border border-border/50 space-y-1.5">
                           <span className="text-[9.5px] uppercase font-bold text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary shrink-0" /> Delivery Address
+                            <MapPin className="h-3 w-3 text-primary shrink-0" /> Delivery Address Details
                           </span>
-                          <p className="text-[12px] font-medium text-foreground leading-snug">
-                            {[selectedCustomer.address, selectedCustomer.area, selectedCustomer.city, selectedCustomer.state, selectedCustomer.pincode].filter(Boolean).join(", ") || "—"}
-                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-[11.5px]">
+                            {selectedCustomer.address && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 sm:col-span-2 lg:col-span-3">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Address</span>
+                                <span className="font-medium text-foreground leading-snug">{selectedCustomer.address}</span>
+                              </div>
+                            )}
+                            {selectedCustomer.area && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Area / Locality</span>
+                                <span className="font-medium text-foreground truncate block">{selectedCustomer.area}</span>
+                              </div>
+                            )}
+                            {selectedCustomer.city && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">City</span>
+                                <span className="font-medium text-foreground truncate block">{selectedCustomer.city}</span>
+                              </div>
+                            )}
+                            {selectedCustomer.state && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">State</span>
+                                <span className="font-medium text-foreground truncate block">{selectedCustomer.state}</span>
+                              </div>
+                            )}
+                            {selectedCustomer.pincode && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Pincode</span>
+                                <span className="font-semibold font-mono text-foreground">{selectedCustomer.pincode}</span>
+                              </div>
+                            )}
+                            {!selectedCustomer.address && !selectedCustomer.area && !selectedCustomer.city && !selectedCustomer.state && !selectedCustomer.pincode && (
+                              <div className="col-span-full text-[12px] font-medium text-muted-foreground">
+                                No delivery address specified
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {selectedCustomer.notes && (

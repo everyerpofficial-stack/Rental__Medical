@@ -413,6 +413,18 @@ function PayDialog({
             if (match) {
               const dVal = Number(match.state.discount) || 0;
               const isMonthlyItem = item.rentCycle === "Monthly";
+              // Store the original rate and discount start date so billing can
+              // split cycles before vs after the discount (prevents retroactive
+              // re-pricing of past months).
+              if (!item.discountStartDate) {
+                if (isMonthlyItem) {
+                  item.originalMonthlyRent = Number(item.monthlyRent) || 0;
+                } else {
+                  item.originalDailyRent = Number(item.dailyRent) || 0;
+                }
+                item.discountStartDate = paymentDate;
+              }
+              item.discountAmount = (Number(item.discountAmount) || 0) + dVal;
               if (isMonthlyItem) {
                 item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - dVal);
               } else {
@@ -524,6 +536,18 @@ function PayDialog({
         uRental.equipmentItems = (uRental.equipmentItems || []).map((item: any) => {
           if (item.equipmentId === eqId) {
             const isMonthlyItem = item.rentCycle === "Monthly";
+            // Store the original rate and discount start date so billing can
+            // split cycles before vs after the discount (prevents retroactive
+            // re-pricing of past months).
+            if (!item.discountStartDate) {
+              if (isMonthlyItem) {
+                item.originalMonthlyRent = Number(item.monthlyRent) || 0;
+              } else {
+                item.originalDailyRent = Number(item.dailyRent) || 0;
+              }
+              item.discountStartDate = paymentDate;
+            }
+            item.discountAmount = (Number(item.discountAmount) || 0) + finalDiscount;
             if (isMonthlyItem) {
               item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - finalDiscount);
             } else {
@@ -1579,7 +1603,23 @@ function DuesPage() {
 
     if (isMonthly) {
       const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
-      totalDue = cyclesCommenced * monthlyRent;
+
+      // If a permanent discount was applied, split billing into pre-discount
+      // (at the original rate) and post-discount (at the current rate) so past
+      // months are not retroactively repriced.
+      if (item?.discountStartDate && item?.originalMonthlyRent != null) {
+        const origRate = Number(item.originalMonthlyRent) || 0;
+        const discDate = parseLocalDate(item.discountStartDate);
+        if (!isNaN(discDate.getTime()) && discDate > start) {
+          const preDiscountCycles = countCommencedCycles(rental.start, discDate) - 1; // completed cycles before discount
+          const postDiscountCycles = Math.max(0, cyclesCommenced - Math.max(0, preDiscountCycles));
+          totalDue = (Math.max(0, preDiscountCycles) * origRate) + (postDiscountCycles * monthlyRent);
+        } else {
+          totalDue = cyclesCommenced * monthlyRent;
+        }
+      } else {
+        totalDue = cyclesCommenced * monthlyRent;
+      }
       
       outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidMonths = monthlyRent > 0 ? Math.round(outstanding / monthlyRent) : 0;
@@ -1589,7 +1629,22 @@ function DuesPage() {
       // Daily billing: calculate purely by days elapsed
       const diffTime = Math.max(0, billingEndDate.getTime() - start.getTime());
       const daysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      totalDue = daysElapsed * dailyRate;
+
+      // If a permanent discount was applied, split billing into pre-discount
+      // and post-discount days.
+      if (item?.discountStartDate && item?.originalDailyRent != null) {
+        const origRate = Number(item.originalDailyRent) || 0;
+        const discDate = parseLocalDate(item.discountStartDate);
+        if (!isNaN(discDate.getTime()) && discDate > start) {
+          const preDiscountDays = Math.ceil(Math.max(0, discDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+          const postDiscountDays = Math.max(0, daysElapsed - preDiscountDays);
+          totalDue = (preDiscountDays * origRate) + (postDiscountDays * dailyRate);
+        } else {
+          totalDue = daysElapsed * dailyRate;
+        }
+      } else {
+        totalDue = daysElapsed * dailyRate;
+      }
       
       outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidDays = dailyRate > 0 ? Math.round(outstanding / dailyRate) : 0;
@@ -1634,7 +1689,24 @@ function DuesPage() {
     let balanceAsOfToday = outstanding;
     if (!item?.returned && isMonthly) {
       const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
-      const completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
+
+      // For the "today" balance, also split pre/post discount
+      let completedDue: number;
+      if (item?.discountStartDate && item?.originalMonthlyRent != null) {
+        const origRate = Number(item.originalMonthlyRent) || 0;
+        const discDate = parseLocalDate(item.discountStartDate);
+        if (!isNaN(discDate.getTime()) && discDate > start) {
+          const preDiscountCycles = countCommencedCycles(rental.start, discDate) - 1;
+          const completedCycles = Math.max(0, cyclesCommenced - 1);
+          const preCompleted = Math.min(Math.max(0, preDiscountCycles), completedCycles);
+          const postCompleted = Math.max(0, completedCycles - preCompleted);
+          completedDue = (preCompleted * origRate) + (postCompleted * monthlyRent);
+        } else {
+          completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
+        }
+      } else {
+        completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
+      }
       const totalDueAsOfToday = completedDue + dueTillToday;
       balanceAsOfToday = Math.max(0, totalDueAsOfToday - grandTotalPaid);
     }
