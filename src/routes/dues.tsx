@@ -1517,7 +1517,10 @@ function DuesPage() {
         isMonthly: false,
         totalDue: 0,
         grandTotalPaid: 0,
-        rate: 0
+        rate: 0,
+        duePerDay: 0,
+        daysTillToday: 0,
+        dueTillToday: 0
       };
     }
 
@@ -1595,8 +1598,39 @@ function DuesPage() {
     }
 
     const rate = isMonthly ? monthlyRent : dailyRate;
+    const duePerDay = item?.returned ? 0 : (isMonthly ? Math.round(monthlyRent / 30) : dailyRate);
 
-    return { unpaidMonths, unpaidDays, outstanding, unpaidText, rateText, isMonthly, totalDue, grandTotalPaid, rate };
+    // Calculate days elapsed in current cycle and daily due accumulated till today
+    let daysTillToday = 0;
+    let dueTillToday = 0;
+
+    if (!item?.returned) {
+      if (isMonthly) {
+        const startDay = start.getDate();
+        let cYear = today.getFullYear();
+        let cMonth = today.getMonth();
+        if (today.getDate() < startDay) {
+          cMonth -= 1;
+          if (cMonth < 0) {
+            cMonth = 11;
+            cYear -= 1;
+          }
+        }
+        const maxDays = new Date(cYear, cMonth + 1, 0).getDate();
+        const actualDay = Math.min(startDay, maxDays);
+        const cycleStart = new Date(cYear, cMonth, actualDay);
+        const diffMs = Math.max(0, today.getTime() - cycleStart.getTime());
+        daysTillToday = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const dailyRentRate = monthlyRent / 30;
+        dueTillToday = Math.round(daysTillToday * dailyRentRate);
+      } else {
+        const diffMs = Math.max(0, today.getTime() - start.getTime());
+        daysTillToday = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        dueTillToday = daysTillToday * dailyRate;
+      }
+    }
+
+    return { unpaidMonths, unpaidDays, outstanding, unpaidText, rateText, isMonthly, totalDue, grandTotalPaid, rate, duePerDay, daysTillToday, dueTillToday };
   };
 
   // Filter out completed/cancelled rentals, and agreements where everything is returned AND fully paid
@@ -2613,6 +2647,9 @@ function DuesPage() {
                           <div className="text-[11.5px] font-extrabold text-right text-amber-600 dark:text-amber-400">
                             ₹{item.totalOutstanding.toLocaleString("en-IN")}
                           </div>
+                          <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
+                            ₹0/day
+                          </div>
                         </TableCell>
 
                         {/* 10. Status */}
@@ -2748,6 +2785,20 @@ function DuesPage() {
                                 <div className={`text-[11.5px] font-extrabold text-right ${item.totalOutstanding > 0 ? "text-destructive" : "text-success"}`}>
                                   ₹{item.totalOutstanding.toLocaleString("en-IN")}
                                 </div>
+                                {(() => {
+                                  let combinedDueTillToday = 0;
+                                  let maxDays = 0;
+                                  eqItems.forEach((it: any) => {
+                                    const details = calcUnpaidDetailsForEquipment(r, it.equipmentId);
+                                    combinedDueTillToday += details.dueTillToday;
+                                    if (details.daysTillToday > maxDays) maxDays = details.daysTillToday;
+                                  });
+                                  return (
+                                    <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
+                                      ₹{combinedDueTillToday.toLocaleString("en-IN")} ({maxDays} days)
+                                    </div>
+                                  );
+                                })()}
                               </TableCell>
                             </>
                           );
@@ -2839,10 +2890,15 @@ function DuesPage() {
                             <TableCell className="px-2 py-2 text-right">
                               <div className="space-y-1 text-right">
                                 {eqItems.map((eqItem: any) => {
-                                  const { outstanding } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                                  const { outstanding, dueTillToday, daysTillToday } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                                   return (
-                                    <div key={eqItem.equipmentId} className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/40") : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
-                                      ₹{outstanding.toLocaleString("en-IN")}
+                                    <div key={eqItem.equipmentId} className="text-right">
+                                      <div className={`text-[11.5px] font-extrabold text-right ${eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/40") : (outstanding > 0 ? "text-destructive" : "text-success")}`}>
+                                        ₹{outstanding.toLocaleString("en-IN")}
+                                      </div>
+                                      <div className="text-[9.5px] font-normal text-muted-foreground text-right mt-0.5 whitespace-nowrap">
+                                        ₹{dueTillToday.toLocaleString("en-IN")} ({daysTillToday} days)
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -2983,7 +3039,7 @@ function DuesPage() {
                       
                       <div className="space-y-2 bg-muted/40 rounded-xl p-3">
                         {eqItems.map((eqItem: any) => {
-                          const { outstanding, unpaidText, grandTotalPaid } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                          const { outstanding, unpaidText, grandTotalPaid, dueTillToday, daysTillToday } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
                           return (
                             <div key={eqItem.equipmentId} className="text-[12px] flex flex-col gap-0.5 border-b border-border/40 last:border-b-0 pb-2 last:pb-0 mb-2 last:mb-0">
                               <div className="flex items-center justify-between font-medium">
@@ -3002,7 +3058,7 @@ function DuesPage() {
                               <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
                                 <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? (outstanding > 0 ? "Return Due" : "—") : unpaidText}</strong></span>
                                 <span>Paid: <strong className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
-                                <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong></span>
+                                <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong> <span className="text-[9.5px] text-muted-foreground font-normal">(₹{dueTillToday.toLocaleString("en-IN")} / {daysTillToday}d)</span></span>
                               </div>
                             </div>
                           );
