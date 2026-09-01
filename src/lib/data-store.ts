@@ -2505,6 +2505,65 @@ export function getDynamicKPIs() {
     return !isNaN(rDate.getTime()) && rDate.getMonth() === curMonth && rDate.getFullYear() === curYear;
   }).length;
 
+  const calcRentalBalanceAsOfToday = (r: any) => {
+    const eqItems = r.equipmentItems || [
+      {
+        equipmentId: r.equipmentId,
+        serial: r.serial,
+        monthlyRent: Number(r.monthlyRent) || 0,
+        dailyRent: Number(r.dailyRent) || 0,
+        returned: false
+      }
+    ];
+
+    const start = parseLocalDate(r.start);
+    if (isNaN(start.getTime())) return 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let totalAsOfToday = 0;
+
+    eqItems.forEach((eqItem: any) => {
+      if (eqItem.returned) return;
+      const monthlyRent = Number(eqItem.monthlyRent || eqItem.rentRate) || 0;
+      const dailyRate = Number(eqItem.dailyRent) || Number(r.dailyRent) || 0;
+      const isMonthly = (eqItem.rentCycle || r.rentCycle) === "Monthly" || (monthlyRent > 0 && dailyRate === 0);
+      const grandTotalPaid = getPaidForEquipment(r, eqItem.equipmentId, pay, false);
+
+      if (isMonthly) {
+        const startDay = start.getDate();
+        let cYear = today.getFullYear();
+        let cMonth = today.getMonth();
+        if (today.getDate() < startDay) {
+          cMonth -= 1;
+          if (cMonth < 0) { cMonth = 11; cYear -= 1; }
+        }
+        const maxDays = new Date(cYear, cMonth + 1, 0).getDate();
+        const actualDay = Math.min(startDay, maxDays);
+        const cycleStart = new Date(cYear, cMonth, actualDay);
+        const diffMs = Math.max(0, today.getTime() - cycleStart.getTime());
+        const daysTillToday = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const dueTillToday = Math.round(daysTillToday * (monthlyRent / 30));
+
+        let monthDiff = (today.getFullYear() - start.getFullYear()) * 12 + (today.getMonth() - start.getMonth());
+        if (today.getDate() < start.getDate()) monthDiff--;
+        const cyclesCommenced = Math.max(1, monthDiff + 1);
+        const completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
+        totalAsOfToday += Math.max(0, (completedDue + dueTillToday) - grandTotalPaid);
+      } else {
+        const diffMs = Math.max(0, today.getTime() - start.getTime());
+        const daysTillToday = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        const totalDue = daysTillToday * dailyRate;
+        totalAsOfToday += Math.max(0, totalDue - grandTotalPaid);
+      }
+    });
+
+    return totalAsOfToday;
+  };
+
+  const pendingPaymentsTodayAmount = rentalsForPending.reduce((sum, r) => sum + calcRentalBalanceAsOfToday(r), 0);
+
   return [
     { label: "Active Rentals",                value: activeAgreements.toString(),   description: "Current active rental agreements" },
     { label: "Agreements Made This Month",    value: curMonthAgreements.toString(), description: "New rental agreements this month" },
@@ -2512,7 +2571,7 @@ export function getDynamicKPIs() {
     { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${equip.length} units available` },
     { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${equip.length} units rented` },
     { label: "Monthly Revenue",     value: `₹${currentMonthRevenue.toLocaleString("en-IN")}`, description: "Payments collected this month" },
-    { label: "Pending Payments",    value: `₹${pendingPaymentsAmount.toLocaleString("en-IN")}`, description: `${pendingInvoicesCount} agreement(s) with dues pending` },
+    { label: "Pending Payments",    value: `₹${pendingPaymentsTodayAmount.toLocaleString("en-IN")}`, description: `Full Month: ₹${pendingPaymentsAmount.toLocaleString("en-IN")} · ${pendingInvoicesCount} agreement(s) with dues pending` },
     { label: "Security Deposits",   value: `₹${securityDepositsAmount.toLocaleString("en-IN")}`, description: "Refundable deposits in escrow" },
   ];
 }
