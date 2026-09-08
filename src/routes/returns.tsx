@@ -36,7 +36,8 @@ import {
   MessageCircle,
   Copy,
   Send,
-  MoreVertical
+  MoreVertical,
+  ArrowLeftRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { QrScannerModal } from "@/components/QrScannerModal";
@@ -882,6 +883,9 @@ function ReturnsPage() {
   const [duePaidAmount, setDuePaidAmount] = useState<string>("");
   const [dueCashAmount, setDueCashAmount] = useState<string>("");
   const [dueBankAmount, setDueBankAmount] = useState<string>("");
+  // Refund adjustment: transfer refund to another equipment on the same agreement
+  const [refundAction, setRefundAction] = useState<"refund" | "adjust">("refund");
+  const [refundTargetEquipmentId, setRefundTargetEquipmentId] = useState<string>("");
   const lastSelectedAgreementRef = useRef("");
   // H-5: the equipment id the QR scanner deep-linked in, held until the
   // agreement-change effect has had its say. Consumed once — a manual agreement
@@ -1203,6 +1207,8 @@ function ReturnsPage() {
         setDuePaymentMode("Cash");
         setDueTxRef("");
         setCollectedBy("");
+        setRefundAction("refund");
+        setRefundTargetEquipmentId("");
         
         const activeIds = rentalEquipments
           .filter((item: any) => !item.returned)
@@ -1233,6 +1239,8 @@ function ReturnsPage() {
         setDuePaymentStatus("Paid");
         setDuePaymentMode("Cash");
         setDueTxRef("");
+        setRefundAction("refund");
+        setRefundTargetEquipmentId("");
       }
     }
   }, [selectedAgreement, selectedRental]);
@@ -1458,6 +1466,7 @@ function ReturnsPage() {
       finalRent: fRent,
       pendingBalance: pend,
       refund: netRefund,
+      refundAdjustedToEquipmentId: (netRefund > 0 && refundAction === "adjust" && refundTargetEquipmentId) ? refundTargetEquipmentId : undefined,
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
       returnedAdditionalItemNames: unpaidItems.map((item: any) => item.name),
@@ -1547,6 +1556,25 @@ function ReturnsPage() {
       }
     }
 
+    // Refund adjustment: if the operator chose to transfer the refund to another
+    // equipment on the same agreement, create a payment record for that amount.
+    if (netRefund > 0 && refundAction === "adjust" && refundTargetEquipmentId) {
+      const targetEqName = getEquipment().find((e) => e.id === refundTargetEquipmentId)?.name || refundTargetEquipmentId;
+      savePayment({
+        id: getNextPaymentNumber(),
+        date: returnDate,
+        customer: selectedRental?.customer || "Unknown Customer",
+        customerId: selectedRental?.customerId || "",
+        agreement: selectedAgreement,
+        equipmentId: refundTargetEquipmentId,
+        amount: netRefund,
+        mode: "Cash" as any,
+        type: "Rent" as const,
+        notes: `Refund of ₹${netRefund.toLocaleString("en-IN")} from return of ${returnedNames} adjusted to ${targetEqName}`,
+        status: "Paid" as const,
+      });
+    }
+
     // Inform user of successful return and amount settled
     const formattedTotalDues = outstandingPayable.toLocaleString("en-IN");
     const formattedPaid = actualPaidAmount.toLocaleString("en-IN");
@@ -1562,7 +1590,12 @@ function ReturnsPage() {
         toast.warning(`Return processed! Unpaid due of ₹${formattedTotalDues} recorded as pending for ${selectedRental?.customer || "customer"}.`);
       }
     } else if (netRefund > 0) {
-      toast.success(`Return processed successfully! Refunded total amount: ₹${formattedRefund} for ${selectedRental?.customer || "customer"}.`);
+      if (refundAction === "adjust" && refundTargetEquipmentId) {
+        const targetEqName = getEquipment().find((e) => e.id === refundTargetEquipmentId)?.name || "equipment";
+        toast.success(`Return processed! Refund of ₹${formattedRefund} adjusted to ${targetEqName} on agreement ${selectedAgreement}.`);
+      } else {
+        toast.success(`Return processed successfully! Refunded total amount: ₹${formattedRefund} for ${selectedRental?.customer || "customer"}.`);
+      }
     } else {
       toast.success(`Return processed successfully for ${selectedRental?.customer || "customer"}!`);
     }
@@ -2204,6 +2237,129 @@ function ReturnsPage() {
                       </div>
                     );
                   })()}
+
+                   {/* Refund Adjustment Option — transfer refund to another equipment */}
+                   {netRefund > 0 && isPartialEquipmentReturn && (() => {
+                     // Equipment items staying on this agreement (not being returned)
+                     const remainingItems = rentalEquipments.filter(
+                       (item: any) => !item.returned && !selectedEquipmentIds.includes(item.equipmentId)
+                     );
+                     if (remainingItems.length === 0) return null;
+
+                     return (
+                       <div className="rounded-xl border border-blue-500/20 bg-blue-50/10 dark:bg-blue-950/10 p-3.5 space-y-2.5 animate-[fade-in_0.2s_ease-out]">
+                         <div className="flex items-center justify-between flex-wrap gap-1.5 border-b border-blue-500/20 pb-1.5">
+                           <span className="text-[11px] font-bold text-blue-900 dark:text-blue-200 uppercase tracking-wide flex items-center gap-1">
+                             <ArrowLeftRight className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                             Refund Adjustment (₹{netRefund.toLocaleString("en-IN")})
+                           </span>
+                         </div>
+
+                         <div className="space-y-2">
+                           <div className="space-y-1">
+                             <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">Refund Action</Label>
+                             <div className="grid grid-cols-2 gap-1 bg-background p-1 rounded-lg border border-border h-10">
+                               <button
+                                 type="button"
+                                 onClick={() => {
+                                   setRefundAction("refund");
+                                   setRefundTargetEquipmentId("");
+                                 }}
+                                 className={`flex items-center justify-center gap-1 rounded text-[10px] font-bold transition-all ${
+                                   refundAction === "refund" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                                 }`}
+                               >
+                                 Refund to Customer
+                               </button>
+
+                               <button
+                                 type="button"
+                                 onClick={() => setRefundAction("adjust")}
+                                 className={`flex items-center justify-center gap-1 rounded text-[10px] font-bold transition-all ${
+                                   refundAction === "adjust" ? "bg-blue-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"
+                                 }`}
+                               >
+                                 <ArrowLeftRight className="h-3 w-3" />
+                                 Adjust to Equipment
+                               </button>
+                             </div>
+                           </div>
+
+                           {refundAction === "adjust" && (
+                             <div className="space-y-1.5 animate-[fade-in_0.15s_ease-out]">
+                               <Label className="text-[9.5px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400">Select Target Equipment</Label>
+                               <div className="grid sm:grid-cols-2 gap-2">
+                                 {remainingItems.map((item: any) => {
+                                   const eqName = getEquipmentName(item.equipmentId);
+                                   const eqItem = eqInventory.find(e => e.id === item.equipmentId);
+                                   const modelNo = eqItem?.model || "";
+                                   const serialNo = item.serial || eqItem?.serial || "";
+                                   const isMonthly = cleanNum(item.monthlyRent) > 0;
+                                   const rentRate = isMonthly ? cleanNum(item.monthlyRent) : cleanNum(item.dailyRent || item.rentRate);
+                                   const rentCycleLabel = isMonthly ? "mo" : "day";
+                                   const isSelected = refundTargetEquipmentId === item.equipmentId;
+
+                                   return (
+                                     <div
+                                       key={item.equipmentId}
+                                       onClick={() => setRefundTargetEquipmentId(item.equipmentId)}
+                                       className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-[11px] transition-all cursor-pointer select-none ${
+                                         isSelected
+                                           ? "bg-blue-50/30 dark:bg-blue-950/30 border-blue-500/50 shadow-soft ring-1 ring-blue-500/20"
+                                           : "bg-background border-border hover:border-blue-400/40 hover:shadow-soft"
+                                       }`}
+                                     >
+                                       <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 transition-all ${
+                                         isSelected
+                                           ? "border-blue-600 bg-blue-600"
+                                           : "border-border bg-background"
+                                       }`}>
+                                         {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                                       </div>
+
+                                       <div className="flex-1 min-w-0 space-y-0.5">
+                                         <span className="block font-bold text-[11.5px] text-foreground truncate">{eqName}</span>
+                                         <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                                           {serialNo && (
+                                             <div className="flex items-center justify-between gap-1">
+                                               <span>Serial:</span>
+                                               <span className="font-mono font-bold text-foreground/90 truncate">{serialNo}</span>
+                                             </div>
+                                           )}
+                                           {modelNo && (
+                                             <div className="flex items-center justify-between gap-1">
+                                               <span>Model:</span>
+                                               <span className="font-semibold text-foreground/90 truncate">{modelNo}</span>
+                                             </div>
+                                           )}
+                                           <div className="flex items-center justify-between gap-1">
+                                             <span>Rent:</span>
+                                             <span className="font-bold text-foreground/80">₹{rentRate.toLocaleString("en-IN")}/{rentCycleLabel}</span>
+                                           </div>
+                                         </div>
+                                       </div>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+
+                               {refundTargetEquipmentId && (
+                                 <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-[10.5px] font-medium">
+                                   ₹{netRefund.toLocaleString("en-IN")} refund will be adjusted as rent payment to <strong>{getEquipmentName(refundTargetEquipmentId)}</strong> on the same agreement.
+                                 </div>
+                               )}
+                             </div>
+                           )}
+
+                           {refundAction === "refund" && (
+                             <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-[10.5px] font-medium">
+                               ₹{netRefund.toLocaleString("en-IN")} will be refunded to the customer.
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     );
+                   })()}
 
                   {/* Due Amount Payment Settlement Option */}
                   {netRefund < 0 && (() => {
