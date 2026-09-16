@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,6 +35,14 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/documents")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Documents — Relife" }] }),
   component: DocsPage,
 });
@@ -133,7 +141,10 @@ function DocsPage() {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [deleteDoc, setDeleteDoc] = useState<DocumentItem | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
 
   // Form states for uploads
   const [newDocName, setNewDocName] = useState("");
@@ -851,7 +862,7 @@ function DocsPage() {
                           >
                             <Download className="h-3.5 w-3.5" />
                           </Button>
-                          {!isStaff && (
+                          {isAdmin && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -957,7 +968,7 @@ function DocsPage() {
             </div>
           )}
           <DialogFooter className="sm:justify-between border-t border-border/50 pt-4 mt-4">
-            {previewDoc && !isStaff && (
+            {previewDoc && isAdmin && (
               <Button
                 variant="ghost"
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive text-[13px] h-9"

@@ -710,6 +710,9 @@ function CollectPaymentDialog({
 }
 
 function DeletePaymentDialog({ payment, trigger, onDelete }: { payment: Payment; trigger: React.ReactNode; onDelete?: () => void }) {
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
+  if (!isAdmin) return null;
+
   const handleDelete = () => {
     deletePayment(payment.id);
     toast.success(`Payment transaction ${payment.id} successfully deleted.`);
@@ -826,6 +829,7 @@ function AgreementPaymentHistoryModal({
 }) {
   if (!agreementId) return null;
 
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
   const rentals = getRentals();
   const payments = getPayments();
   const rental = rentals.find((r) => r.id === agreementId);
@@ -1046,11 +1050,13 @@ function AgreementPaymentHistoryModal({
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
-                            <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            } />
+                            {isAdmin && (
+                              <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              } />
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1113,7 +1119,11 @@ function PaymentsPage() {
   const [viewMode, setViewMode] = useState<"by-agreement" | "all-receipts">("by-agreement");
   const [selectedHistoryAgreementId, setSelectedHistoryAgreementId] = useState<string | null>(null);
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const isAdmin = userRole === "Admin";
+  const showKpiCards = !isStaff && !isAccountant;
 
   const refresh = () => setPayments(getPayments());
 
@@ -1376,25 +1386,27 @@ function PaymentsPage() {
           </Button>
       }
     >
-      {/* Stat cards */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {[
-          { l: "Today's Collection", v: formatValue(todayCollection), icon: IndianRupee, color: "text-primary" },
-          { l: "This Month",         v: formatValue(thisMonthCollection),  icon: Wallet,      color: "text-primary/80" },
-          { l: "Cash",               v: formatValue(cashCollection),  icon: Banknote,    color: "text-accent" },
-          { l: "Bank Transfers",     v: formatValue(bankCollection),   icon: Building2,   color: "text-success" },
-        ].map((s, i) => (
-          <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}>
-            <CardContent className="p-3.5 sm:p-5">
-              <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9 mb-2.5">
-                <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
-              </div>
-              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight">{s.l}</p>
-              <p className={`mt-1 font-display text-[18px] sm:text-[22px] font-bold ${s.color}`}>{s.v}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Stat cards - hidden for Staff and Accountant */}
+      {showKpiCards && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {[
+            { l: "Today's Collection", v: formatValue(todayCollection), icon: IndianRupee, color: "text-primary" },
+            { l: "This Month",         v: formatValue(thisMonthCollection),  icon: Wallet,      color: "text-primary/80" },
+            { l: "Cash",               v: formatValue(cashCollection),  icon: Banknote,    color: "text-accent" },
+            { l: "Bank Transfers",     v: formatValue(bankCollection),   icon: Building2,   color: "text-success" },
+          ].map((s, i) => (
+            <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}>
+              <CardContent className="p-3.5 sm:p-5">
+                <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9 mb-2.5">
+                  <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
+                </div>
+                <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight">{s.l}</p>
+                <p className={`mt-1 font-display text-[18px] sm:text-[22px] font-bold ${s.color}`}>{s.v}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="w-full">
         {/* Recent Payments table */}
@@ -1644,11 +1656,13 @@ function PaymentsPage() {
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
-                            <DeletePaymentDialog payment={p} onDelete={refresh} trigger={
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            } />
+                            {isAdmin && (
+                              <DeletePaymentDialog payment={p} onDelete={refresh} trigger={
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              } />
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

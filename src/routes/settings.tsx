@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import {
   Building2, CreditCard, Shield, Bell, Check, Users, Wallet, MessageSquare, Mail, Phone, BarChart3,
   Database, Link2, CheckCircle2, XCircle, RefreshCw, AlertTriangle, Copy, ExternalLink, CloudUpload, CloudDownload,
-  Lock, Trash2, UserPlus, Download, Upload, FileSpreadsheet, HardDriveDownload, HardDriveUpload,
+  Lock, Trash2, UserPlus, Download, Upload, FileSpreadsheet, HardDriveDownload, HardDriveUpload, Calculator,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose,
@@ -77,7 +77,7 @@ export const Route = createFileRoute("/settings")({
   beforeLoad: () => {
     if (typeof window === "undefined") return;
     if (localStorage.getItem("medirent-user-role") !== "Admin") {
-      throw redirect({ to: "/" });
+      throw redirect({ to: "/rentals" });
     }
   },
   component: SettingsPage,
@@ -86,6 +86,7 @@ export const Route = createFileRoute("/settings")({
 const roleIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   "Admin": Shield,
   "Staff": Users,
+  "Accountant": Calculator,
 };
 
 // ─── Database / Google Sheets Tab ────────────────────────────────────────────
@@ -977,7 +978,7 @@ interface StaffUser {
   email: string;
   password?: string;       // legacy plaintext (old users)
   passwordHash?: string;   // SHA-256 hash (new users)
-  role: "Admin" | "Staff";
+  role: "Admin" | "Staff" | "Accountant";
 }
 
 function UserLoginCredentials() {
@@ -1012,7 +1013,7 @@ function UserLoginCredentials() {
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"Admin" | "Staff">("Staff");
+  const [newRole, setNewRole] = useState<"Admin" | "Staff" | "Accountant">("Staff");
   const [isOpen, setIsOpen] = useState(false);
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -1100,6 +1101,8 @@ function UserLoginCredentials() {
     switch (role) {
       case "Admin":
         return "bg-indigo-50 text-indigo-700 border-indigo-200/50 dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800/40";
+      case "Accountant":
+        return "bg-sky-50 text-sky-700 border-sky-200/50 dark:bg-sky-950/40 dark:text-sky-400 dark:border-sky-800/40";
       default:
         return "bg-emerald-50 text-emerald-700 border-emerald-200/50 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40";
     }
@@ -1152,6 +1155,7 @@ function UserLoginCredentials() {
                     <SelectContent>
                       <SelectItem value="Admin" className="text-[13px]">Admin (Full Access)</SelectItem>
                       <SelectItem value="Staff" className="text-[13px]">Staff User</SelectItem>
+                      <SelectItem value="Accountant" className="text-[13px]">Accountant</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

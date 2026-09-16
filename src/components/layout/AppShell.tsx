@@ -77,13 +77,54 @@ const navSections = [
   },
 ] as const;
 
-// Primary 4 items shown in bottom nav — most-used
-const bottomNavPrimary = [
-  { to: "/", label: "Home", icon: LayoutDashboard },
-  { to: "/rentals", label: "Rentals", icon: FileText },
-  { to: "/customers", label: "Customers", icon: Users },
-  { to: "/equipment", label: "Equipment", icon: Package },
-] as const;
+// Visibility helper by role
+export function isSectionVisibleForRole(to: string, role: string): boolean {
+  if (role === "Admin") return true;
+
+  if (role === "Accountant") {
+    // Hidden for Accountant: Dashboard, Owners, reports, settings
+    if (to === "/" || to === "/owners" || to === "/reports" || to === "/settings") {
+      return false;
+    }
+    return true;
+  }
+
+  if (role === "Staff") {
+    // Hidden for Staff: Dashboard, customers, equipment, owners, exchange, qr scanner, rent dues, reports, documents, settings
+    // Visible for Staff: Rentals, Payments, Returns
+    if (to === "/rentals" || to === "/payments" || to === "/returns") {
+      return true;
+    }
+    return false;
+  }
+
+  // Fallback for unauthenticated or unknown
+  return to !== "/settings";
+}
+
+function getBottomNavItems(role: string) {
+  if (role === "Staff") {
+    return [
+      { to: "/rentals", label: "Rentals", icon: FileText },
+      { to: "/payments", label: "Payments", icon: CreditCard },
+      { to: "/returns", label: "Returns", icon: RotateCcw },
+    ] as const;
+  }
+  if (role === "Accountant") {
+    return [
+      { to: "/rentals", label: "Rentals", icon: FileText },
+      { to: "/payments", label: "Payments", icon: CreditCard },
+      { to: "/customers", label: "Customers", icon: Users },
+      { to: "/equipment", label: "Equipment", icon: Package },
+    ] as const;
+  }
+  return [
+    { to: "/", label: "Home", icon: LayoutDashboard },
+    { to: "/rentals", label: "Rentals", icon: FileText },
+    { to: "/customers", label: "Customers", icon: Users },
+    { to: "/equipment", label: "Equipment", icon: Package },
+  ] as const;
+}
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
 
@@ -102,11 +143,14 @@ export function AppShell({
   const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  // Seeded empty, not with a placeholder name and "Admin": the optimistic
-  // "Admin" default flashed the Settings nav item to Staff users on every load
-  // before the mount effect corrected it.
-  const [userName, setUserName] = useState("");
-  const [userRole, setUserRole] = useState("");
+  const [userName, setUserName] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("medirent-user-name") || "";
+    return "";
+  });
+  const [userRole, setUserRole] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("medirent-user-role") || "";
+    return "";
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [, setDbVersion] = useState(0);
   // Mobile "More" drawer state
@@ -282,8 +326,8 @@ export function AppShell({
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
           {navSections.map((section) => {
-            const filteredItems = section.items.filter(
-              (item) => !(userRole === "Staff" && item.to === "/settings")
+            const filteredItems = section.items.filter((item) =>
+              isSectionVisibleForRole(item.to, userRole)
             );
             if (filteredItems.length === 0) return null;
             return (
@@ -409,7 +453,7 @@ export function AppShell({
               <div className="px-4 pb-5 grid grid-cols-4 gap-2">
                 {navSections.flatMap((section) =>
                   section.items
-                    .filter((item) => !(userRole === "Staff" && item.to === "/settings"))
+                    .filter((item) => isSectionVisibleForRole(item.to, userRole))
                     .map((item) => {
                       const active =
                         item.to === "/"
@@ -585,16 +629,18 @@ export function AppShell({
               </Button>
             )}
 
-            {/* QR Scanner Trigger */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground mr-1"
-              onClick={() => setQrOpen(true)}
-              title="Scan Product QR Code"
-            >
-              <QrCode className="h-4 w-4 text-primary" />
-            </Button>
+            {/* QR Scanner Trigger - hidden for Staff */}
+            {userRole !== "Staff" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-md text-muted-foreground hover:text-foreground mr-1"
+                onClick={() => setQrOpen(true)}
+                title="Scan Product QR Code"
+              >
+                <QrCode className="h-4 w-4 text-primary" />
+              </Button>
+            )}
 
             {/* Theme toggle */}
             <Button
@@ -607,20 +653,20 @@ export function AppShell({
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
 
-            {/* Notifications — desktop only.
-                Routes to Rent Dues, which is what the badge is actually about;
-                it previously rendered an unread dot with no click handler. */}
-            <Button
-              onClick={() => navigate({ to: "/dues" })}
-              title="Rent dues needing attention"
-              variant="ghost"
-              size="icon"
-              className="relative hidden sm:flex h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
-              aria-label="Notifications"
-            >
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-[7px] w-[7px] rounded-full bg-destructive border-2 border-background" />
-            </Button>
+            {/* Notifications — desktop only. Hidden for Staff as dues is hidden */}
+            {userRole !== "Staff" && (
+              <Button
+                onClick={() => navigate({ to: "/dues" })}
+                title="Rent dues needing attention"
+                variant="ghost"
+                size="icon"
+                className="relative hidden sm:flex h-8 w-8 rounded-md text-muted-foreground hover:text-foreground"
+                aria-label="Notifications"
+              >
+                <Bell className="h-4 w-4" />
+                <span className="absolute top-1.5 right-1.5 h-[7px] w-[7px] rounded-full bg-destructive border-2 border-background" />
+              </Button>
+            )}
 
             {/* Divider — desktop only */}
             <div className="mx-1.5 h-5 w-px bg-border hidden sm:block" />
@@ -712,7 +758,7 @@ export function AppShell({
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         <div className="flex items-stretch">
-          {bottomNavPrimary.map((item) => {
+          {getBottomNavItems(userRole).map((item) => {
             const active =
               item.to === "/"
                 ? pathname === "/"
@@ -762,55 +808,77 @@ export function AppShell({
         <CommandList>
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Operations">
-            <CommandItem onSelect={() => { navigate({ to: "/" }); setSearchOpen(false); }}>
-              <LayoutDashboard className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Dashboard</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/customers" }); setSearchOpen(false); }}>
-              <Users className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Customers</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/equipment" }); setSearchOpen(false); }}>
-              <Package className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Equipment Inventory</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/owners" }); setSearchOpen(false); }}>
-              <Handshake className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Equipment Owners</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/rentals" }); setSearchOpen(false); }}>
-              <FileText className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Rental Agreements</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/exchanges" }); setSearchOpen(false); }}>
-              <RefreshCw className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Exchanges</span>
-            </CommandItem>
+            {isSectionVisibleForRole("/", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/" }); setSearchOpen(false); }}>
+                <LayoutDashboard className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Dashboard</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/customers", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/customers" }); setSearchOpen(false); }}>
+                <Users className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Customers</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/equipment", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/equipment" }); setSearchOpen(false); }}>
+                <Package className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Equipment Inventory</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/owners", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/owners" }); setSearchOpen(false); }}>
+                <Handshake className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Equipment Owners</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/rentals", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/rentals" }); setSearchOpen(false); }}>
+                <FileText className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Rental Agreements</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/exchanges", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/exchanges" }); setSearchOpen(false); }}>
+                <RefreshCw className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Exchanges</span>
+              </CommandItem>
+            )}
           </CommandGroup>
           <CommandGroup heading="Finance">
-            <CommandItem onSelect={() => { navigate({ to: "/payments" }); setSearchOpen(false); }}>
-              <CreditCard className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Payments Ledger</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/dues" }); setSearchOpen(false); }}>
-              <CalendarClock className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Rent Dues & Reminders</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/returns" }); setSearchOpen(false); }}>
-              <RotateCcw className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Equipment Returns</span>
-            </CommandItem>
+            {isSectionVisibleForRole("/payments", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/payments" }); setSearchOpen(false); }}>
+                <CreditCard className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Payments Ledger</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/dues", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/dues" }); setSearchOpen(false); }}>
+                <CalendarClock className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Rent Dues & Reminders</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/returns", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/returns" }); setSearchOpen(false); }}>
+                <RotateCcw className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Equipment Returns</span>
+              </CommandItem>
+            )}
           </CommandGroup>
           <CommandGroup heading="Insights">
-            <CommandItem onSelect={() => { navigate({ to: "/reports" }); setSearchOpen(false); }}>
-              <BarChart3 className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Reports & Analytics</span>
-            </CommandItem>
-            <CommandItem onSelect={() => { navigate({ to: "/documents" }); setSearchOpen(false); }}>
-              <FolderArchive className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
-              <span>Document Repository</span>
-            </CommandItem>
-            {userRole !== "Staff" && (
+            {isSectionVisibleForRole("/reports", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/reports" }); setSearchOpen(false); }}>
+                <BarChart3 className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Reports & Analytics</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/documents", userRole) && (
+              <CommandItem onSelect={() => { navigate({ to: "/documents" }); setSearchOpen(false); }}>
+                <FolderArchive className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
+                <span>Document Repository</span>
+              </CommandItem>
+            )}
+            {isSectionVisibleForRole("/settings", userRole) && (
               <CommandItem onSelect={() => { navigate({ to: "/settings" }); setSearchOpen(false); }}>
                 <Settings className="mr-2 h-4.5 w-4.5 text-muted-foreground" />
                 <span>Settings & Rules</span>

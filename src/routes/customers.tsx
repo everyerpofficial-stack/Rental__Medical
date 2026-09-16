@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
@@ -66,6 +66,14 @@ import { asText, capitalizeWords } from "@/lib/utils";
 import { AgreementPreviewDialog } from "./rentals";
 
 export const Route = createFileRoute("/customers")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Customers — Relife" }] }),
   component: CustomersPage,
 });
@@ -793,7 +801,12 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
   }, [initialCustomer]);
 
   if (!customer) return null;
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
+  const canEdit = isAdmin || isAccountant;
+  const canDelete = isAdmin;
   const rentals = getRentals();
   const payments = getPayments();
   const documents = getDocuments();
@@ -863,7 +876,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
             
             {/* Quick action buttons */}
             <div className="flex gap-2 flex-wrap self-start sm:self-center">
-              {!isStaff && (
+              {canEdit && (
                 <CustomerFormDialog
                   title="Edit Customer"
                   customer={customer}
@@ -980,7 +993,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
                               <Button variant="outline" size="sm" className="h-7 text-[11px] px-2 rounded-md" onClick={() => setPreviewDoc(d)}>
                                 View
                               </Button>
-                              {!isStaff && (
+                              {canDelete && (
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -1313,7 +1326,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
                           >
                             <Download className="h-3 w-3 mr-1" /> Download
                           </Button>
-                          {!isStaff && (
+                          {canDelete && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1735,7 +1748,12 @@ function CustomersPage() {
   const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all-status");
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
+  const canEdit = isAdmin || isAccountant;
+  const canDelete = isAdmin;
 
   const refresh = () => setCustomers(getCustomers());
 
@@ -2149,28 +2167,28 @@ function CustomersPage() {
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
-                        {!isStaff && (
-                          <>
-                            <CustomerFormDialog
-                              title="Edit Customer"
-                              customer={c}
-                              onSave={refresh}
-                              trigger={
-                                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
-                                  <Edit className="h-3.5 w-3.5" />
-                                </Button>
-                              }
-                            />
-                            <DeleteCustomerDialog
-                              customer={c}
-                              onDelete={refresh}
-                              trigger={
-                                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              }
-                            />
-                          </>
+                        {canEdit && (
+                          <CustomerFormDialog
+                            title="Edit Customer"
+                            customer={c}
+                            onSave={refresh}
+                            trigger={
+                              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                                <Edit className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
+                        )}
+                        {canDelete && (
+                          <DeleteCustomerDialog
+                            customer={c}
+                            onDelete={refresh}
+                            trigger={
+                              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            }
+                          />
                         )}
                       </div>
                     </TableCell>
@@ -2248,7 +2266,7 @@ function CustomersPage() {
                             </p>
                             <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <CustomerPayDueDialog customer={c} onSave={refresh} />
-                              {!isStaff && (
+                              {canEdit && (
                                 <CustomerFormDialog
                                   title="Edit Customer"
                                   customer={c}

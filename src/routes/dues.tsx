@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
@@ -54,6 +54,14 @@ function isInitialRentPaidHelper(r: any, paymentsList: any[]): boolean {
 }
 
 export const Route = createFileRoute("/dues")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Rent Dues — Relife" }] }),
   component: DuesPage,
 });

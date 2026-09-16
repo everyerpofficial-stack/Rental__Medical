@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { EquipmentFormDialog, Equipment, isOwnOwner } from "../components/EquipmentFormDialog";
@@ -39,6 +39,14 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/equipment")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Equipment — Relife" }] }),
   component: EquipmentPage,
 });
@@ -985,7 +993,12 @@ function EquipmentPage() {
   const [categoryFilter, setCategoryFilter] = useState("all-cat");
   const [ownerFilter, setOwnerFilter] = useState("all-owners");
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
+  const canEdit = isAdmin || isAccountant;
+  const canDelete = isAdmin;
 
   const refresh = () => setEquipment(getEquipment());
 
@@ -1253,28 +1266,28 @@ function EquipmentPage() {
                             />
                           )}
                           <QrCodeDialog eq={item} />
-                          {!isStaff && (
-                            <>
-                              <EquipmentFormDialog
-                                title="Edit Equipment"
-                                eq={item}
-                                onSave={refresh}
-                                trigger={
-                                  <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
-                                    <Edit className="h-3.5 w-3.5" />
-                                  </Button>
-                                }
-                              />
-                              <DeleteEquipmentDialog
-                                eq={item}
-                                onDelete={refresh}
-                                trigger={
-                                  <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                }
-                              />
-                            </>
+                          {canEdit && (
+                            <EquipmentFormDialog
+                              title="Edit Equipment"
+                              eq={item}
+                              onSave={refresh}
+                              trigger={
+                                <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                          )}
+                          {canDelete && (
+                            <DeleteEquipmentDialog
+                              eq={item}
+                              onDelete={refresh}
+                              trigger={
+                                <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
                           )}
                         </div>
                       </CardContent>

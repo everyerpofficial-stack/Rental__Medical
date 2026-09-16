@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,14 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/reports")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff" || role === "Accountant") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Statements & Analytics — Relife" }] }),
   component: ReportsPage,
 });

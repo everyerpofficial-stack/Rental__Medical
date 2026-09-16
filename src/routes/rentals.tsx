@@ -276,7 +276,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   // (delivery photos, signed docs, location tag) never fires, leaving the
   // Security & Verification section blank when editing an agreement.
   const [open, setOpen] = useState(!!inline);
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const role = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const isStaff = role === "Staff";
+  const canApprove = role === "Admin";
   const [equipmentList, setEquipmentList] = useState(() => getEquipment());
   // BUG-FIX: customersList used to be recomputed via a bare getCustomers() call
   // in the render body, which re-runs on every keystroke/selection in this
@@ -3484,7 +3486,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               
               <div className="flex gap-2 w-full mt-2">
                 <Button variant="outline" type="button" className="flex-1" onClick={onClose}>Cancel</Button>
-                {!isStaff && rental && rental.status === "Pending Approval" && (
+                {canApprove && rental && rental.status === "Pending Approval" && (
                   <Button 
                     type="button" 
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] px-2" 
@@ -4471,7 +4473,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
   trigger: React.ReactNode;
   onApproveSuccess?: () => void;
 }) {
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const canApprove = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
   // Helper to convert numbers to words (Indian numbering format)
   const convertNumberToWords = (amount: number): string => {
     if (amount <= 0 || isNaN(amount)) return "N/A";
@@ -4751,7 +4753,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
         <div className="flex flex-row items-center justify-between mb-4 mt-2">
           <DialogTitle className="text-lg font-bold">Agreement Preview</DialogTitle>
           <div className="flex gap-2 font-semibold">
-            {!isStaff && rental?.id && rental?.status === "Pending Approval" && (
+            {canApprove && rental?.id && rental?.status === "Pending Approval" && (
               <DialogClose asChild>
                 <Button
                   size="sm"
@@ -5071,7 +5073,13 @@ function RentalsPage() {
   const [visibleCount, setVisibleCount] = useState(RENTALS_PAGE_SIZE);
   const [rentalsList, setRentalsList] = useState(() => getRentals());
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const isAdmin = userRole === "Admin";
+  const canEdit = isAdmin || isAccountant;
+  const canCancel = isAdmin;
+  const canApprove = isAdmin;
 
   const refresh = () => setRentalsList(getRentals());
 
@@ -5623,8 +5631,8 @@ function RentalsPage() {
                             <MapPin className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                                                {/* Bug 7 fix: Edit button for each rental agreement */}
-                        {!isStaff && r.status !== "Cancelled" && (
+                                                {/* Edit button for rental agreement - Admin and Accountant */}
+                        {canEdit && r.status !== "Cancelled" && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -5676,7 +5684,7 @@ function RentalsPage() {
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Email" onClick={() => toast.success(`Agreement emailed successfully to ${r.customer}.`)}>
                           <Mail className="h-3.5 w-3.5" />
                         </Button>
-                        {!isStaff && r.status === "Pending Approval" && (
+                        {canApprove && r.status === "Pending Approval" && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -5691,7 +5699,7 @@ function RentalsPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        {!isStaff && r.status !== "Completed" && r.status !== "Returned" && r.status !== "Cancelled" && (
+                        {canCancel && r.status !== "Completed" && r.status !== "Returned" && r.status !== "Cancelled" && (
                           <CancelRentalDialog
                             rental={r}
                             onCancel={refresh}
@@ -5806,7 +5814,7 @@ function RentalsPage() {
                       >
                         <FileText className="h-3 w-3 mr-1" /> PDF
                       </Button>
-                      {!isStaff && r.status !== "Cancelled" && (
+                      {canEdit && r.status !== "Cancelled" && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -5819,7 +5827,7 @@ function RentalsPage() {
                           <Edit className="h-3 w-3 mr-1" /> Edit
                         </Button>
                       )}
-                      {!isStaff && r.status === "Pending Approval" && (
+                      {canApprove && r.status === "Pending Approval" && (
                         <Button
                           variant="outline"
                           size="sm"

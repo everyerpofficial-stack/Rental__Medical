@@ -660,7 +660,7 @@ function RootComponent() {
    */
   useEffect(() => {
     if (!isAuthenticated || typeof window === "undefined") return;
-    if (localStorage.getItem("medirent-user-role") === "Staff") return;
+    if (localStorage.getItem("medirent-user-role") !== "Admin") return;
 
     let cancelled = false;
     // Defer past first paint so the daily check never delays the dashboard.
@@ -704,7 +704,15 @@ function RootComponent() {
       {isAuthenticated ? (
         <Outlet />
       ) : (
-        <LoginInterface onLoginSuccess={() => setIsAuthenticated(true)} />
+        <LoginInterface
+          onLoginSuccess={() => {
+            setIsAuthenticated(true);
+            const role = localStorage.getItem("medirent-user-role");
+            if ((role === "Staff" || role === "Accountant") && (window.location.pathname === "/" || window.location.pathname === "")) {
+              window.location.href = "/rentals";
+            }
+          }}
+        />
       )}
       <Toaster />
     </QueryClientProvider>

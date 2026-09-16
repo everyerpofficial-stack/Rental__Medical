@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { asText } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
@@ -42,6 +42,14 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/owners")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const role = localStorage.getItem("medirent-user-role");
+      if (role === "Staff" || role === "Accountant") {
+        throw redirect({ to: "/rentals" });
+      }
+    }
+  },
   head: () => ({ meta: [{ title: "Equipment Owners — Relife" }] }),
   component: OwnersPage,
 });

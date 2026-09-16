@@ -903,7 +903,10 @@ function ReturnsPage() {
   const [mobileWaReturn, setMobileWaReturn] = useState<any>(null);
   const [mobilePayDueReturn, setMobilePayDueReturn] = useState<any>(null);
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -3022,7 +3025,7 @@ function ReturnsPage() {
                               {ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
                                 <PayReturnDueDialog ret={ret} onSave={refresh} />
                               )}
-                              {!isStaff && ret.status === "Pending Approval" && (
+                              {isAdmin && ret.status === "Pending Approval" && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -3125,7 +3128,7 @@ function ReturnsPage() {
                                 <CreditCard className="h-4 w-4 text-emerald-600" /> Pay Due
                               </DropdownMenuItem>
                             )}
-                            {!isStaff && ret.status === "Pending Approval" && (
+                            {isAdmin && ret.status === "Pending Approval" && (
                               <DropdownMenuItem
                                 onSelect={() => {
                                   const updatedReturn = { ...ret, status: "Completed" };
