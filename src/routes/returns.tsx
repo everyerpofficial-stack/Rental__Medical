@@ -1205,6 +1205,7 @@ function ReturnsPage() {
       if (selectedRental) {
         setReturnDate(getLocalYYYYMMDD());
         setDamageCharges("0");
+        setDiscount("0");
         setCondition("Good");
         setDuePaymentStatus("Paid");
         setDuePaymentMode("Cash");
@@ -1234,6 +1235,7 @@ function ReturnsPage() {
         setReturnDate("");
         setFinalRent("");
         setDamageCharges("");
+        setDiscount("0");
         setPendingBalance("");
         setTotalPaidAmount("");
         setSelectedEquipmentIds([]);
@@ -3183,7 +3185,7 @@ function ReturnsPage() {
               <WhatsAppReturnMessageModal
                 ret={mobileWaReturn}
                 rental={rentals.find((r) => r.id === mobileWaReturn.agreement)}
-                customer={customers.find((c) => c.name === mobileWaReturn.customer || c.id === rentals.find((r) => r.id === mobileWaReturn.agreement)?.customerId)}
+                customer={(mobileWaReturn.agreement && customers.find((c) => c.id === rentals.find((r) => r.id === mobileWaReturn.agreement)?.customerId)) || customers.find((c) => c.name === mobileWaReturn.customer)}
                 hideTrigger
                 controlledOpen={!!mobileWaReturn}
                 onControlledOpenChange={(v) => { if (!v) setMobileWaReturn(null); }}

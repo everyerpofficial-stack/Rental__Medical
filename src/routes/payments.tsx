@@ -1021,12 +1021,6 @@ function AgreementPaymentHistoryModal({
                   {agreementId}
                 </span>
                 <StatusBadge status={status as any} />
-                {rentalDate && (
-                  <span className="inline-flex items-center gap-1 font-mono text-[11.5px] font-semibold bg-muted px-2 py-0.5 rounded-md text-foreground border border-border/60">
-                    <Calendar className="h-3 w-3 text-primary" />
-                    Rent Date: {formatDateDDMMYYYY(rentalDate)}
-                  </span>
-                )}
               </div>
               <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                 <span>Customer: <strong className="text-foreground font-semibold">{customerName}</strong></span>

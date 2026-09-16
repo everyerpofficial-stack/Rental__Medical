@@ -369,7 +369,8 @@ function ExchangesPage() {
   const filteredExchanges = sortLatestFirst(
     exchanges.filter((e: any) => {
       const q = searchQuery.toLowerCase().trim();
-      const customer = customers.find((c: any) => c.name.toLowerCase() === (e.customer || "").toLowerCase() || c.id === e.customerId);
+      const customer = (e.customerId && customers.find((c: any) => c.id === e.customerId)) ||
+        customers.find((c: any) => c.name && e.customer && c.name.toLowerCase() === e.customer.toLowerCase());
 
       const matchesSearch = !q ||
         (e.id || "").toLowerCase().includes(q) ||
@@ -746,7 +747,8 @@ function ExchangesPage() {
                   </TableRow>
                 ) : (
                   filteredExchanges.map((exc) => {
-                    const cust = customersList.find((c: any) => c.id === exc.customerId || c.name === exc.customer);
+                    const cust = (exc.customerId && customersList.find((c: any) => c.id === exc.customerId)) ||
+                      customersList.find((c: any) => c.name && exc.customer && c.name.toLowerCase() === exc.customer.toLowerCase());
                     const contactNo = cust ? [cust.phone, cust.altPhone].filter(Boolean).join(" / ") : "";
                     const rental = rentals.find((r: any) => r.id === exc.agreementId);
                     const rentDate = rental?.start ? formatDateDDMMYYYY(rental.start) : "—";
@@ -902,7 +904,8 @@ function ExchangesPage() {
                   options={rentals
                     .filter((r) => r.status === "Active" || r.status === "Overdue")
                     .map((r) => {
-                      const cust = customers.find(c => c.id === r.customerId || (c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase()));
+                      const cust = (r.customerId && customers.find((c: any) => c.id === r.customerId)) ||
+                        customers.find((c: any) => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
                       const phone1 = r.phone || cust?.phone || "";
                       const phone2 = r.altPhone || cust?.altPhone || "";
                       const phone3 = r.contactNumber3 || cust?.contactNumber3 || "";

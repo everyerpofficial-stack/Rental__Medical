@@ -351,10 +351,9 @@ export function getRentalEquipmentLabels(rental: any, equipmentList?: any[], inc
   return items.map((item: any) => {
     const eq = byId.get(item.equipmentId);
     return formatEquipmentLabel({
-      // The line item wins where it has a value; the master fills the gaps
-      // (older line items were saved before `model` was captured on them).
-      name: item.equipment || item.name || eq?.name || eq?.category || rental.equipment,
-      model: item.model || eq?.model,
+      // Prefer eq master name/model when eq exists so exchanged units show latest master info
+      name: eq?.name || item.equipment || item.name || eq?.category || rental.equipment,
+      model: eq?.model || item.model,
       serial: item.serial || eq?.serial,
     }, includeSerial);
   });
@@ -422,8 +421,8 @@ export function getRentalEquipmentDetailedItems(
 
   return items.map((item: any) => {
     const eq = byId.get(item.equipmentId);
-    const name = item.equipment || item.name || eq?.name || eq?.category || rental.equipment;
-    const model = item.model || eq?.model;
+    const name = eq?.name || item.equipment || item.name || eq?.category || rental.equipment;
+    const model = eq?.model || item.model;
     const serial = item.serial || eq?.serial;
 
     const label = formatEquipmentLabel({ name, model, serial }, includeSerial);
@@ -1650,6 +1649,111 @@ export function getRentals() {
     return { ...r, equipmentId, serial, equipment, monthlyRent, deposit };
   });
 
+  // Exchange self-healing pass: reconcile completed equipment exchanges
+  // so rental line items and summary fields reflect the latest swapped unit.
+  const exchangesList = getStorageItem("medirent-exchanges", []);
+  const completedExchanges = Array.isArray(exchangesList) ? exchangesList.filter((e: any) => e && e.status === "Completed") : [];
+
+  let finalHealedList = repairedList;
+  if (completedExchanges.length > 0) {
+    if (!eqMasterForRepair) eqMasterForRepair = getStorageItem("medirent-equipment", initialEquipment);
+    const eqMap = new Map<string, any>((eqMasterForRepair || []).map((e: any) => [e.id, e]));
+
+    finalHealedList = repairedList.map((r: any) => {
+      const relevantExchanges = completedExchanges.filter((exc: any) => exc.agreementId === r.id);
+      if (relevantExchanges.length === 0) return r;
+
+      let rentalModified = false;
+      let items: any[] = Array.isArray(r.equipmentItems) && r.equipmentItems.length > 0
+        ? [...r.equipmentItems]
+        : (r.equipmentId ? String(r.equipmentId).split(",").map((s: string) => s.trim()).filter(Boolean).map((id: string, idx: number) => ({
+            equipmentId: id,
+            serial: (r.serial || "").split(",")[idx] || "XXXX",
+            name: r.equipment,
+            equipment: r.equipment,
+            model: r.model,
+            monthlyRent: cleanNum(r.monthlyRent),
+            deposit: cleanNum(r.deposit),
+            returned: false
+          })) : []);
+
+      const sortedExc = [...relevantExchanges].sort((a: any, b: any) => 
+        new Date(a.exchangeDate || a.date || 0).getTime() - new Date(b.exchangeDate || b.date || 0).getTime()
+      );
+
+      sortedExc.forEach((exc: any) => {
+        const newEq = eqMap.get(exc.newEquipmentId);
+        const newName = newEq?.name || exc.newEquipment;
+        const newModel = newEq?.model;
+        const newSerial = exc.newEquipmentSerial || newEq?.serial;
+
+        let matched = false;
+        items = items.map((item: any) => {
+          const isMatch = item.equipmentId === exc.currentEquipmentId || 
+                          (exc.currentEquipmentSerial && item.serial === exc.currentEquipmentSerial) ||
+                          (items.length === 1 && item.equipmentId !== exc.newEquipmentId);
+          
+          if (isMatch) {
+            const needsUpdate = item.equipmentId !== exc.newEquipmentId || 
+                                (newSerial && item.serial !== newSerial) || 
+                                (newName && item.name !== newName) || 
+                                (newModel !== undefined && item.model !== newModel);
+            if (needsUpdate) {
+              rentalModified = true;
+              matched = true;
+              return {
+                ...item,
+                equipmentId: exc.newEquipmentId,
+                serial: newSerial || item.serial,
+                name: newName || item.name || item.equipment,
+                equipment: newName || item.equipment || item.name,
+                model: newModel !== undefined ? newModel : item.model
+              };
+            }
+          }
+          return item;
+        });
+
+        if (!matched && items.length === 1) {
+          const item = items[0];
+          if (item.equipmentId !== exc.newEquipmentId || (newName && item.name !== newName)) {
+            rentalModified = true;
+            items[0] = {
+              ...item,
+              equipmentId: exc.newEquipmentId,
+              serial: newSerial || item.serial,
+              name: newName || item.name,
+              equipment: newName || item.equipment,
+              model: newModel !== undefined ? newModel : item.model
+            };
+          }
+        }
+      });
+
+      if (rentalModified) {
+        changed = true;
+        const activeItems = items.filter((item: any) => !item.returned);
+        const displayItems = activeItems.length > 0 ? activeItems : items;
+
+        const targetEquipmentId = displayItems.map((it: any) => it.equipmentId).join(", ");
+        const targetSerial = displayItems.map((it: any) => it.serial).join(", ");
+        const targetEquipment = displayItems.map((it: any) => eqMap.get(it.equipmentId)?.name || it.name || it.equipment || "Unknown").join(", ");
+        const targetModel = displayItems.map((it: any) => eqMap.get(it.equipmentId)?.model || it.model || "").filter(Boolean).join(", ");
+
+        return {
+          ...r,
+          equipmentItems: items,
+          equipmentId: targetEquipmentId || r.equipmentId,
+          serial: targetSerial || r.serial,
+          equipment: targetEquipment || r.equipment,
+          ...(targetModel ? { model: targetModel } : {})
+        };
+      }
+
+      return r;
+    });
+  }
+
   // Status-correction pass: "Overdue" means there's a real unpaid balance —
   // not a nominal end date passing (most agreements here run ongoing
   // month-to-month with no formal renewal/end date at all, so gating on
@@ -1670,7 +1774,7 @@ export function getRentals() {
   }
 
   const statusCorrections: any[] = [];
-  const statusCorrectedList = repairedList.map((r: any) => {
+  const statusCorrectedList = finalHealedList.map((r: any) => {
     if (r.status !== "Active" && r.status !== "Overdue") return r;
 
     const agreementPayments = paymentsByAgreement.get(r.id) || [];
@@ -2955,8 +3059,8 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
       // ITEM-5/7: the line item is the record of what was actually hired on this
       // agreement, so it wins over the (mutable) equipment master; the master is
       // only the fallback for older line items saved before `model` was captured.
-      const name = item.name || eqObj?.name || eqObj?.category || "Equipment";
-      const model = item.model || eqObj?.model || "Standard";
+      const name = eqObj?.name || item.name || item.equipment || eqObj?.category || "Equipment";
+      const model = eqObj?.model || item.model || "Standard";
       const serial = item.serial || eqObj?.serial || "XXXX";
       return `
          <tr>
@@ -5398,33 +5502,61 @@ export function saveExchange(exc: ExchangeItem) {
     const rIndex = rentals.findIndex((r: any) => r.id === exc.agreementId);
     if (rIndex > -1) {
       const rental = rentals[rIndex];
-      
+      const eqList = getEquipment();
+      const newEq = eqList.find(e => e.id === exc.newEquipmentId);
+      const newName = newEq?.name || exc.newEquipment;
+      const newModel = newEq?.model;
+      const newSerial = exc.newEquipmentSerial || newEq?.serial;
+
       // Update equipmentItems list if present
       if (rental.equipmentItems && rental.equipmentItems.length > 0) {
+        let matched = false;
         rental.equipmentItems = rental.equipmentItems.map((item: any) => {
-          if (item.equipmentId === exc.currentEquipmentId) {
+          const isMatch = item.equipmentId === exc.currentEquipmentId || 
+                          (exc.currentEquipmentSerial && item.serial === exc.currentEquipmentSerial) ||
+                          (rental.equipmentItems.length === 1 && item.equipmentId !== exc.newEquipmentId);
+          if (isMatch) {
+            matched = true;
             return {
               ...item,
               equipmentId: exc.newEquipmentId,
-              serial: exc.newEquipmentSerial,
+              serial: newSerial || item.serial,
+              name: newName || item.name || item.equipment,
+              equipment: newName || item.equipment || item.name,
+              model: newModel !== undefined ? newModel : item.model,
               // Keep original monthly rent, deposit, etc.
             };
           }
           return item;
         });
 
+        if (!matched && rental.equipmentItems.length === 1) {
+          const item = rental.equipmentItems[0];
+          rental.equipmentItems[0] = {
+            ...item,
+            equipmentId: exc.newEquipmentId,
+            serial: newSerial || item.serial,
+            name: newName || item.name,
+            equipment: newName || item.equipment,
+            model: newModel !== undefined ? newModel : item.model,
+          };
+        }
+
         // Update active comma-separated fields for backward compatibility
         const activeItems = rental.equipmentItems.filter((item: any) => !item.returned);
-        rental.equipmentId = activeItems.map((item: any) => item.equipmentId).join(", ");
-        rental.serial = activeItems.map((item: any) => item.serial).join(", ");
+        const displayItems = activeItems.length > 0 ? activeItems : rental.equipmentItems;
 
-        const eqList = getEquipment();
-        rental.equipment = activeItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || "Unknown").join(", ");
+        rental.equipmentId = displayItems.map((item: any) => item.equipmentId).join(", ");
+        rental.serial = displayItems.map((item: any) => item.serial).join(", ");
+        rental.equipment = displayItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.name || item.name || newName || "Unknown").join(", ");
+        const modelStr = displayItems.map((item: any) => eqList.find(e => e.id === item.equipmentId)?.model || item.model || "").filter(Boolean).join(", ");
+        if (modelStr) rental.model = modelStr;
       } else {
         // Fallback for legacy rentals without equipmentItems
         rental.equipmentId = exc.newEquipmentId;
-        rental.serial = exc.newEquipmentSerial;
-        rental.equipment = exc.newEquipment;
+        rental.serial = newSerial || exc.newEquipmentSerial;
+        rental.equipment = newName || exc.newEquipment;
+        if (newModel) rental.model = newModel;
       }
 
       setStorageItem("medirent-rentals", rentals);

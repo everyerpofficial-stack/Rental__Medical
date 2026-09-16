@@ -245,7 +245,8 @@ function PayDialog({
 
   const customerInfo = useMemo(() => {
     const custs = getCustomers();
-    const c = custs.find((c: any) => c.id === rental.customerId || (c.name && rental.customer && c.name.toLowerCase() === rental.customer.toLowerCase()));
+    const c = (rental.customerId && custs.find((c: any) => c.id === rental.customerId)) ||
+      custs.find((c: any) => c.name && rental.customer && c.name.toLowerCase() === rental.customer.toLowerCase());
     const p1 = rental.phone || c?.phone || "";
     const p2 = rental.altPhone || c?.altPhone || "";
     const p3 = rental.contactNumber3 || c?.contactNumber3 || "";
@@ -2405,11 +2406,8 @@ function DuesPage() {
       const remarkText = "";
 
       if (item.isReturnDue) {
-        const cust = customersList.find(
-          (c: any) =>
-            c.id === item.customerId ||
-            (c.name && item.customer && c.name.toLowerCase() === item.customer.toLowerCase())
-        );
+        const cust = (item.customerId && customersList.find((c: any) => c.id === item.customerId)) ||
+          customersList.find((c: any) => c.name && item.customer && c.name.toLowerCase() === item.customer.toLowerCase());
         const p1 = cust?.phone || "";
         const p2 = cust?.altPhone || "";
         const p3 = cust?.contactNumber3 || "";

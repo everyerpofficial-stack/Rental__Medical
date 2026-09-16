@@ -4631,8 +4631,8 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
       const eqObj = eqList.find(e => e.id === item.equipmentId);
       // ITEM-5/7: prefer the agreement's own line item over the (mutable)
       // equipment master, matching getAgreementHtmlContent().
-      const name = item.name || eqObj?.name || eqObj?.category || "Equipment";
-      const model = item.model || eqObj?.model || "Standard";
+      const name = eqObj?.name || item.name || item.equipment || eqObj?.category || "Equipment";
+      const model = eqObj?.model || item.model || "Standard";
       const serial = item.serial || eqObj?.serial || "XXXX";
       return (
         <tr key={idx} className="border-b border-slate-800 text-[11.5px]">

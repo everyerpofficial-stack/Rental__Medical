@@ -88,9 +88,11 @@ export function normalizeWhatsAppPhone(raw: unknown): string {
 
 /** Pull the best contact number off a rental, falling back to the customer record. */
 export function resolveCustomerPhone(record: any, customersList: any[] = []): string {
-  const customer = customersList.find(
-    (c: any) => c.id === record?.customerId || c.name === record?.customer,
-  );
+  const customer =
+    (record?.customerId && customersList.find((c: any) => c.id === record.customerId)) ||
+    customersList.find(
+      (c: any) => c.name && record?.customer && c.name.toLowerCase() === record.customer.toLowerCase(),
+    );
   const raw =
     customer?.phone ||
     record?.phone ||
