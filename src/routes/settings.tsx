@@ -39,9 +39,11 @@ import {
 import {
   getBusinessName,
   getWhatsAppStatus,
+  getWhatsAppTemplates,
   normalizeWhatsAppPhone,
   sendWhatsAppMessage,
   type WhatsAppStatus,
+  type WhatsAppTemplate,
 } from "@/lib/whatsapp";
 import {
   createBackupSnapshot,
@@ -89,6 +91,20 @@ function WhatsAppSettingsTab() {
   const [checking, setChecking] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testing, setTesting] = useState(false);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[] | null>(null);
+  const [templateError, setTemplateError] = useState("");
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  const loadTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const result = await getWhatsAppTemplates();
+      setTemplates(result.templates);
+      setTemplateError(result.error || "");
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
 
   const refreshStatus = async () => {
     setChecking(true);
@@ -148,6 +164,12 @@ function WhatsAppSettingsTab() {
       required: false,
       hint: "Only needed when the Meta app has \"Require app secret\" switched on.",
       present: status?.hasAppSecret,
+    },
+    {
+      key: "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      required: false,
+      hint: "WhatsApp Manager → Account tools → Business account ID. Only needed to list your templates below.",
+      present: status?.hasBusinessAccountId,
     },
     {
       key: "WHATSAPP_TEMPLATE_NAME",
@@ -282,6 +304,95 @@ function WhatsAppSettingsTab() {
             </p>
           </div>
 
+          {/* Which templates exist, and what shape are they */}
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Approved message templates
+              </Label>
+              <Button variant="outline" size="sm" onClick={loadTemplates} disabled={loadingTemplates}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${loadingTemplates ? "animate-spin" : ""}`} />
+                {loadingTemplates ? "Loading…" : templates ? "Reload" : "Load templates"}
+              </Button>
+            </div>
+
+            {templateError && (
+              <p className="rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-[11.5px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/25 dark:text-amber-200">
+                {templateError}
+              </p>
+            )}
+
+            {templates && templates.length === 0 && !templateError && (
+              <p className="text-[11.5px] text-muted-foreground">
+                No templates on this WhatsApp Business Account yet.
+              </p>
+            )}
+
+            {templates && templates.length > 0 && (
+              <div className="rounded-xl border border-border/60 divide-y divide-border/60 overflow-hidden">
+                {templates.map((t) => (
+                  <div key={`${t.name}-${t.language}`} className="p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="text-[11.5px] font-bold break-all">{t.name}</code>
+                      <span
+                        className={`text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          t.status === "APPROVED"
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                        }`}
+                      >
+                        {t.status}
+                      </span>
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {t.headerFormat || "No header"}
+                      </span>
+                      <span className="text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {t.bodyParams} {t.bodyParams === 1 ? "variable" : "variables"}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 ml-auto shrink-0"
+                        title={`Copy ${t.name}`}
+                        onClick={() => {
+                          navigator.clipboard.writeText(t.name);
+                          toast.success(`Copied ${t.name}`);
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    {t.bodyText && (
+                      <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug break-words">
+                        {t.bodyText}
+                      </p>
+                    )}
+                    {/* The agreement send needs a document header; anything else
+                        delivers the template text with no PDF attached. */}
+                    {!t.usableForDocuments && (
+                      <p className="mt-1.5 text-[10.5px] text-amber-700 dark:text-amber-400">
+                        {t.status !== "APPROVED"
+                          ? "Not approved yet, so it cannot be used."
+                          : "No document header — this template would send text without the agreement PDF."}
+                      </p>
+                    )}
+                    {t.usableForDocuments && t.bodyParams !== 2 && (
+                      <p className="mt-1.5 text-[10.5px] text-amber-700 dark:text-amber-400">
+                        Expects {t.bodyParams} variable(s); the agreement send supplies 2 (customer name, then
+                        agreement number). Tell your developer to match this count.
+                      </p>
+                    )}
+                    {t.usableForDocuments && t.bodyParams === 2 && (
+                      <p className="mt-1.5 text-[10.5px] text-emerald-700 dark:text-emerald-400">
+                        Ready to use — put this name in WHATSAPP_TEMPLATE_NAME.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Prove it works */}
           <div className="space-y-2.5">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -395,6 +506,7 @@ const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns",
 const WHATSAPP_PHONE_NUMBER_ID = "";  // e.g. "123456789012345"
 const WHATSAPP_ACCESS_TOKEN    = "";  // System User permanent token (starts with EAA...)
 const WHATSAPP_APP_SECRET      = "";  // only needed if the Meta app requires appsecret_proof
+const WHATSAPP_BUSINESS_ACCOUNT_ID = ""; // WhatsApp Manager > Account tools > Business account ID
 const WHATSAPP_TEMPLATE_NAME   = "";  // approved template, used when the 24h window has closed
 const WHATSAPP_TEMPLATE_LANG   = "en_US";
 const WHATSAPP_API_VERSION     = "v21.0";
@@ -423,6 +535,12 @@ function doGet(e) {
 
   // WhatsApp readiness, for the Settings screen. Reports only whether the
   // credentials exist, never their values.
+  if (action === "whatsappTemplates") {
+    return ContentService
+      .createTextOutput(JSON.stringify(waListTemplates()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   if (action === "whatsappStatus") {
     var waCfg = waConfig();
     var pid = waCfg.phoneNumberId;
@@ -432,6 +550,7 @@ function doGet(e) {
         hasPhoneNumberId: !!pid,
         hasAccessToken: !!waCfg.accessToken,
         hasAppSecret: !!waCfg.appSecret,
+        hasBusinessAccountId: !!waCfg.businessAccountId,
         templateName: waCfg.templateName || "",
         apiVersion: waCfg.apiVersion,
         phoneNumberIdMasked: pid ? pid.replace(/.(?=.{4})/g, "*") : ""
@@ -763,6 +882,7 @@ function waConfig() {
     phoneNumberId: pick("WHATSAPP_PHONE_NUMBER_ID", WHATSAPP_PHONE_NUMBER_ID),
     accessToken:   pick("WHATSAPP_ACCESS_TOKEN", WHATSAPP_ACCESS_TOKEN),
     appSecret:     pick("WHATSAPP_APP_SECRET", WHATSAPP_APP_SECRET),
+    businessAccountId: pick("WHATSAPP_BUSINESS_ACCOUNT_ID", WHATSAPP_BUSINESS_ACCOUNT_ID),
     templateName:  pick("WHATSAPP_TEMPLATE_NAME", WHATSAPP_TEMPLATE_NAME),
     templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en_US",
     apiVersion:    pick("WHATSAPP_API_VERSION", WHATSAPP_API_VERSION) || "v21.0",
@@ -974,6 +1094,78 @@ function waErrorText(json, to) {
     return "The business phone number is not registered for the Cloud API yet. Complete registration in Meta, WhatsApp, API Setup.";
   }
   return msg + (err.code ? " (Meta error " + err.code + ")" : "");
+}
+
+
+/**
+ * Lists the approved templates on the WhatsApp Business Account.
+ *
+ * A template send fails outright when the parameters the code sends do not
+ * match the template's own shape, and Meta's error for that ("132000") says
+ * nothing about what the right shape was. Reading the templates back means the
+ * Settings screen can show which ones exist, whether each carries a document
+ * header, and how many body variables it expects - so the name in
+ * WHATSAPP_TEMPLATE_NAME can be chosen from fact rather than from memory.
+ */
+function waListTemplates() {
+  var cfg = waConfig();
+  if (!cfg.accessToken) {
+    return { error: "WHATSAPP_ACCESS_TOKEN is not set in Script Properties." };
+  }
+  if (!cfg.businessAccountId) {
+    return { error: "WHATSAPP_BUSINESS_ACCOUNT_ID is not set in Script Properties. Copy it from Meta > WhatsApp Manager > Account tools > Business account ID." };
+  }
+
+  var url = waUrl(cfg, cfg.businessAccountId + "/message_templates");
+  url += (url.indexOf("?") === -1 ? "?" : "&") + "fields=name,status,language,category,components&limit=100";
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "get",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    muteHttpExceptions: true
+  });
+
+  var json = waParse(res);
+  if (res.getResponseCode() >= 300 || json.error) {
+    return { error: waErrorText(json, cfg.businessAccountId) };
+  }
+
+  var templates = (json.data || []).map(function (t) {
+    var headerFormat = "";
+    var bodyParams = 0;
+    var bodyText = "";
+
+    (t.components || []).forEach(function (c) {
+      var type = String(c.type || "").toUpperCase();
+      if (type === "HEADER") {
+        headerFormat = String(c.format || "TEXT").toUpperCase();
+      } else if (type === "BODY") {
+        bodyText = String(c.text || "");
+        // Meta numbers placeholders {{1}}, {{2}}, ... so the highest index is
+        // the count Meta expects, even if one is repeated or skipped.
+        var matches = bodyText.match(/\\{\\{\\s*(\\d+)\\s*\\}\\}/g) || [];
+        matches.forEach(function (m) {
+          var n = parseInt(m.replace(/[^0-9]/g, ""), 10);
+          if (n > bodyParams) bodyParams = n;
+        });
+      }
+    });
+
+    return {
+      name: t.name,
+      status: t.status,
+      language: t.language,
+      category: t.category,
+      headerFormat: headerFormat,
+      bodyParams: bodyParams,
+      bodyText: bodyText.slice(0, 300),
+      // What this integration needs: an approved template whose header carries
+      // the PDF and whose body takes customer name + agreement number.
+      usableForDocuments: t.status === "APPROVED" && headerFormat === "DOCUMENT"
+    };
+  });
+
+  return { status: "ok", templates: templates, selected: cfg.templateName || "" };
 }
 `;
 

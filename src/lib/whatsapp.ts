@@ -51,10 +51,25 @@ export interface WhatsAppStatus {
   hasPhoneNumberId: boolean;
   hasAccessToken: boolean;
   hasAppSecret: boolean;
+  hasBusinessAccountId: boolean;
   templateName: string;
   phoneNumberIdMasked: string;
   apiVersion?: string;
   error?: string;
+}
+
+/** One approved (or pending) template as Meta reports it. */
+export interface WhatsAppTemplate {
+  name: string;
+  status: string;
+  language: string;
+  category: string;
+  /** "DOCUMENT", "TEXT", "IMAGE"… or "" when the template has no header. */
+  headerFormat: string;
+  /** Highest {{n}} placeholder in the body — the number of values Meta expects. */
+  bodyParams: number;
+  bodyText: string;
+  usableForDocuments: boolean;
 }
 
 // ─── Phone helpers ───────────────────────────────────────────────────────────
@@ -213,6 +228,7 @@ export async function getWhatsAppStatus(): Promise<WhatsAppStatus> {
     hasPhoneNumberId: false,
     hasAccessToken: false,
     hasAppSecret: false,
+    hasBusinessAccountId: false,
     templateName: "",
     phoneNumberIdMasked: "",
   };
@@ -244,6 +260,47 @@ export async function getWhatsAppStatus(): Promise<WhatsAppStatus> {
 
 // ─── Message templates ───────────────────────────────────────────────────────
 
+/**
+ * Reads the message templates back from Meta.
+ *
+ * A template send is rejected when the values sent do not match the template's
+ * own shape, so this exists to make that shape visible in Settings rather than
+ * something to be remembered or guessed at.
+ */
+export async function getWhatsAppTemplates(): Promise<{
+  templates: WhatsAppTemplate[];
+  selected: string;
+  error?: string;
+}> {
+  const url = getGSheetsUrl();
+  if (!url) return { templates: [], selected: "", error: "No Apps Script URL configured." };
+
+  try {
+    const response = await fetch(
+      `${url}?action=whatsappTemplates&token=${encodeURIComponent(getGSheetsToken())}`,
+      { method: "GET" },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const json = await response.json();
+    if (json.error) return { templates: [], selected: "", error: String(json.error) };
+    if (!Array.isArray(json.templates)) {
+      return {
+        templates: [],
+        selected: "",
+        error:
+          "This Apps Script deployment is older than the template listing. Re-copy the script from Database Sync and deploy a new version.",
+      };
+    }
+    return { templates: json.templates as WhatsAppTemplate[], selected: json.selected || "" };
+  } catch (err) {
+    return {
+      templates: [],
+      selected: "",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 const rupee = (n: unknown) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
 
 /**
@@ -259,7 +316,12 @@ export function getBusinessName(): string {
   return configured;
 }
 
-export function buildRentalAgreementMessage(rental: any): string {
+/**
+ * `withAttachment` must be false for the wa.me fallback: a pre-filled draft
+ * carries text only, so the automatic wording would promise the customer a PDF
+ * that is not there.
+ */
+export function buildRentalAgreementMessage(rental: any, withAttachment = true): string {
   const business = getBusinessName();
   const start = rental?.start ? formatDateDDMMYYYY(rental.start) : "—";
   const end = rental?.end ? formatDateDDMMYYYY(rental.end) : "Ongoing";
@@ -280,7 +342,9 @@ export function buildRentalAgreementMessage(rental: any): string {
   return [
     `*Rental Agreement — ${business}*`,
     "",
-    `Dear ${rental?.customer || "Customer"}, your signed rental agreement is attached as a PDF.`,
+    withAttachment
+      ? `Dear ${rental?.customer || "Customer"}, your signed rental agreement is attached as a PDF.`
+      : `Dear ${rental?.customer || "Customer"}, here are the details of your rental agreement.`,
     "",
     `📄 Agreement No: ${rental?.id ?? "—"}`,
     `📦 Equipment: ${equipment}`,
@@ -289,7 +353,9 @@ export function buildRentalAgreementMessage(rental: any): string {
     `💰 Rent: ${rent}`,
     `💵 Security Deposit: ${rupee(rental?.deposit)}`,
     "",
-    `Please keep this document for your records. Call us any time you need support with the equipment.`,
+    withAttachment
+      ? `Please keep this document for your records. Call us any time you need support with the equipment.`
+      : `Call us any time you need support with the equipment, or a copy of the signed agreement.`,
     "",
     `— ${business}`,
   ].join("\n");
@@ -330,9 +396,12 @@ function toastFailureWithFallback(
   message: string,
   error: string,
 ) {
+  // The toast is transient and Meta's refusals are the hard part of setting this
+  // up, so keep the reason in the console where it can still be read afterwards.
+  console.error("[WhatsApp] Send failed:", error, { to: normalizeWhatsAppPhone(phone) });
   toast.error(error, {
     id: toastId,
-    duration: 12000,
+    duration: 20000,
     action: {
       label: "Send manually",
       onClick: () => openWhatsAppWeb(phone, message),
@@ -386,7 +455,14 @@ export async function sendRentalAgreementOnWhatsApp(
       description: `Delivered to +${result.to} as a PDF attachment.`,
     });
   } else {
-    toastFailureWithFallback(toastId, phone, message, result.error || "WhatsApp send failed.");
+    // Meta refused the send; the operator can still forward the details by hand,
+    // but only as text - so drop the "attached as a PDF" promise.
+    toastFailureWithFallback(
+      toastId,
+      phone,
+      buildRentalAgreementMessage(rental, false),
+      result.error || "WhatsApp send failed.",
+    );
   }
   return result;
 }

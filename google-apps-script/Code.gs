@@ -71,6 +71,7 @@ const LOCK_WAIT_MS = 30000;
 const WHATSAPP_PHONE_NUMBER_ID = "";  // e.g. "123456789012345"
 const WHATSAPP_ACCESS_TOKEN    = "";  // System User permanent token (starts with EAA...)
 const WHATSAPP_APP_SECRET      = "";  // only needed if the Meta app requires appsecret_proof
+const WHATSAPP_BUSINESS_ACCOUNT_ID = ""; // WhatsApp Manager > Account tools > Business account ID
 const WHATSAPP_TEMPLATE_NAME   = "";  // approved template, used when the 24h window has closed
 const WHATSAPP_TEMPLATE_LANG   = "en_US";
 const WHATSAPP_API_VERSION     = "v21.0";
@@ -119,6 +120,12 @@ function doGet(e) {
 
   // ── WhatsApp readiness, for the Settings screen. Reports only whether the
   //    credentials exist, never their values. ──
+  if (action === "whatsappTemplates") {
+    return ContentService
+      .createTextOutput(JSON.stringify(waListTemplates()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   if (action === "whatsappStatus") {
     var waCfg = waConfig();
     var pid = waCfg.phoneNumberId;
@@ -128,6 +135,7 @@ function doGet(e) {
         hasPhoneNumberId: !!pid,
         hasAccessToken: !!waCfg.accessToken,
         hasAppSecret: !!waCfg.appSecret,
+        hasBusinessAccountId: !!waCfg.businessAccountId,
         templateName: waCfg.templateName || "",
         apiVersion: waCfg.apiVersion,
         // Last four digits only — enough to confirm the right number is wired up.
@@ -495,6 +503,7 @@ function waConfig() {
     phoneNumberId: pick("WHATSAPP_PHONE_NUMBER_ID", WHATSAPP_PHONE_NUMBER_ID),
     accessToken:   pick("WHATSAPP_ACCESS_TOKEN", WHATSAPP_ACCESS_TOKEN),
     appSecret:     pick("WHATSAPP_APP_SECRET", WHATSAPP_APP_SECRET),
+    businessAccountId: pick("WHATSAPP_BUSINESS_ACCOUNT_ID", WHATSAPP_BUSINESS_ACCOUNT_ID),
     templateName:  pick("WHATSAPP_TEMPLATE_NAME", WHATSAPP_TEMPLATE_NAME),
     templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en_US",
     apiVersion:    pick("WHATSAPP_API_VERSION", WHATSAPP_API_VERSION) || "v21.0",
@@ -706,4 +715,75 @@ function waErrorText(json, to) {
     return "The business phone number is not registered for the Cloud API yet. Complete registration in Meta, WhatsApp, API Setup.";
   }
   return msg + (err.code ? " (Meta error " + err.code + ")" : "");
+}
+
+/**
+ * Lists the approved templates on the WhatsApp Business Account.
+ *
+ * A template send fails outright when the parameters the code sends do not
+ * match the template's own shape, and Meta's error for that ("132000") says
+ * nothing about what the right shape was. Reading the templates back means the
+ * Settings screen can show which ones exist, whether each carries a document
+ * header, and how many body variables it expects - so the name in
+ * WHATSAPP_TEMPLATE_NAME can be chosen from fact rather than from memory.
+ */
+function waListTemplates() {
+  var cfg = waConfig();
+  if (!cfg.accessToken) {
+    return { error: "WHATSAPP_ACCESS_TOKEN is not set in Script Properties." };
+  }
+  if (!cfg.businessAccountId) {
+    return { error: "WHATSAPP_BUSINESS_ACCOUNT_ID is not set in Script Properties. Copy it from Meta > WhatsApp Manager > Account tools > Business account ID." };
+  }
+
+  var url = waUrl(cfg, cfg.businessAccountId + "/message_templates");
+  url += (url.indexOf("?") === -1 ? "?" : "&") + "fields=name,status,language,category,components&limit=100";
+
+  var res = UrlFetchApp.fetch(url, {
+    method: "get",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    muteHttpExceptions: true
+  });
+
+  var json = waParse(res);
+  if (res.getResponseCode() >= 300 || json.error) {
+    return { error: waErrorText(json, cfg.businessAccountId) };
+  }
+
+  var templates = (json.data || []).map(function (t) {
+    var headerFormat = "";
+    var bodyParams = 0;
+    var bodyText = "";
+
+    (t.components || []).forEach(function (c) {
+      var type = String(c.type || "").toUpperCase();
+      if (type === "HEADER") {
+        headerFormat = String(c.format || "TEXT").toUpperCase();
+      } else if (type === "BODY") {
+        bodyText = String(c.text || "");
+        // Meta numbers placeholders {{1}}, {{2}}, ... so the highest index is
+        // the count Meta expects, even if one is repeated or skipped.
+        var matches = bodyText.match(/\{\{\s*(\d+)\s*\}\}/g) || [];
+        matches.forEach(function (m) {
+          var n = parseInt(m.replace(/[^0-9]/g, ""), 10);
+          if (n > bodyParams) bodyParams = n;
+        });
+      }
+    });
+
+    return {
+      name: t.name,
+      status: t.status,
+      language: t.language,
+      category: t.category,
+      headerFormat: headerFormat,
+      bodyParams: bodyParams,
+      bodyText: bodyText.slice(0, 300),
+      // What this integration needs: an approved template whose header carries
+      // the PDF and whose body takes customer name + agreement number.
+      usableForDocuments: t.status === "APPROVED" && headerFormat === "DOCUMENT"
+    };
+  });
+
+  return { status: "ok", templates: templates, selected: cfg.templateName || "" };
 }
