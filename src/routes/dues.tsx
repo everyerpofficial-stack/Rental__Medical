@@ -17,10 +17,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 import {
-  MessageCircle, Mail, Phone, Bell,
+  MessageCircle, Mail, Phone, Bell, Loader2,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock, AlertCircle,
 } from "lucide-react";
 import { getRentals, getCustomers, getPayments, savePayment, saveRental, saveReturn, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
+import {
+  buildDueReminderMessage,
+  normalizeWhatsAppPhone,
+  resolveCustomerPhone,
+  sendWhatsAppMessage,
+  sendWhatsAppTextWithFeedback,
+} from "@/lib/whatsapp";
 
 function countCommencedCycles(startDateStr: string, endDate: Date): number {
   const start = parseLocalDate(startDateStr);
@@ -50,6 +57,90 @@ function isInitialRentPaidHelper(r: any, paymentsList: any[]): boolean {
   return payments.some(
     (p: any) =>
       p.paymentType === "Initial Rent" || String(p.notes || "").toLowerCase().includes("initial")
+  );
+}
+
+/**
+ * Sends a rent reminder to the customer's WhatsApp.
+ *
+ * Every reminder button on this page used to fire `toast.success("WhatsApp
+ * reminder sent")` without contacting anyone — the office believed customers
+ * had been chased when nothing had left the building. These now perform a real
+ * Cloud API send and report what actually happened, including the manual
+ * fallback when Meta refuses delivery.
+ */
+function SendDueReminderButton({
+  customer,
+  customerId,
+  amount,
+  agreement,
+  equipment,
+  dueDate,
+  customersList,
+  layout = "icon",
+}: {
+  customer: string;
+  customerId?: string;
+  amount: number;
+  agreement?: string;
+  equipment?: string;
+  dueDate?: string;
+  customersList: any[];
+  layout?: "icon" | "button";
+}) {
+  const [sending, setSending] = useState(false);
+
+  const phone = resolveCustomerPhone({ customer, customerId }, customersList);
+  const hasPhone = !!normalizeWhatsAppPhone(phone);
+
+  const handleSend = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await sendWhatsAppTextWithFeedback({
+        to: phone,
+        customerName: customer,
+        reference: agreement,
+        message: buildDueReminderMessage({ customer, agreement, amount, dueDate, equipment }),
+        pendingLabel: `Sending rent reminder to ${customer} on WhatsApp…`,
+        successLabel: `Rent reminder sent to ${customer} on WhatsApp.`,
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const title = hasPhone
+    ? `Send rent reminder to ${customer} on WhatsApp`
+    : `No phone number on file for ${customer}`;
+
+  if (layout === "button") {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-10 text-[11px] px-2.5"
+        onClick={handleSend}
+        disabled={sending}
+        title={title}
+      >
+        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+        {sending ? "Sending…" : "Remind"}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 text-muted-foreground hover:text-success hover:bg-success/10"
+      title={title}
+      onClick={handleSend}
+      disabled={sending}
+    >
+      {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+    </Button>
   );
 }
 
@@ -1966,6 +2057,93 @@ function DuesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery, 300);
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
+  const [isSendingAll, setIsSendingAll] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+
+  /**
+   * Bulk rent reminders over WhatsApp.
+   *
+   * Sent one at a time rather than in parallel: each send is a billable Meta
+   * conversation and a burst of simultaneous requests to one business number is
+   * what gets a WhatsApp sender rate-limited. Confirmation is explicit because
+   * this messages real customers and cannot be undone.
+   */
+  const handleSendAllReminders = async () => {
+    if (isSendingAll) return;
+
+    const targets = filteredRentals
+      .map((item: any) => {
+        const isReturn = item.isReturnDue;
+        const customer = isReturn ? item.customer : item.rental?.customer;
+        const customerId = isReturn ? item.customerId : item.rental?.customerId;
+        return {
+          customer: customer || "",
+          customerId,
+          amount: item.totalOutstanding,
+          agreement: isReturn ? item.agreementId : item.rental?.id,
+          equipment: isReturn ? item.equipment : item.rental?.equipment,
+          dueDate: isReturn ? item.date : item.rental?.end,
+          phone: resolveCustomerPhone({ customer, customerId }, customersList),
+        };
+      })
+      .filter((t: any) => t.customer && normalizeWhatsAppPhone(t.phone));
+
+    const skipped = filteredRentals.length - targets.length;
+
+    if (targets.length === 0) {
+      toast.error("None of the customers in this list have a phone number on file.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Send a WhatsApp rent reminder to ${targets.length} customer(s)?` +
+        (skipped > 0 ? `\n\n${skipped} row(s) will be skipped — no phone number on file.` : "") +
+        `\n\nThis messages real customers and cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setIsSendingAll(true);
+    setBulkProgress({ done: 0, total: targets.length });
+    const toastId = toast.loading(`Sending reminder 1 of ${targets.length}…`);
+
+    let sent = 0;
+    const failures: string[] = [];
+
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      toast.loading(`Sending reminder ${i + 1} of ${targets.length} — ${t.customer}…`, { id: toastId });
+      const result = await sendWhatsAppMessage({
+        to: t.phone,
+        message: buildDueReminderMessage({
+          customer: t.customer,
+          agreement: t.agreement,
+          amount: t.amount,
+          dueDate: t.dueDate,
+          equipment: t.equipment,
+        }),
+        customerName: t.customer,
+        reference: t.agreement,
+      });
+      if (result.ok) sent++;
+      else failures.push(`${t.customer}: ${result.error}`);
+      setBulkProgress({ done: i + 1, total: targets.length });
+    }
+
+    setIsSendingAll(false);
+
+    if (failures.length === 0) {
+      toast.success(`Rent reminders sent to ${sent} customer(s) on WhatsApp.`, { id: toastId });
+    } else {
+      // Naming the first failure gives the operator something to act on; the
+      // console carries the rest so a long list doesn't bury the toast.
+      console.warn("[Dues] WhatsApp reminder failures:", failures);
+      toast.error(
+        `Sent ${sent} of ${targets.length} reminders. ${failures.length} failed — first error: ${failures[0]}`,
+        { id: toastId, duration: 15000 },
+      );
+    }
+  };
+
   const customersById = useMemo(
     () => new Map<string, any>(customersList.map((c: any) => [c.id, c])),
     [customersList]
@@ -2252,13 +2430,16 @@ function DuesPage() {
         const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
         const returnDurationCell = retDateFormatted ? `Returned on\n${retDateFormatted}` : "Return Due";
 
+        const custTaluk = cust?.taluk || (item as any)?.taluk || "";
+        const depositCell = custTaluk ? `${item.deposit || 0}\nTaluk: ${custTaluk}` : (item.deposit || 0);
+
         rows.push([
           slNo++,
           custCell,
           eqText,
           rentDateFormatted,
           item.rentRateText ? `<b>${item.rentRateText}</b>` : "—",
-          item.deposit || 0,
+          depositCell,
           returnDurationCell,
           `₹${item.totalDue.toLocaleString("en-IN")} (Final Settlement)`,
           `<b>${item.totalOutstanding || 0}</b>`,
@@ -2407,13 +2588,16 @@ function DuesPage() {
           }
         }
 
+        const custTaluk = cust?.taluk || r?.taluk || (item as any)?.taluk || "";
+        const depositCell = custTaluk ? `${combinedDeposit}\nTaluk: ${custTaluk}` : combinedDeposit;
+
         rows.push([
           slNo++,
           custCell,
           eqCell,
           rentDateCell,
           rateCell,
-          combinedDeposit,
+          depositCell,
           pendingDurationCell,
           paymentDueStatusCell,
           `<b>${remainingDueCell}</b>`,
@@ -2446,6 +2630,9 @@ function DuesPage() {
           const depVal = Number(ei.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
           const itemStartDate = ei.startDate || r.start;
 
+          const custTaluk = cust?.taluk || r?.taluk || (item as any)?.taluk || "";
+          const depositCell = custTaluk ? `${depVal}\nTaluk: ${custTaluk}` : depVal;
+
           if (ei.returned) {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);
             let retDateRaw = ei.returnedDate || ei.returnDate || r.end;
@@ -2458,7 +2645,7 @@ function DuesPage() {
               eqName,
               formatDateDDMMYYYY(itemStartDate),
               rateCell,
-              depVal,
+              depositCell,
               returnDurationCell,
               `₹${outstanding.toLocaleString("en-IN")} (Final Settlement)`,
               `<b>${outstanding || 0}</b>`,
@@ -2489,7 +2676,7 @@ function DuesPage() {
               eqName,
               formatDateDDMMYYYY(itemStartDate),
               rateCell,
-              depVal,
+              depositCell,
               pendingDurationCell,
               paymentDueStatusCell,
               `<b>${remainingDueCell}</b>`,
@@ -2531,14 +2718,19 @@ function DuesPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => {
-              toast.success("Sending reminders to " + filteredRentals.length + " customer(s) via WhatsApp, SMS & Email.");
-            }}
-            title="Send All Reminders"
+            onClick={handleSendAllReminders}
+            disabled={isSendingAll}
+            title="Send a WhatsApp rent reminder to every customer in this list"
             aria-label="Send All Reminders"
           >
-            <Bell className="h-3.5 w-3.5 md:mr-1.5" />
-            <span className="hidden md:inline">Send All Reminders</span>
+            {isSendingAll ? (
+              <Loader2 className="h-3.5 w-3.5 md:mr-1.5 animate-spin" />
+            ) : (
+              <Bell className="h-3.5 w-3.5 md:mr-1.5" />
+            )}
+            <span className="hidden md:inline">
+              {isSendingAll ? `Sending ${bulkProgress.done}/${bulkProgress.total}…` : "Send All Reminders"}
+            </span>
           </Button>
         </div>
       }
@@ -2677,6 +2869,13 @@ function DuesPage() {
                             </div>
                           )}
                           <div className="mt-1 font-mono text-[9.5px] text-muted-foreground">Agr: {item.agreementId}</div>
+                          {(() => {
+                            const cust = customersById.get(item.customerId) || customersList.find((c: any) => c.id === item.customerId);
+                            const talukName = cust?.taluk || (item as any)?.taluk;
+                            return talukName ? (
+                              <div className="text-[10px] font-medium text-muted-foreground mt-0.5">Taluk: {talukName}</div>
+                            ) : null;
+                          })()}
                         </TableCell>
 
                         {/* 2. Equipment name */}
@@ -2752,9 +2951,15 @@ function DuesPage() {
                               ret={ret}
                               onPaid={() => setRefreshKey((k) => k + 1)}
                             />
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-success hover:bg-success/10" title="WhatsApp" onClick={() => toast.success(`WhatsApp reminder sent to ${item.customer}`)}>
-                              <MessageCircle className="h-3.5 w-3.5" />
-                            </Button>
+                            <SendDueReminderButton
+                              customer={item.customer}
+                              customerId={item.customerId}
+                              amount={item.totalOutstanding}
+                              agreement={item.agreementId}
+                              equipment={item.equipment}
+                              dueDate={item.date}
+                              customersList={customersList}
+                            />
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="SMS" onClick={() => toast.success(`SMS reminder sent to ${item.customer}`)}>
                               <Phone className="h-3.5 w-3.5" />
                             </Button>
@@ -2788,6 +2993,13 @@ function DuesPage() {
                           </div>
                         )}
                         <div className="mt-1 font-mono text-[9.5px] text-muted-foreground">Agr: {r.id}</div>
+                        {(() => {
+                          const cust = customersById.get(r.customerId) || customersList.find((c: any) => c.id === r.customerId);
+                          const talukName = cust?.taluk || r?.taluk;
+                          return talukName ? (
+                            <div className="text-[10px] font-medium text-muted-foreground mt-0.5">Taluk: {talukName}</div>
+                          ) : null;
+                        })()}
                       </TableCell>
 
                       {/* 3. Equipment name with model */}
@@ -3006,9 +3218,15 @@ function DuesPage() {
                             getEquipmentName={getEquipmentName}
                             onPaid={() => setRefreshKey((k) => k + 1)}
                           />
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-success hover:bg-success/10" title="WhatsApp" onClick={() => toast.success(`WhatsApp reminder sent to ${r.customer}`)}>
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </Button>
+                          <SendDueReminderButton
+                            customer={r.customer}
+                            customerId={r.customerId}
+                            amount={item.totalOutstanding}
+                            agreement={r.id}
+                            equipment={r.equipment}
+                            dueDate={r.end}
+                            customersList={customersList}
+                          />
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="SMS" onClick={() => toast.success(`SMS reminder sent to ${r.customer}`)}>
                             <Phone className="h-3.5 w-3.5" />
                           </Button>
@@ -3054,6 +3272,13 @@ function DuesPage() {
                           <div>
                             <p className="font-semibold text-[13.5px]">{item.customer}</p>
                             <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary mt-0.5">{item.agreementId}</span>
+                            {(() => {
+                              const cust = customersById.get(item.customerId) || customersList.find((c: any) => c.id === item.customerId);
+                              const talukName = cust?.taluk || (item as any)?.taluk;
+                              return talukName ? (
+                                <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Taluk: {talukName}</p>
+                              ) : null;
+                            })()}
                             {getCustomerPhones(item.customerId).length > 0 && (
                               <div className="mt-1 space-y-0.5">
                                 {getCustomerPhones(item.customerId).map((p, idx) => (
@@ -3087,9 +3312,16 @@ function DuesPage() {
                             onPaid={() => setRefreshKey((k) => k + 1)}
                             triggerClassName="h-10 px-3 text-[11px] flex-1"
                           />
-                          <Button variant="outline" size="sm" className="h-10 text-[11px] px-2.5" onClick={() => toast.success(`WhatsApp reminder sent to ${item.customer}`)}>
-                            <MessageCircle className="h-3.5 w-3.5" /> Remind
-                          </Button>
+                          <SendDueReminderButton
+                            layout="button"
+                            customer={item.customer}
+                            customerId={item.customerId}
+                            amount={item.totalOutstanding}
+                            agreement={item.agreementId}
+                            equipment={item.equipment}
+                            dueDate={item.date}
+                            customersList={customersList}
+                          />
                         </div>
                       </div>
                     );
@@ -3110,6 +3342,13 @@ function DuesPage() {
                         <div>
                           <p className="font-semibold text-[13.5px]">{r.customer}</p>
                           <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary mt-0.5">{r.id}</span>
+                          {(() => {
+                            const cust = customersById.get(r.customerId) || customersList.find((c: any) => c.id === r.customerId);
+                            const talukName = cust?.taluk || r?.taluk;
+                            return talukName ? (
+                              <p className="text-[11px] font-medium text-muted-foreground mt-0.5">Taluk: {talukName}</p>
+                            ) : null;
+                          })()}
                           {getCustomerPhones(r.customerId).length > 0 && (
                             <div className="mt-1 space-y-0.5">
                               {getCustomerPhones(r.customerId).map((p, idx) => (
@@ -3168,9 +3407,16 @@ function DuesPage() {
                           onPaid={() => setRefreshKey((k) => k + 1)}
                           triggerClassName="h-10 px-3 text-[11px]"
                         />
-                        <Button variant="outline" size="sm" className="h-10 text-[11px] px-2.5" onClick={() => toast.success(`WhatsApp reminder sent to ${r.customer}`)}>
-                          <MessageCircle className="h-3.5 w-3.5" /> Remind
-                        </Button>
+                        <SendDueReminderButton
+                          layout="button"
+                          customer={r.customer}
+                          customerId={r.customerId}
+                          amount={item.totalOutstanding}
+                          agreement={r.id}
+                          equipment={r.equipment}
+                          dueDate={r.end}
+                          customersList={customersList}
+                        />
                       </div>
                     </div>
                   );

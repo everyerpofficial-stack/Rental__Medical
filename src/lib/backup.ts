@@ -427,12 +427,12 @@ export function downloadBackupExcel(): BackupSnapshot {
   const sheets: ExcelSheetDefinition[] = [
     {
       name: "Customers",
-      headers: ["Customer ID", "Full Name", "Primary Phone", "Alt Phone", "Alt Phone 1", "Email", "City", "State", "Pincode", "Address", "Area", "Aadhaar Number", "PAN Number", "Status", "Notes"],
-      colWidths: [100, 180, 140, 140, 140, 180, 110, 100, 90, 250, 130, 140, 130, 90, 200],
+      headers: ["Customer ID", "Full Name", "Primary Phone", "Alt Phone", "Alt Phone 1", "Email", "City", "State", "Pincode", "Address", "Area", "Taluk", "Aadhaar Number", "PAN Number", "Status", "Notes"],
+      colWidths: [100, 180, 140, 140, 140, 180, 110, 100, 90, 250, 130, 130, 140, 130, 90, 200],
       rows: customers.map((c: any) => [
         c.id || "", c.name || "", c.phone || "", c.altPhone || "", c.contactNumber3 || "",
         c.email || "", c.city || "", c.state || "", c.pincode || "", c.address || "",
-        c.area || "", c.aadhaar || "", c.pan || "", c.status || "Active", c.notes || ""
+        c.area || "", c.taluk || "", c.aadhaar || "", c.pan || "", c.status || "Active", c.notes || ""
       ])
     },
     {
@@ -447,8 +447,8 @@ export function downloadBackupExcel(): BackupSnapshot {
     },
     {
       name: "Rental Agreements",
-      headers: ["Agreement ID", "Customer ID", "Customer Name", "Consulting Hospital", "Referred By", "Rent Start Date", "Rent End Date", "Monthly Rent (₹)", "Deposit (₹)", "Equipment Items", "Serials", "Status", "Payment Mode", "Collected By", "Remarks"],
-      colWidths: [130, 110, 180, 160, 150, 110, 110, 120, 120, 220, 160, 110, 110, 130, 200],
+      headers: ["Agreement ID", "Customer ID", "Customer Name", "Consulting Hospital", "Referred By", "Rent Start Date", "Rent End Date", "Monthly Rent (₹)", "Deposit (₹)", "Equipment Items", "Serials", "Status", "Payment Mode", "Collected By", "Taluk", "Remarks"],
+      colWidths: [130, 110, 180, 160, 150, 110, 110, 120, 120, 220, 160, 110, 110, 130, 130, 200],
       rows: rentals.map((r: any) => {
         const items = Array.isArray(r.equipmentItems) && r.equipmentItems.length > 0
           ? r.equipmentItems.map((it: any) => `${it.name || "Equip"}${it.model ? " (" + it.model + ")" : ""}`).join(", ")
@@ -459,7 +459,7 @@ export function downloadBackupExcel(): BackupSnapshot {
         return [
           r.id || "", r.customerId || "", r.customer || "", r.consultingHospital || "", r.referredBy || "",
           cleanDate(r.start), cleanDate(r.end), Number(r.monthlyRent) || 0, Number(r.deposit) || 0,
-          items, serials, r.status || "Active", r.paymentMode || "Cash", r.paymentCollectedBy || "", r.remarks || r.notes || ""
+          items, serials, r.status || "Active", r.paymentMode || "Cash", r.paymentCollectedBy || "", r.taluk || "", r.remarks || r.notes || ""
         ];
       })
     },

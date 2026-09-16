@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════
-// MediRent / Relife ERP — Google Apps Script Web App  (v6 — Shared-Secret Auth)
+// MediRent / Relife ERP — Google Apps Script Web App  (v7 — WhatsApp Cloud API)
 // Sheet ID: 1va-_-hRrCaj7CyZSfdEoQeU1PBwn7Bh_PJlj9kaR--0
 //
 // SETUP STEPS:
@@ -9,6 +9,28 @@
 //  3. Click Deploy → Manage deployments → Edit (pencil) → Deploy
 //     - Execute as: Me
 //     - Who has access: Anyone
+//
+// v7 CHANGES (vs v6):
+//  - NEW ACTION `sendWhatsApp`: sends a rental agreement (or any message) to a
+//    customer through the Meta WhatsApp Cloud API, server-side. The frontend
+//    posts the agreement HTML; this script converts it to a PDF, uploads it to
+//    Meta as media, and sends it as a WhatsApp document message.
+//  - WHY SERVER-SIDE: the previous implementation called graph.facebook.com
+//    straight from the browser with VITE_WHATSAPP_ACCESS_TOKEN, which put a
+//    permanent Meta access token into the public JS bundle — anyone opening
+//    DevTools could read it and send WhatsApp messages as the business. The
+//    token now lives only in this script's Script Properties and never reaches
+//    a browser. Configure it under Project Settings → Script Properties:
+//        WHATSAPP_PHONE_NUMBER_ID   (from Meta → WhatsApp → API Setup)
+//        WHATSAPP_ACCESS_TOKEN      (System User permanent token)
+//        WHATSAPP_APP_SECRET        (optional — only if "Require app secret"
+//                                    is enabled on the Meta app)
+//        WHATSAPP_TEMPLATE_NAME     (optional — approved template used to
+//                                    re-open a conversation past the 24h window)
+//        WHATSAPP_TEMPLATE_LANG     (optional — defaults to en_US)
+//  - NEW ACTION `whatsappStatus` (GET): reports whether the credentials above
+//    are present, so Settings can show a real connection state. It never
+//    returns the token itself.
 //
 // v6 CHANGES (vs v5):
 //  - SECURITY FIX: doGet/doPost previously accepted requests from anyone who
@@ -41,6 +63,19 @@ const SPREADSHEET_ID = "1va-_-hRrCaj7CyZSfdEoQeU1PBwn7Bh_PJlj9kaR--0";
 const TOKEN = "392284cd2d4b0ea7d53f74cba8cd2288d044898d586824f1"; // must match the frontend's token — rotate both together
 const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns", "Owners", "Documents", "Exchanges", "FileChunks", "Staff"];
 const LOCK_WAIT_MS = 30000;
+
+// ─── WhatsApp Cloud API config ──────────────────────────────────────────────
+// Leave these blank and set them under Project Settings → Script Properties
+// instead; Script Properties win over the constants below. Either way the
+// values stay inside this script and are never sent to a browser.
+const WHATSAPP_PHONE_NUMBER_ID = "";  // e.g. "123456789012345"
+const WHATSAPP_ACCESS_TOKEN    = "";  // System User permanent token (starts with EAA...)
+const WHATSAPP_APP_SECRET      = "";  // only needed if the Meta app requires appsecret_proof
+const WHATSAPP_TEMPLATE_NAME   = "";  // approved template, used when the 24h window has closed
+const WHATSAPP_TEMPLATE_LANG   = "en_US";
+const WHATSAPP_API_VERSION     = "v21.0";
+const WHATSAPP_DEFAULT_CC      = "91"; // country code prefixed to bare 10-digit Indian numbers
+
 
 function getSS() {
   if (SPREADSHEET_ID && SPREADSHEET_ID.trim() !== "") {
@@ -78,7 +113,26 @@ function doGet(e) {
   if (action === "ping") {
     const ss = getSS();
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v6" }))
+      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v7" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // ── WhatsApp readiness, for the Settings screen. Reports only whether the
+  //    credentials exist, never their values. ──
+  if (action === "whatsappStatus") {
+    var waCfg = waConfig();
+    var pid = waCfg.phoneNumberId;
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        configured: !!(pid && waCfg.accessToken),
+        hasPhoneNumberId: !!pid,
+        hasAccessToken: !!waCfg.accessToken,
+        hasAppSecret: !!waCfg.appSecret,
+        templateName: waCfg.templateName || "",
+        apiVersion: waCfg.apiVersion,
+        // Last four digits only — enough to confirm the right number is wired up.
+        phoneNumberIdMasked: pid ? pid.replace(/.(?=.{4})/g, "*") : ""
+      }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -164,6 +218,21 @@ function doPost(e) {
   if (body.token !== TOKEN) return unauthorized();
 
   const action = body.action;
+
+  // Handled before the lock below: a WhatsApp send touches no sheet and makes
+  // two external HTTP calls to Meta that can take several seconds. Holding the
+  // script lock across them would stall every concurrent database write.
+  if (action === "sendWhatsApp") {
+    try {
+      return ContentService
+        .createTextOutput(JSON.stringify(handleWhatsAppSend(body)))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (waErr) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ error: String(waErr && waErr.message ? waErr.message : waErr) }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
 
   // Every write path below mutates a sheet via a read-then-write sequence
   // (find row by id, then overwrite or append). Apps Script runs concurrent
@@ -392,4 +461,249 @@ function applyHeaderFormat(sh) {
       sh.setColumnWidth(c, Math.max(120, sh.getColumnWidth(c) + 20));
     }
   } catch (err) {}
+}
+
+// ─── WhatsApp Cloud API ─────────────────────────────────────────────────────
+//
+// Flow for "send the rental agreement":
+//   1. The frontend POSTs { action:"sendWhatsApp", to, message, documentHtml }.
+//   2. documentHtml is the same printable agreement markup the PDF/Download
+//      button renders, so what the customer receives on WhatsApp is the very
+//      document the office prints.
+//   3. Utilities converts that HTML to a real PDF, which is uploaded to Meta's
+//      /media endpoint and then sent as a document message with the summary
+//      text as its caption.
+//
+// Meta only accepts free-form messages within 24 hours of the customer last
+// messaging the business (error 131047). For a brand-new customer that window
+// is always closed, so when WHATSAPP_TEMPLATE_NAME is configured the send is
+// retried once as an approved template carrying the same PDF in its header.
+
+function waConfig() {
+  var props = {};
+  try {
+    props = PropertiesService.getScriptProperties().getProperties() || {};
+  } catch (err) {
+    props = {};
+  }
+  function pick(key, fallback) {
+    var v = props[key];
+    if (v === undefined || v === null || String(v).trim() === "") return fallback;
+    return String(v).trim();
+  }
+  return {
+    phoneNumberId: pick("WHATSAPP_PHONE_NUMBER_ID", WHATSAPP_PHONE_NUMBER_ID),
+    accessToken:   pick("WHATSAPP_ACCESS_TOKEN", WHATSAPP_ACCESS_TOKEN),
+    appSecret:     pick("WHATSAPP_APP_SECRET", WHATSAPP_APP_SECRET),
+    templateName:  pick("WHATSAPP_TEMPLATE_NAME", WHATSAPP_TEMPLATE_NAME),
+    templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en_US",
+    apiVersion:    pick("WHATSAPP_API_VERSION", WHATSAPP_API_VERSION) || "v21.0",
+    defaultCc:     pick("WHATSAPP_DEFAULT_CC", WHATSAPP_DEFAULT_CC) || "91"
+  };
+}
+
+/** Bare 10-digit numbers are stored without a country code throughout the ERP;
+ *  Meta requires full international format with no "+" or separators. */
+function waNormalizePhone(raw, defaultCc) {
+  var digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return defaultCc + digits;
+  // 0XXXXXXXXXX — the trunk prefix used when dialling domestically
+  if (digits.length === 11 && digits.charAt(0) === "0") return defaultCc + digits.slice(1);
+  return digits;
+}
+
+/** Meta apps with "Require app secret" enabled reject calls that do not prove
+ *  the caller also holds the app secret, not just the token. */
+function waAppSecretProof(token, appSecret) {
+  if (!appSecret) return "";
+  var sig = Utilities.computeHmacSha256Signature(token, appSecret);
+  return sig.map(function (b) {
+    return ("0" + (b & 0xff).toString(16)).slice(-2);
+  }).join("");
+}
+
+function waUrl(cfg, path) {
+  var url = "https://graph.facebook.com/" + cfg.apiVersion + "/" + path;
+  var proof = waAppSecretProof(cfg.accessToken, cfg.appSecret);
+  return proof ? url + "?appsecret_proof=" + proof : url;
+}
+
+function waParse(response) {
+  var text = response.getContentText();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { error: { message: "Non-JSON response from Meta: " + text.slice(0, 300) } };
+  }
+}
+
+/** HTML to PDF to Meta media id. Returns { id, filename } or throws. */
+function waUploadPdf(cfg, html, filename) {
+  var safeName = String(filename || "Agreement.pdf").replace(/[^A-Za-z0-9._-]/g, "_");
+  if (safeName.slice(-4).toLowerCase() !== ".pdf") safeName += ".pdf";
+
+  var pdf = Utilities.newBlob(html, MimeType.HTML, safeName).getAs(MimeType.PDF).setName(safeName);
+
+  var res = UrlFetchApp.fetch(waUrl(cfg, cfg.phoneNumberId + "/media"), {
+    method: "post",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    // A Blob in the payload makes UrlFetchApp send multipart/form-data, which
+    // is the only format this endpoint accepts.
+    payload: {
+      messaging_product: "whatsapp",
+      type: "application/pdf",
+      file: pdf
+    },
+    muteHttpExceptions: true
+  });
+
+  var json = waParse(res);
+  if (res.getResponseCode() >= 300 || json.error || !json.id) {
+    throw new Error("Media upload failed: " + ((json.error && json.error.message) || res.getContentText().slice(0, 300)));
+  }
+  return { id: json.id, filename: safeName };
+}
+
+function waPostMessage(cfg, payload) {
+  var res = UrlFetchApp.fetch(waUrl(cfg, cfg.phoneNumberId + "/messages"), {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  return { code: res.getResponseCode(), json: waParse(res) };
+}
+
+/** Meta re-engagement errors: the customer has not messaged us in 24h, so only
+ *  an approved template may be delivered. */
+function waIsOutsideWindow(json) {
+  var err = json && json.error;
+  if (!err) return false;
+  if (err.code === 131047 || err.code === 131051 || err.code === 470) return true;
+  return /24 hours|re-?engagement|outside.*window/i.test(String(err.message || ""));
+}
+
+function waBuildTemplatePayload(cfg, to, media, params) {
+  var components = [];
+  if (media && media.id) {
+    components.push({
+      type: "header",
+      parameters: [{ type: "document", document: { id: media.id, filename: media.filename } }]
+    });
+  }
+  var list = [];
+  for (var i = 0; i < (params || []).length; i++) {
+    var raw = params[i];
+    list.push({ type: "text", text: String(raw === undefined || raw === null ? "" : raw) });
+  }
+  if (list.length) components.push({ type: "body", parameters: list });
+
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: to,
+    type: "template",
+    template: {
+      name: cfg.templateName,
+      language: { code: cfg.templateLang },
+      components: components
+    }
+  };
+}
+
+function handleWhatsAppSend(body) {
+  var cfg = waConfig();
+
+  if (!cfg.phoneNumberId || !cfg.accessToken) {
+    return { error: "WhatsApp is not configured on the server. Add WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN under Project Settings, Script Properties, in the Apps Script editor." };
+  }
+
+  var to = waNormalizePhone(body.to, cfg.defaultCc);
+  if (!to) return { error: "No WhatsApp number on file for this customer." };
+
+  // Meta limits: 4096 chars for a text body, 1024 for a document caption.
+  var message = String(body.message || "").slice(0, 4096);
+  var caption = String(body.caption || body.message || "").slice(0, 1024);
+
+  var media = null;
+  if (body.documentHtml) {
+    try {
+      media = waUploadPdf(cfg, String(body.documentHtml), body.filename);
+    } catch (err) {
+      return { error: String(err.message || err) };
+    }
+  }
+
+  var payload = media
+    ? {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: to,
+        type: "document",
+        document: { id: media.id, filename: media.filename, caption: caption }
+      }
+    : {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: to,
+        type: "text",
+        text: { preview_url: false, body: message }
+      };
+
+  var sent = waPostMessage(cfg, payload);
+
+  // Conversation closed? Re-send the identical PDF inside an approved template,
+  // which Meta allows at any time.
+  if ((sent.code >= 300 || sent.json.error) && waIsOutsideWindow(sent.json) && cfg.templateName) {
+    var params = body.templateParams && body.templateParams.length
+      ? body.templateParams
+      : [body.customerName || "Customer", body.reference || ""];
+    var retry = waPostMessage(cfg, waBuildTemplatePayload(cfg, to, media, params));
+    if (retry.code < 300 && !retry.json.error) {
+      return {
+        status: "ok",
+        mode: media ? "template+document" : "template",
+        to: to,
+        messageId: retry.json.messages && retry.json.messages[0] && retry.json.messages[0].id
+      };
+    }
+    return { error: waErrorText(retry.json, to) };
+  }
+
+  if (sent.code >= 300 || sent.json.error) {
+    return { error: waErrorText(sent.json, to) };
+  }
+
+  return {
+    status: "ok",
+    mode: media ? "document" : "text",
+    to: to,
+    messageId: sent.json.messages && sent.json.messages[0] && sent.json.messages[0].id
+  };
+}
+
+/** Meta raw errors are opaque to an office operator; translate the ones that
+ *  actually come up into an instruction they can act on. */
+function waErrorText(json, to) {
+  var err = (json && json.error) || {};
+  var msg = String(err.message || "WhatsApp send failed");
+  if (waIsOutsideWindow(json)) {
+    return "WhatsApp will not deliver to " + to + " because this customer has not messaged the business in the last 24 hours. " +
+           "Set WHATSAPP_TEMPLATE_NAME in Script Properties to an approved template to send anyway, or ask the customer to send any message first.";
+  }
+  if (err.code === 190) {
+    return "The WhatsApp access token has expired or been revoked. Generate a new permanent System User token in Meta Business Settings and update WHATSAPP_ACCESS_TOKEN.";
+  }
+  if (err.code === 131026) {
+    return to + " is not a valid WhatsApp number, or that account cannot receive messages from this business.";
+  }
+  if (err.code === 100 && /phone.number/i.test(msg)) {
+    return "WHATSAPP_PHONE_NUMBER_ID is wrong. Copy the Phone number ID (not the phone number) from Meta, WhatsApp, API Setup.";
+  }
+  if (err.code === 133010 || err.code === 133016) {
+    return "The business phone number is not registered for the Cloud API yet. Complete registration in Meta, WhatsApp, API Setup.";
+  }
+  return msg + (err.code ? " (Meta error " + err.code + ")" : "");
 }

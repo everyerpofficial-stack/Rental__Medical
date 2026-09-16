@@ -104,6 +104,7 @@ const customerImportColumns: ImportColumn[] = [
   { key: "state", label: "State" },
   { key: "pincode", label: "Pincode" },
   { key: "area", label: "Area" },
+  { key: "taluk", label: "Taluk", aliases: ["Taluk", "Taluk Name"] },
   { key: "address", label: "Address" },
   { key: "aadhaar", label: "Aadhaar" },
   { key: "pan", label: "PAN" },
@@ -143,6 +144,7 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
     pincode: row.pincode || "",
     address: row.address || "No address provided",
     area: row.area || "",
+    taluk: row.taluk || "",
     aadhaar: row.aadhaar || "",
     pan: row.pan || "",
     rentals: 0,
@@ -178,6 +180,7 @@ function CustomerFormDialog({
   const [pan, setPan] = useState(asText(customer?.pan));
   const [address, setAddress] = useState(asText(customer?.address));
   const [area, setArea] = useState(asText(customer?.area));
+  const [taluk, setTaluk] = useState(asText(customer?.taluk));
   const [city, setCity] = useState(asText(customer?.city) || "Mysore");
   const [state, setState] = useState(asText(customer?.state) || "Karnataka");
   const [pincode, setPincode] = useState(asText(customer?.pincode));
@@ -206,6 +209,7 @@ function CustomerFormDialog({
       setPan(asText(customer?.pan));
       setAddress(asText(customer?.address));
       setArea(asText(customer?.area));
+      setTaluk(asText(customer?.taluk));
       setCity(asText(customer?.city) || "Mysore");
       setState(asText(customer?.state) || "Karnataka");
       setPincode(asText(customer?.pincode));
@@ -375,6 +379,7 @@ function CustomerFormDialog({
       pincode: pincode,
       address: address || "No address provided",
       area: area.trim(),
+      taluk: taluk.trim(),
       aadhaar: aadhaar.replace(/\D/g, "").slice(0, 12),
       pan,
       rentals: customer?.rentals || 0,
@@ -533,6 +538,7 @@ function CustomerFormDialog({
             </div>
             <Field label="Address" placeholder="Full address" value={address} onChange={(e) => setAddress(capitalizeWords(e.target.value))} />
             <Field label="Area" placeholder="Area / Locality" value={area} onChange={(e) => setArea(capitalizeWords(e.target.value))} />
+            <Field label="Taluk" placeholder="Taluk name" value={taluk} onChange={(e) => setTaluk(capitalizeWords(e.target.value))} />
             <Field label="City" value={city} onChange={(e) => setCity(capitalizeWords(e.target.value))} />
             <div className="space-y-1.5">
               <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">State</Label>
@@ -948,6 +954,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
                       <InfoRow icon={MapPin} label="City / State" value={`${customer.city}, ${customer.state}`} />
                       <InfoRow icon={Hash} label="Pincode" value={customer.pincode || "—"} />
                       <InfoRow icon={MapPin} label="Area" value={customer.area || "—"} />
+                      <InfoRow icon={MapPin} label="Taluk" value={customer.taluk || "—"} />
                       <InfoRow icon={MapPinned} label="Full Address" value={customer.address} />
                     </div>
                   </div>
@@ -1904,7 +1911,7 @@ function CustomersPage() {
             variant="outline"
             size="sm"
             onClick={() => {
-              const headers = ["Customer ID", "Name", "Primary Number", "Alternative Phone", "Alternative Phone 1", "Email", "City", "State", "Active Rentals", "Status"];
+              const headers = ["Customer ID", "Name", "Primary Number", "Alternative Phone", "Alternative Phone 1", "Email", "City", "State", "Taluk", "Active Rentals", "Status"];
               const rows = customers.map(c => [
                 c.id,
                 c.name,
@@ -1914,10 +1921,11 @@ function CustomersPage() {
                 c.email || "",
                 c.city,
                 c.state,
+                c.taluk || "",
                 c.rentals.toString(),
                 c.status
               ]);
-              downloadExcel("customers_export.xls", headers, rows, [110, 200, 120, 120, 120, 220, 120, 120, 110, 100]);
+              downloadExcel("customers_export.xls", headers, rows, [110, 200, 120, 120, 120, 220, 120, 120, 120, 110, 100]);
               toast.success("Customer list exported successfully.");
             }}
           >

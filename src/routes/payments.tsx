@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
-  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2,
 } from "lucide-react";
 import {
   getPayments,
@@ -28,6 +28,7 @@ import {
   downloadFile,
   downloadExcel,
   printReceipt,
+  getPaymentReceiptHtmlContent,
   getEquipment,
   useDatabaseTrigger,
   getNextPaymentNumber,
@@ -40,6 +41,11 @@ import {
   formatEquipmentLabel,
   cleanNum,
 } from "@/lib/data-store";
+import {
+  normalizeWhatsAppPhone,
+  openWhatsAppWeb,
+  sendWhatsAppMessage,
+} from "@/lib/whatsapp";
 import { Combobox } from "@/components/ui/combobox";
 import { useDebounce } from "@/hooks/use-debounce";
 import { cn } from "@/lib/utils";
@@ -353,6 +359,8 @@ function CollectPaymentDialog({
   const remainingAfter = Math.max(0, dueForType - netAmount - discountAmount);
   const overpayment = Math.max(0, netAmount + discountAmount - dueForType);
 
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+
   const buildPaymentRecord = (id: string): Payment => ({
     id,
     date,
@@ -383,13 +391,9 @@ function CollectPaymentDialog({
     toast.success("Receipt print preview opened.");
   };
 
-  const handleShareWhatsApp = () => {
-    if (!agreement) {
-      toast.error("Select an agreement before sharing a receipt.");
-      return;
-    }
+  const buildReceiptMessage = () => {
     const rupee = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
-    const lines = [
+    return [
       `*Payment Receipt — ${type}*`,
       `Customer: ${selectedCustomer?.name || "Customer"}`,
       `Agreement: ${agreement}`,
@@ -399,14 +403,59 @@ function CollectPaymentDialog({
       `Paid: ${rupee(netAmount)} (${mode})`,
       txRef ? `Ref: ${txRef}` : "",
       remainingAfter > 0 ? `Balance remaining: ${rupee(remainingAfter)}` : "Balance cleared. Thank you!",
-    ].filter(Boolean);
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
 
-    const text = encodeURIComponent(lines.join("\n"));
-    const phone = String(selectedCustomer?.phone || "").replace(/\D/g, "");
-    const target = phone
-      ? `https://wa.me/${phone.length === 10 ? `91${phone}` : phone}?text=${text}`
-      : `https://wa.me/?text=${text}`;
-    window.open(target, "_blank");
+  /**
+   * Delivers the receipt to the customer's WhatsApp as a PDF - the same
+   * document the Print Receipt button renders - instead of only opening a
+   * pre-filled draft the operator still has to send by hand.
+   */
+  const handleSendWhatsApp = async () => {
+    if (!agreement) {
+      toast.error("Select an agreement before sharing a receipt.");
+      return;
+    }
+    if (isSendingWhatsApp) return;
+
+    const message = buildReceiptMessage();
+    const phone = selectedCustomer?.phone || "";
+
+    if (!normalizeWhatsAppPhone(phone)) {
+      // Nothing to send to automatically, but the operator can still forward
+      // the text from their own WhatsApp.
+      toast.error(`No phone number on file for ${selectedCustomer?.name || "this customer"}.`, {
+        action: { label: "Send manually", onClick: () => openWhatsAppWeb(phone, message) },
+      });
+      return;
+    }
+
+    setIsSendingWhatsApp(true);
+    try {
+      const record = buildPaymentRecord(payment?.id || "PAY-TEMP");
+      const toastId = toast.loading(`Sending receipt to ${record.customer} on WhatsApp…`);
+      const result = await sendWhatsAppMessage({
+        to: phone,
+        message,
+        documentHtml: getPaymentReceiptHtmlContent(record, record.customer, false),
+        filename: `Receipt_${String(record.id).replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
+        customerName: record.customer,
+        reference: agreement,
+      });
+      if (result.ok) {
+        toast.success(`Receipt sent to ${record.customer} on WhatsApp.`, { id: toastId });
+      } else {
+        toast.error(result.error || "WhatsApp send failed.", {
+          id: toastId,
+          duration: 12000,
+          action: { label: "Send manually", onClick: () => openWhatsAppWeb(phone, message) },
+        });
+      }
+    } finally {
+      setIsSendingWhatsApp(false);
+    }
   };
 
   const handleSave = () => {
@@ -694,8 +743,13 @@ function CollectPaymentDialog({
           <Button variant="outline" type="button" onClick={handlePrintForm}>
             <Printer className="mr-1.5 h-3.5 w-3.5" />Print Receipt
           </Button>
-          <Button variant="outline" type="button" onClick={handleShareWhatsApp}>
-            <MessageCircle className="mr-1.5 h-3.5 w-3.5" />Share
+          <Button variant="outline" type="button" onClick={handleSendWhatsApp} disabled={isSendingWhatsApp}>
+            {isSendingWhatsApp ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {isSendingWhatsApp ? "Sending…" : "Send on WhatsApp"}
           </Button>
           <DialogClose asChild>
             <Button variant="outline" type="button">Cancel</Button>

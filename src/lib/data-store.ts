@@ -2325,6 +2325,45 @@ export function syncAllOwnerStatuses() {
   owners.forEach((o) => updateOwnerStatusByEquipment(o.name));
 }
 
+/** Helper to check if an equipment's owner is Deepak / Relife Medical Technologies (In-House) */
+export function isRelifeOwner(ownerInput?: unknown, ownersList?: any[]): boolean {
+  if (!ownerInput) return true;
+  const s = String(ownerInput).trim().toLowerCase();
+  if (
+    !s ||
+    s === "own" ||
+    s === "in-house" ||
+    s === "inhouse" ||
+    s === "medirent" ||
+    s === "medirent healthcare" ||
+    s.includes("relife") ||
+    s.includes("deepak") ||
+    s.includes("rmt")
+  ) {
+    return true;
+  }
+  if (ownersList && Array.isArray(ownersList)) {
+    const matchedOwner = ownersList.find(
+      (o) => (o.name && String(o.name).trim().toLowerCase() === s) || (o.id && String(o.id).trim().toLowerCase() === s)
+    );
+    if (matchedOwner) {
+      const oName = String(matchedOwner.name || "").toLowerCase();
+      const oPerson = String(matchedOwner.ownerName || "").toLowerCase();
+      if (
+        oName.includes("relife") ||
+        oName.includes("deepak") ||
+        oName.includes("rmt") ||
+        oPerson.includes("relife") ||
+        oPerson.includes("deepak") ||
+        oPerson.includes("rmt")
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // Dynamic KPI Calculator for Dashboard
 export function getDynamicKPIs() {
   const custs = getCustomers();
@@ -2332,10 +2371,13 @@ export function getDynamicKPIs() {
   const equip = getEquipment();
   const pay = getPayments();
   const rets = getReturns();
+  const owners = getOwners();
+
+  const relifeEquip = equip.filter((e) => isRelifeOwner(e.owner, owners));
 
   const activeAgreements = rent.filter((r) => r.status === "Active" || r.status === "Overdue").length;
-  const availableEquip = equip.filter((e) => e.status === "Available" || e.status === "Inactive").length;
-  const rentedEquip = equip.filter((e) => e.status === "Rented" || e.status === "Active").length;
+  const availableEquip = relifeEquip.filter((e) => e.status === "Available" || e.status === "Inactive").length;
+  const rentedEquip = relifeEquip.filter((e) => e.status === "Rented" || e.status === "Active").length;
 
   const now = new Date();
   const curMonth = now.getMonth();
@@ -2622,8 +2664,8 @@ export function getDynamicKPIs() {
     { label: "Active Rentals",                value: activeAgreements.toString(),   description: "Current active rental agreements" },
     { label: "Agreements Made This Month",    value: curMonthAgreements.toString(), description: "New rental agreements this month" },
     { label: "Agreements Closed This Month",  value: curMonthReturns.toString(),    description: "Equipment returns this month" },
-    { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${equip.length} units available` },
-    { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${equip.length} units rented` },
+    { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${relifeEquip.length} units available` },
+    { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${relifeEquip.length} units rented` },
     { label: "Monthly Revenue",     value: `₹${currentMonthRevenue.toLocaleString("en-IN")}`, description: "Payments collected this month" },
     { label: "Pending Payments",    value: `₹${pendingPaymentsTodayAmount.toLocaleString("en-IN")}`, description: `Full Month: ₹${pendingPaymentsAmount.toLocaleString("en-IN")} · ${pendingInvoicesCount} agreement(s) with dues pending` },
     { label: "Security Deposits",   value: `₹${securityDepositsAmount.toLocaleString("en-IN")}`, description: "Refundable deposits in escrow" },

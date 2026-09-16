@@ -26,6 +26,7 @@ import {
   parseLocalDate,
   getPaidForEquipment,
   formatDateDDMMYYYY,
+  isRelifeOwner,
 } from "@/lib/data-store";
 import { toast } from "sonner";
 
@@ -109,28 +110,21 @@ function Dashboard() {
   const returnsList = useMemo(() => getReturns(), [dbVersion]);
   const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
-  // Calculate equipment counts per owner
-  const equipmentByOwner = ownersList.map((owner) => {
-    const count = equipmentList.filter(
-      (e) => e.owner?.toLowerCase() === owner.name.toLowerCase()
-    ).length;
-    return {
-      name: owner.name,
-      count: count,
-    };
-  });
+  // Filter equipment belonging to Deepak / Relife Medical Technologies (In-House)
+  const relifeEquipmentList = useMemo(
+    () => equipmentList.filter((e) => isRelifeOwner(e.owner, ownersList)),
+    [equipmentList, ownersList]
+  );
 
-  const inHouseCount = equipmentList.filter(
-    (e) => !e.owner || e.owner.toLowerCase() === "medirent" || e.owner.toLowerCase() === "medirent healthcare"
-  ).length;
-
-  const ownerGraphData = [
-    // Bug fix #13: Only include In-House if there are items; filter zero-count owners
-    ...(inHouseCount > 0 ? [{ name: "In-House", count: inHouseCount }] : []),
-    ...equipmentByOwner.filter(
-      (o) => o.count > 0 && o.name.toLowerCase() !== "medirent" && o.name.toLowerCase() !== "medirent healthcare"
-    ),
-  ];
+  const ownerGraphData = useMemo(() => {
+    const cats = relifeEquipmentList.length > 0 
+      ? Array.from(new Set(relifeEquipmentList.map(e => e.category)))
+      : [];
+    return cats.map((cat) => {
+      const count = relifeEquipmentList.filter((e) => e.category === cat).length;
+      return { name: cat, count };
+    }).filter((c) => c.count > 0);
+  }, [relifeEquipmentList]);
 
   // Dynamic weekly/maintenance metrics
   const oneWeekAgo = new Date();
@@ -146,7 +140,7 @@ function Dashboard() {
     return !isNaN(retDate.getTime()) && retDate.getTime() >= oneWeekAgo.getTime();
   }).length;
 
-  const maintenanceCount = equipmentList.filter(e => e.status === "UnderMaintenance").length;
+  const maintenanceCount = relifeEquipmentList.filter(e => e.status === "UnderMaintenance").length;
 
   // Total Paid
   const totalCollected = paymentsList
@@ -312,11 +306,11 @@ function Dashboard() {
     "Nebulizer",
     "Patient Ventilator",
   ];
-  const activeCategories = equipmentList.length > 0 
-    ? Array.from(new Set(equipmentList.map(e => e.category)))
+  const activeCategories = relifeEquipmentList.length > 0 
+    ? Array.from(new Set(relifeEquipmentList.map(e => e.category)))
     : defaultCategories;
   const utilizationData = activeCategories.map(cat => {
-    const catEquip = equipmentList.filter(e => e.category === cat);
+    const catEquip = relifeEquipmentList.filter(e => e.category === cat);
     const rentedCount = catEquip.filter(e => e.status === "Rented" || e.status === "Active").length;
     const rate = catEquip.length > 0 ? Math.round((rentedCount / catEquip.length) * 100) : 0;
     return { name: cat, value: rate };
@@ -617,8 +611,8 @@ function Dashboard() {
             {/* Owner Inventory Distribution Graph */}
             <Card className="lg:col-span-1">
               <CardHeader className="border-b border-border/60 pb-3 mb-0">
-                <CardTitle>Equipment by Owner</CardTitle>
-                <p className="text-[12px] text-muted-foreground">Inventory distribution across partners</p>
+                <CardTitle>Relife Inventory Breakdown</CardTitle>
+                <p className="text-[12px] text-muted-foreground">Deepak (Relife Medical Technologies) units by category</p>
               </CardHeader>
               <CardContent className="pt-4">
                 <ResponsiveContainer width="100%" height={260}>

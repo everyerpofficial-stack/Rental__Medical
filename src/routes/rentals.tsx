@@ -15,13 +15,14 @@ import {
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Plus, Search, Download, FileText, Mail, CalendarDays, MessageCircle,
   MoreHorizontal, Edit, Trash2, XCircle, FileCheck2, Clock, AlertTriangle,
   ShieldCheck, Fingerprint, PenTool, Camera, FileUp, CheckCircle2, MapPin,
-  X, QrCode, Phone, Info, Eye, User
+  X, QrCode, Phone, Info, Eye, User, Loader2
 } from "lucide-react";
 import {
   getRentals,
@@ -68,6 +69,11 @@ import { EquipmentFormDialog } from "@/components/EquipmentFormDialog";
 import { isOwnOwner } from "@/components/EquipmentFormDialog";
 import { QrScannerModal } from "@/components/QrScannerModal";
 import { capitalizeWords, numericInputGuard } from "@/lib/utils";
+import {
+  sendRentalAgreementOnWhatsApp,
+  normalizeWhatsAppPhone,
+  resolveCustomerPhone,
+} from "@/lib/whatsapp";
 
 export const Route = createFileRoute("/rentals")({
   head: () => ({ meta: [{ title: "Rentals — Relife" }] }),
@@ -106,93 +112,75 @@ export interface Rental {
   [key: string]: unknown;
 }
 
-export async function sendWhatsAppCloudApiMessage(toPhone: string, textMessage: string, templateName?: string) {
-  const phoneId = import.meta.env.VITE_WHATSAPP_PHONE_NUMBER_ID || "1193201143885448";
-  const token = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
-  if (!token) throw new Error("WhatsApp Access Token is missing");
+/**
+ * One-click "send this agreement to the customer on WhatsApp".
+ *
+ * The send is a real Meta Cloud API call that delivers the agreement as a PDF,
+ * so it takes a couple of seconds and costs a conversation. This owns its own
+ * in-flight state to show that it is working and to block the double-click that
+ * would otherwise deliver the same document twice.
+ */
+function SendAgreementWhatsAppButton({
+  rental,
+  customers,
+  layout = "icon",
+  onSent,
+}: {
+  rental: any;
+  customers: any[];
+  layout?: "icon" | "button";
+  onSent?: () => void;
+}) {
+  const [sending, setSending] = useState(false);
 
-  const cleanPhone = String(toPhone).replace(/\D/g, "");
-  const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+  const hasPhone = !!normalizeWhatsAppPhone(resolveCustomerPhone(rental, customers));
 
-  const payload = templateName
-    ? {
-        messaging_product: "whatsapp",
-        to: targetPhone,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: "en_US" }
-        }
-      }
-    : {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: targetPhone,
-        type: "text",
-        text: { preview_url: false, body: textMessage },
-      };
-
-  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const json = await response.json();
-  if (!response.ok || json.error) {
-    throw new Error(json.error?.message || "WhatsApp Cloud API request failed");
-  }
-  return json;
-}
-
-export function sendWhatsAppDocument(rental: any, customersList: any[] = []) {
-  if (!rental) return;
-  const cust = customersList.find((c: any) => c.id === rental.customerId || c.name === rental.customer);
-  const rawPhone = cust?.phone || rental.phone || rental.customerPhone || "";
-  const cleanPhone = String(rawPhone).replace(/\D/g, "");
-
-  const startDateFormatted = formatDateDDMMYYYY(rental.start);
-  const endDateFormatted = rental.end ? formatDateDDMMYYYY(rental.end) : "Ongoing";
-  const rentDisplay = rental.rentRate || (rental.monthlyRent ? `₹${rental.monthlyRent.toLocaleString("en-IN")}/mo` : "—");
-  const depositDisplay = `₹${(rental.deposit || 0).toLocaleString("en-IN")}`;
-
-  const equipmentLabels = getRentalEquipmentLabels(rental);
-  const equipmentBlock = equipmentLabels.length > 0
-    ? equipmentLabels.map((label) => `📦 *Equipment:* ${label}\n`).join("")
-    : `📦 *Equipment:* Medical Equipment\n`;
-
-  const message = `*Rental Agreement Document - MediRent*\n\n` +
-    `📄 *Agreement ID:* ${rental.id}\n` +
-    `👤 *Customer:* ${rental.customer}\n` +
-    equipmentBlock +
-    `🗓️ *Start Date:* ${startDateFormatted}\n` +
-    `🗓️ *End Date:* ${endDateFormatted}\n` +
-    `💰 *Rent Rate:* ${rentDisplay}\n` +
-    `💵 *Security Deposit:* ${depositDisplay}\n` +
-    `📌 *Status:* ${rental.status}\n\n` +
-    `Thank you for choosing MediRent! Please contact us if you need any assistance.`;
-
-  const textEncoded = encodeURIComponent(message);
-
-  if (cleanPhone) {
-    const targetPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    
-    // Attempt sending via Meta Cloud API background call if token is configured
-    if (import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN) {
-      sendWhatsAppCloudApiMessage(targetPhone, message)
-        .then(() => toast.success(`Sent WhatsApp message via Cloud API to ${cust?.name || rental.customer}`))
-        .catch((err) => console.warn("WhatsApp Cloud API send notice:", err));
+  const handleSend = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      const result = await sendRentalAgreementOnWhatsApp(rental, customers);
+      if (result.ok && onSent) onSent();
+    } finally {
+      setSending(false);
     }
-    
-    window.open(`https://wa.me/${targetPhone}?text=${textEncoded}`, "_blank");
-    toast.success(`Opening WhatsApp to send document for ${rental.id} to ${cust?.name || rental.customer} (${rawPhone})`);
-  } else {
-    window.open(`https://wa.me/?text=${textEncoded}`, "_blank");
-    toast.info(`Opening WhatsApp to share document for ${rental.id}.`);
+  };
+
+  const title = hasPhone
+    ? `Send agreement PDF to ${rental?.customer || "customer"} on WhatsApp`
+    : `No phone number on file for ${rental?.customer || "this customer"}`;
+
+  if (layout === "button") {
+    return (
+      <Button
+        size="sm"
+        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+        onClick={handleSend}
+        disabled={sending}
+        title={title}
+      >
+        {sending ? (
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+        )}
+        {sending ? "Sending…" : "Send to WhatsApp"}
+      </Button>
+    );
   }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+      title={title}
+      onClick={handleSend}
+      disabled={sending}
+    >
+      {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+    </Button>
+  );
 }
 
 export function getDirectionsUrl(lat: number, lon: number, address?: string): string {
@@ -381,6 +369,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [custPan, setCustPan] = useState("");
   const [custAddress, setCustAddress] = useState("");
   const [custArea, setCustArea] = useState("");
+  const [custTaluk, setCustTaluk] = useState("");
   const [custCity, setCustCity] = useState("");
   const [custState, setCustState] = useState("Karnataka");
   const [custPincode, setCustPincode] = useState("");
@@ -465,6 +454,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [paymentCollectedBy, setPaymentCollectedBy] = useState((rental?.paymentCollectedBy as string) || "");
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Default on for a new agreement (the customer is standing there and
+  // expects their copy), off when editing — re-sending the same document
+  // after a small correction is rarely what the operator wants.
+  const [sendOnWhatsApp, setSendOnWhatsApp] = useState(!rental);
   const [hasDraft, setHasDraft] = useState(false);
   const [approvalStatus, setApprovalStatus] = useState<"Active">("Active");
 
@@ -539,6 +532,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       custPan,
       custAddress,
       custArea,
+      custTaluk,
       custCity,
       custState,
       custPincode,
@@ -595,6 +589,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         setCustPan(draft.custPan || "");
         setCustAddress(draft.custAddress || "");
         setCustArea(draft.custArea || "");
+        setCustTaluk(draft.custTaluk || "");
         setCustCity(draft.custCity || "Mysore");
         setCustState(draft.custState || "Karnataka");
         setCustPincode(draft.custPincode || "");
@@ -767,8 +762,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setCustEmail("");
       setCustAadhaar("");
       setCustPan("");
-      setCustAddress("");
-      setCustArea("");
+      setCustAddress((rental as any)?.address || "");
+      setCustArea((rental as any)?.area || "");
+      setCustTaluk((rental as any)?.taluk || "");
       setCustCity("Mysore");
       setCustState("Karnataka");
       setCustPincode("");
@@ -1095,6 +1091,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   );
 
   const selectedCustomer = customersList.find(c => c.id === selectedCustomerId);
+  // Where an auto-send would land, shown next to the toggle so the operator
+  // can see the number before committing to a send that costs a conversation.
+  const whatsAppTargetPhone = normalizeWhatsAppPhone(
+    isNewCustomer ? custPhone : selectedCustomer?.phone || "",
+  );
 
   // Load the selected customer's saved KYC ID proofs whenever the dialog is
   // open and the selection changes. Files live in IndexedDB (and are pulled
@@ -1600,6 +1601,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         pincode: custPincode,
         address: custAddress || "No address provided",
         area: custArea,
+        taluk: custTaluk,
         aadhaar: custAadhaar,
         pan: custPan,
         rentals: 1,
@@ -1734,6 +1736,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       rentalDiscountMode,
       netRent: netRentVal,
       totalRent: 0,
+      taluk: custTaluk,
       latitude: capturedLocation?.latitude || null,
       longitude: capturedLocation?.longitude || null,
       locationAddress: capturedLocation?.address || null,
@@ -1905,6 +1908,21 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     }
 
         toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
+
+    // Deliver the agreement PDF to the customer's WhatsApp. Deliberately not
+    // awaited: the send is a multi-second round trip to Meta and the operator
+    // should not be held on a saved form waiting for it. Progress and any
+    // failure (with a manual-send fallback) surface as their own toasts.
+    if (sendOnWhatsApp) {
+      const whatsAppPhone = isNewCustomer
+        ? custPhone
+        : selectedCustomer?.phone || "";
+      void sendRentalAgreementOnWhatsApp(
+        { ...newRental, phone: whatsAppPhone },
+        getCustomers(),
+      );
+    }
+
     setOpen(false);
     if (onClose) onClose();
     if (onSave) onSave();
@@ -2005,6 +2023,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Area</Label>
                       <Input placeholder="Area / Locality" value={custArea} onChange={(e) => setCustArea(capitalizeWords(e.target.value))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Taluk</Label>
+                      <Input placeholder="Taluk name" value={custTaluk} onChange={(e) => setCustTaluk(capitalizeWords(e.target.value))} />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">City</Label>
@@ -2227,6 +2249,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                 <span className="font-medium text-foreground truncate block">{selectedCustomer.area}</span>
                               </div>
                             )}
+                            {selectedCustomer.taluk && (
+                              <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
+                                <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">Taluk</span>
+                                <span className="font-medium text-foreground truncate block">{selectedCustomer.taluk}</span>
+                              </div>
+                            )}
                             {selectedCustomer.city && (
                               <div className="bg-background/80 p-2 rounded-md border border-border/40 min-w-0">
                                 <span className="text-[9.5px] uppercase font-bold text-muted-foreground block truncate">City</span>
@@ -2245,7 +2273,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                                 <span className="font-semibold font-mono text-foreground">{selectedCustomer.pincode}</span>
                               </div>
                             )}
-                            {!selectedCustomer.address && !selectedCustomer.area && !selectedCustomer.city && !selectedCustomer.state && !selectedCustomer.pincode && (
+                            {!selectedCustomer.address && !selectedCustomer.area && !selectedCustomer.taluk && !selectedCustomer.city && !selectedCustomer.state && !selectedCustomer.pincode && (
                               <div className="col-span-full text-[12px] font-medium text-muted-foreground">
                                 No delivery address specified
                               </div>
@@ -3483,7 +3511,31 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 trigger={<Button variant="outline" type="button" className="w-full justify-start"><FileText className="mr-1.5 h-3.5 w-3.5" />Preview Agreement</Button>}
               />
               <Button variant="outline" type="button" className="w-full justify-start" onClick={() => toast.success(`Agreement emailed successfully to customer.`)}><Mail className="mr-1.5 h-3.5 w-3.5" />Email Agreement</Button>
-              
+
+              {/* Saving and sending are one action for the operator: the customer
+                  is usually standing at the counter waiting for their copy. */}
+              <label
+                htmlFor="send-agreement-whatsapp"
+                className="mt-1 flex w-full cursor-pointer items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/25"
+              >
+                <Checkbox
+                  id="send-agreement-whatsapp"
+                  checked={sendOnWhatsApp}
+                  onCheckedChange={(checked) => setSendOnWhatsApp(checked === true)}
+                  className="mt-0.5 border-emerald-500 data-[state=checked]:border-emerald-600 data-[state=checked]:bg-emerald-600"
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-800 dark:text-emerald-300">
+                    <MessageCircle className="h-3.5 w-3.5" /> Send agreement on WhatsApp
+                  </span>
+                  <span className="mt-0.5 block text-[10.5px] leading-snug text-emerald-700/80 dark:text-emerald-400/80">
+                    {whatsAppTargetPhone
+                      ? `The PDF is delivered to +${whatsAppTargetPhone} as soon as this agreement is saved.`
+                      : "Add a 10-digit mobile number above to deliver the PDF automatically."}
+                  </span>
+                </span>
+              </label>
+
               <div className="flex gap-2 w-full mt-2">
                 <Button variant="outline" type="button" className="flex-1" onClick={onClose}>Cancel</Button>
                 {canApprove && rental && rental.status === "Pending Approval" && (
@@ -3504,7 +3556,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 )}
                 <Button type="button" className="flex-1 font-bold bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleSave} disabled={isSubmitting}>
                   <FileText className="mr-1.5 h-3.5 w-3.5" />
-                  {isSubmitting ? "Saving..." : (rental ? "Update Agreement" : "Save Agreement")}
+                  {isSubmitting
+                    ? "Saving..."
+                    : sendOnWhatsApp
+                      ? (rental ? "Update & Send" : "Save & Send")
+                      : (rental ? "Update Agreement" : "Save Agreement")}
                 </Button>
               </div>
             </div>
@@ -3530,7 +3586,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                 disabled={isSubmitting}
               >
                 <FileText className="mr-1.5 h-3.5 w-3.5" />
-                {isSubmitting ? "Saving..." : (rental ? "Update Agreement" : "Save Agreement")}
+                {isSubmitting
+                  ? "Saving..."
+                  : sendOnWhatsApp
+                    ? (rental ? "Update & Send" : "Save & Send")
+                    : (rental ? "Update Agreement" : "Save Agreement")}
               </Button>
             </div>
           </div>
@@ -4771,9 +4831,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
             <Button variant="outline" size="sm" onClick={() => { downloadAgreementFile(rental); toast.success(`Agreement PDF downloaded successfully.`); }}>
               <Download className="mr-1.5 h-3.5 w-3.5" /> PDF / Download
             </Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => sendWhatsAppDocument(rental, customers)}>
-              <MessageCircle className="mr-1.5 h-3.5 w-3.5" /> Send to WhatsApp
-            </Button>
+            <SendAgreementWhatsAppButton rental={rental} customers={customers} layout="button" />
             <DialogClose asChild>
               <Button variant="outline" size="sm" className="hover:bg-destructive hover:text-destructive-foreground">
                 <X className="mr-1.5 h-3.5 w-3.5" /> Close
@@ -5672,15 +5730,7 @@ function RentalsPage() {
                         >
                           <FileText className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                          title={`Send WhatsApp to ${r.customer}`}
-                          onClick={() => sendWhatsAppDocument(r, customersList)}
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" />
-                        </Button>
+                        <SendAgreementWhatsAppButton rental={r} customers={customersList} />
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Email" onClick={() => toast.success(`Agreement emailed successfully to ${r.customer}.`)}>
                           <Mail className="h-3.5 w-3.5" />
                         </Button>

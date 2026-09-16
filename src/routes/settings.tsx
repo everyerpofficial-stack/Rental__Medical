@@ -37,6 +37,13 @@ import {
   deduplicateStaffUsers,
 } from "@/lib/data-store";
 import {
+  getBusinessName,
+  getWhatsAppStatus,
+  normalizeWhatsAppPhone,
+  sendWhatsAppMessage,
+  type WhatsAppStatus,
+} from "@/lib/whatsapp";
+import {
   createBackupSnapshot,
   downloadBackupJSON,
   downloadBackupCSV,
@@ -65,6 +72,244 @@ import {
   syncRowToSheet,
   deleteRowFromSheet,
 } from "@/lib/google-sheets";
+
+// ─── WhatsApp Tab ────────────────────────────────────────────────────────────
+
+/**
+ * WhatsApp is configured in the Apps Script project, not here.
+ *
+ * The access token is the credential that lets anyone send messages as this
+ * business, so it deliberately has no input field on this page: anything the
+ * website can read, a visitor can read too. This screen only reports whether
+ * the backend has the credentials and lets an admin prove it end to end with a
+ * test message.
+ */
+function WhatsAppSettingsTab() {
+  const [status, setStatus] = useState<WhatsAppStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [testPhone, setTestPhone] = useState("");
+  const [testing, setTesting] = useState(false);
+
+  const refreshStatus = async () => {
+    setChecking(true);
+    try {
+      setStatus(await getWhatsAppStatus());
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshStatus();
+    // Checked once when the tab mounts; the button re-runs it on demand.
+  }, []);
+
+  const handleTestSend = async () => {
+    const normalized = normalizeWhatsAppPhone(testPhone);
+    if (!normalized) {
+      toast.error("Enter a 10-digit mobile number to send the test to.");
+      return;
+    }
+    setTesting(true);
+    const toastId = toast.loading(`Sending a test WhatsApp message to +${normalized}…`);
+    try {
+      const result = await sendWhatsAppMessage({
+        to: normalized,
+        message:
+          `Test message from ${getBusinessName()} ERP. ` +
+          `If you can read this, WhatsApp sending is working correctly.`,
+        customerName: "Test",
+      });
+      if (result.ok) {
+        toast.success(`Test message delivered to +${result.to}.`, { id: toastId });
+      } else {
+        toast.error(result.error || "Test send failed.", { id: toastId, duration: 15000 });
+      }
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const scriptProperties = [
+    {
+      key: "WHATSAPP_PHONE_NUMBER_ID",
+      required: true,
+      hint: "Meta → WhatsApp → API Setup → the Phone number ID (a long number, not the phone number itself).",
+      present: status?.hasPhoneNumberId,
+    },
+    {
+      key: "WHATSAPP_ACCESS_TOKEN",
+      required: true,
+      hint: "A permanent System User token from Meta Business Settings. The temporary 24-hour test token works, but stops after a day.",
+      present: status?.hasAccessToken,
+    },
+    {
+      key: "WHATSAPP_APP_SECRET",
+      required: false,
+      hint: "Only needed when the Meta app has \"Require app secret\" switched on.",
+      present: status?.hasAppSecret,
+    },
+    {
+      key: "WHATSAPP_TEMPLATE_NAME",
+      required: false,
+      hint: "An approved message template. Without one, a customer who has never messaged the business cannot be sent anything (see below).",
+      present: !!status?.templateName,
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600">
+            <MessageSquare className="h-4.5 w-4.5" />
+          </div>
+          <div className="min-w-0">
+            <CardTitle>WhatsApp Sending</CardTitle>
+            <p className="text-[12px] text-muted-foreground mt-0.5">
+              Delivers rental agreements, receipts and rent reminders straight to the customer's WhatsApp
+            </p>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {/* Connection state */}
+          <div
+            className={`rounded-xl border p-4 ${
+              status?.configured
+                ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/50 dark:bg-emerald-950/25"
+                : "border-amber-300 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/25"
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {status?.configured ? (
+                  <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="h-4.5 w-4.5 shrink-0 text-amber-600" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold">
+                    {status === null
+                      ? "Checking…"
+                      : status.configured
+                        ? "WhatsApp is connected"
+                        : "WhatsApp is not configured yet"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 break-words">
+                    {status?.error
+                      ? status.error
+                      : status?.configured
+                        ? `Sending from phone number ID ${status.phoneNumberIdMasked} via Graph API ${status.apiVersion}.`
+                        : "Add the credentials below to the Apps Script project, then re-check."}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={refreshStatus} disabled={checking}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${checking ? "animate-spin" : ""}`} />
+                {checking ? "Checking…" : "Re-check"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Where the credentials live */}
+          <div className="space-y-2.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Script Properties (set these in the Apps Script editor)
+            </Label>
+            <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+              Open the Apps Script project → <strong>Project Settings</strong> (gear icon) →{" "}
+              <strong>Script properties</strong> → <strong>Add script property</strong>. These stay on Google's
+              servers; they are never sent to this website, which is exactly why there is no field for them here.
+            </p>
+            <div className="rounded-xl border border-border/60 divide-y divide-border/60 overflow-hidden">
+              {scriptProperties.map((prop) => (
+                <div key={prop.key} className="flex items-start gap-3 p-3">
+                  <div className="mt-0.5 shrink-0">
+                    {prop.present ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    ) : prop.required ? (
+                      <XCircle className="h-4 w-4 text-destructive" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground/40" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <code className="text-[11.5px] font-bold break-all">{prop.key}</code>
+                      <span
+                        className={`text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          prop.required
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {prop.required ? "Required" : "Optional"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{prop.hint}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    title={`Copy ${prop.key}`}
+                    onClick={() => {
+                      navigator.clipboard.writeText(prop.key);
+                      toast.success(`Copied ${prop.key}`);
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* The rule that surprises everyone */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/50 dark:bg-blue-950/25">
+            <p className="flex items-center gap-2 text-[12.5px] font-bold text-blue-900 dark:text-blue-300">
+              <AlertTriangle className="h-4 w-4 shrink-0" /> WhatsApp's 24-hour rule
+            </p>
+            <p className="mt-1.5 text-[11.5px] leading-relaxed text-blue-900/85 dark:text-blue-200/85">
+              Meta only delivers a freely-written message to someone who has messaged the business within the
+              last 24 hours. A brand-new customer has not, so the send is refused (error 131047) unless it uses
+              an <strong>approved message template</strong>. Create one under Meta → WhatsApp Manager → Message
+              Templates with a <strong>Document header</strong>, wait for approval, then put its name in{" "}
+              <code className="text-[11px] font-bold">WHATSAPP_TEMPLATE_NAME</code>. Sends then fall back to
+              that template automatically, with the agreement PDF attached. Until then, a refused send still
+              offers "Send manually", which opens WhatsApp with the message ready to go.
+            </p>
+          </div>
+
+          {/* Prove it works */}
+          <div className="space-y-2.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Send a test message
+            </Label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                placeholder="10-digit mobile number"
+                inputMode="numeric"
+                className="h-10 text-[13px] flex-1"
+              />
+              <Button onClick={handleTestSend} disabled={testing || !status?.configured} className="h-10">
+                <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                {testing ? "Sending…" : "Send Test"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Use your own number. Message that number from WhatsApp first so the 24-hour window is open,
+              otherwise the test will be refused even when everything is configured correctly.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — Relife" }] }),
@@ -107,7 +352,7 @@ function DatabaseSettingsTab() {
   const SHEET_ID = "1f5mJV8P90ID2-BiyeZZvtBF0Q3JjvyElbfI4omxkJRw";
 
   const appsScriptCode = `// ══════════════════════════════════════════════════════════
-// MediRent / Relife ERP — Google Apps Script Web App  (v6 — Shared-Secret Auth)
+// MediRent / Relife ERP — Google Apps Script Web App  (v7 — WhatsApp Cloud API)
 // Sheet ID: ${SHEET_ID}
 //
 // SETUP STEPS:
@@ -116,11 +361,21 @@ function DatabaseSettingsTab() {
 //  3. Replace ALL existing code with this script
 //  4. (Recommended) Change TOKEN below to your own secret, and paste the same
 //     value into the "Shared Secret Token" field below before saving.
-//  5. Click Deploy → New Deployment → Web App
+//  5. FIRST TIME ONLY: Deploy → New Deployment → Web App
+//     UPDATING an existing deployment: Deploy → Manage deployments → pencil
+//     (Edit) → Version: "New version" → Deploy. This keeps the SAME Web App
+//     URL, so nothing in the ERP needs changing. A New Deployment would mint a
+//     different URL and leave the old one serving the old code.
 //     - Execute as: Me
 //     - Who has access: Anyone
 //  6. Click Deploy → copy the Web App URL
 //  7. Paste the URL (and token) into the fields above and click Test Connection
+//  8. FOR WHATSAPP: in the Apps Script editor open Project Settings (gear icon)
+//     -> Script Properties -> Add script property, and add:
+//        WHATSAPP_PHONE_NUMBER_ID = the Phone number ID from Meta > WhatsApp > API Setup
+//        WHATSAPP_ACCESS_TOKEN    = a permanent System User access token
+//     Keep these here, never in the website - anything in the frontend is
+//     public. Redeploy after adding them.
 // ══════════════════════════════════════════════════════════
 
 // SECURITY: every request must include a token matching TOKEN below, or it's
@@ -132,6 +387,18 @@ const TOKEN = "${sheetsToken || "CHANGE_ME_TO_A_LONG_RANDOM_SECRET"}";
 // BUG-9 FIX (v3): Added "FileChunks" — required for cross-device PDF/image sync.
 // Without this, file chunk upserts silently failed because the sheet wasn't tracked.
 const SHEET_NAMES = ["Customers", "Equipment", "Rentals", "Payments", "Returns", "Owners", "Documents", "Exchanges", "FileChunks", "Staff"];
+
+// ─── WhatsApp Cloud API config ──────────────────────────────────────────────
+// Leave these blank and set them under Project Settings → Script Properties
+// instead; Script Properties win over the constants below. Either way the
+// values stay inside this script and are never sent to a browser.
+const WHATSAPP_PHONE_NUMBER_ID = "";  // e.g. "123456789012345"
+const WHATSAPP_ACCESS_TOKEN    = "";  // System User permanent token (starts with EAA...)
+const WHATSAPP_APP_SECRET      = "";  // only needed if the Meta app requires appsecret_proof
+const WHATSAPP_TEMPLATE_NAME   = "";  // approved template, used when the 24h window has closed
+const WHATSAPP_TEMPLATE_LANG   = "en_US";
+const WHATSAPP_API_VERSION     = "v21.0";
+const WHATSAPP_DEFAULT_CC      = "91"; // country code prefixed to bare 10-digit Indian numbers
 
 function unauthorized() {
   return ContentService
@@ -150,7 +417,25 @@ function doGet(e) {
   if (action === "ping") {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v6" }))
+      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v7" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // WhatsApp readiness, for the Settings screen. Reports only whether the
+  // credentials exist, never their values.
+  if (action === "whatsappStatus") {
+    var waCfg = waConfig();
+    var pid = waCfg.phoneNumberId;
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        configured: !!(pid && waCfg.accessToken),
+        hasPhoneNumberId: !!pid,
+        hasAccessToken: !!waCfg.accessToken,
+        hasAppSecret: !!waCfg.appSecret,
+        templateName: waCfg.templateName || "",
+        apiVersion: waCfg.apiVersion,
+        phoneNumberIdMasked: pid ? pid.replace(/.(?=.{4})/g, "*") : ""
+      }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -231,6 +516,21 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: "ok" }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Handled before the lock below: a WhatsApp send touches no sheet and makes
+  // two external HTTP calls to Meta that can take several seconds. Holding the
+  // script lock across them would stall every concurrent database write.
+  if (action === "sendWhatsApp") {
+    try {
+      return ContentService
+        .createTextOutput(JSON.stringify(handleWhatsAppSend(body)))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (waErr) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ error: String(waErr && waErr.message ? waErr.message : waErr) }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
   }
 
   // Every write path below mutates a sheet via a read-then-write sequence
@@ -429,7 +729,253 @@ function applyHeaderFormat(sh) {
       sh.setColumnWidth(c, Math.max(120, sh.getColumnWidth(c) + 20));
     }
   } catch (err) {}
-}`;
+}
+
+// ─── WhatsApp Cloud API ─────────────────────────────────────────────────────
+//
+// Flow for "send the rental agreement":
+//   1. The frontend POSTs { action:"sendWhatsApp", to, message, documentHtml }.
+//   2. documentHtml is the same printable agreement markup the PDF/Download
+//      button renders, so what the customer receives on WhatsApp is the very
+//      document the office prints.
+//   3. Utilities converts that HTML to a real PDF, which is uploaded to Meta's
+//      /media endpoint and then sent as a document message with the summary
+//      text as its caption.
+//
+// Meta only accepts free-form messages within 24 hours of the customer last
+// messaging the business (error 131047). For a brand-new customer that window
+// is always closed, so when WHATSAPP_TEMPLATE_NAME is configured the send is
+// retried once as an approved template carrying the same PDF in its header.
+
+function waConfig() {
+  var props = {};
+  try {
+    props = PropertiesService.getScriptProperties().getProperties() || {};
+  } catch (err) {
+    props = {};
+  }
+  function pick(key, fallback) {
+    var v = props[key];
+    if (v === undefined || v === null || String(v).trim() === "") return fallback;
+    return String(v).trim();
+  }
+  return {
+    phoneNumberId: pick("WHATSAPP_PHONE_NUMBER_ID", WHATSAPP_PHONE_NUMBER_ID),
+    accessToken:   pick("WHATSAPP_ACCESS_TOKEN", WHATSAPP_ACCESS_TOKEN),
+    appSecret:     pick("WHATSAPP_APP_SECRET", WHATSAPP_APP_SECRET),
+    templateName:  pick("WHATSAPP_TEMPLATE_NAME", WHATSAPP_TEMPLATE_NAME),
+    templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en_US",
+    apiVersion:    pick("WHATSAPP_API_VERSION", WHATSAPP_API_VERSION) || "v21.0",
+    defaultCc:     pick("WHATSAPP_DEFAULT_CC", WHATSAPP_DEFAULT_CC) || "91"
+  };
+}
+
+/** Bare 10-digit numbers are stored without a country code throughout the ERP;
+ *  Meta requires full international format with no "+" or separators. */
+function waNormalizePhone(raw, defaultCc) {
+  var digits = String(raw || "").replace(/\\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 10) return defaultCc + digits;
+  // 0XXXXXXXXXX — the trunk prefix used when dialling domestically
+  if (digits.length === 11 && digits.charAt(0) === "0") return defaultCc + digits.slice(1);
+  return digits;
+}
+
+/** Meta apps with "Require app secret" enabled reject calls that do not prove
+ *  the caller also holds the app secret, not just the token. */
+function waAppSecretProof(token, appSecret) {
+  if (!appSecret) return "";
+  var sig = Utilities.computeHmacSha256Signature(token, appSecret);
+  return sig.map(function (b) {
+    return ("0" + (b & 0xff).toString(16)).slice(-2);
+  }).join("");
+}
+
+function waUrl(cfg, path) {
+  var url = "https://graph.facebook.com/" + cfg.apiVersion + "/" + path;
+  var proof = waAppSecretProof(cfg.accessToken, cfg.appSecret);
+  return proof ? url + "?appsecret_proof=" + proof : url;
+}
+
+function waParse(response) {
+  var text = response.getContentText();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    return { error: { message: "Non-JSON response from Meta: " + text.slice(0, 300) } };
+  }
+}
+
+/** HTML to PDF to Meta media id. Returns { id, filename } or throws. */
+function waUploadPdf(cfg, html, filename) {
+  var safeName = String(filename || "Agreement.pdf").replace(/[^A-Za-z0-9._-]/g, "_");
+  if (safeName.slice(-4).toLowerCase() !== ".pdf") safeName += ".pdf";
+
+  var pdf = Utilities.newBlob(html, MimeType.HTML, safeName).getAs(MimeType.PDF).setName(safeName);
+
+  var res = UrlFetchApp.fetch(waUrl(cfg, cfg.phoneNumberId + "/media"), {
+    method: "post",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    // A Blob in the payload makes UrlFetchApp send multipart/form-data, which
+    // is the only format this endpoint accepts.
+    payload: {
+      messaging_product: "whatsapp",
+      type: "application/pdf",
+      file: pdf
+    },
+    muteHttpExceptions: true
+  });
+
+  var json = waParse(res);
+  if (res.getResponseCode() >= 300 || json.error || !json.id) {
+    throw new Error("Media upload failed: " + ((json.error && json.error.message) || res.getContentText().slice(0, 300)));
+  }
+  return { id: json.id, filename: safeName };
+}
+
+function waPostMessage(cfg, payload) {
+  var res = UrlFetchApp.fetch(waUrl(cfg, cfg.phoneNumberId + "/messages"), {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: "Bearer " + cfg.accessToken },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  return { code: res.getResponseCode(), json: waParse(res) };
+}
+
+/** Meta re-engagement errors: the customer has not messaged us in 24h, so only
+ *  an approved template may be delivered. */
+function waIsOutsideWindow(json) {
+  var err = json && json.error;
+  if (!err) return false;
+  if (err.code === 131047 || err.code === 131051 || err.code === 470) return true;
+  return /24 hours|re-?engagement|outside.*window/i.test(String(err.message || ""));
+}
+
+function waBuildTemplatePayload(cfg, to, media, params) {
+  var components = [];
+  if (media && media.id) {
+    components.push({
+      type: "header",
+      parameters: [{ type: "document", document: { id: media.id, filename: media.filename } }]
+    });
+  }
+  var list = [];
+  for (var i = 0; i < (params || []).length; i++) {
+    var raw = params[i];
+    list.push({ type: "text", text: String(raw === undefined || raw === null ? "" : raw) });
+  }
+  if (list.length) components.push({ type: "body", parameters: list });
+
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: to,
+    type: "template",
+    template: {
+      name: cfg.templateName,
+      language: { code: cfg.templateLang },
+      components: components
+    }
+  };
+}
+
+function handleWhatsAppSend(body) {
+  var cfg = waConfig();
+
+  if (!cfg.phoneNumberId || !cfg.accessToken) {
+    return { error: "WhatsApp is not configured on the server. Add WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN under Project Settings, Script Properties, in the Apps Script editor." };
+  }
+
+  var to = waNormalizePhone(body.to, cfg.defaultCc);
+  if (!to) return { error: "No WhatsApp number on file for this customer." };
+
+  // Meta limits: 4096 chars for a text body, 1024 for a document caption.
+  var message = String(body.message || "").slice(0, 4096);
+  var caption = String(body.caption || body.message || "").slice(0, 1024);
+
+  var media = null;
+  if (body.documentHtml) {
+    try {
+      media = waUploadPdf(cfg, String(body.documentHtml), body.filename);
+    } catch (err) {
+      return { error: String(err.message || err) };
+    }
+  }
+
+  var payload = media
+    ? {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: to,
+        type: "document",
+        document: { id: media.id, filename: media.filename, caption: caption }
+      }
+    : {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: to,
+        type: "text",
+        text: { preview_url: false, body: message }
+      };
+
+  var sent = waPostMessage(cfg, payload);
+
+  // Conversation closed? Re-send the identical PDF inside an approved template,
+  // which Meta allows at any time.
+  if ((sent.code >= 300 || sent.json.error) && waIsOutsideWindow(sent.json) && cfg.templateName) {
+    var params = body.templateParams && body.templateParams.length
+      ? body.templateParams
+      : [body.customerName || "Customer", body.reference || ""];
+    var retry = waPostMessage(cfg, waBuildTemplatePayload(cfg, to, media, params));
+    if (retry.code < 300 && !retry.json.error) {
+      return {
+        status: "ok",
+        mode: media ? "template+document" : "template",
+        to: to,
+        messageId: retry.json.messages && retry.json.messages[0] && retry.json.messages[0].id
+      };
+    }
+    return { error: waErrorText(retry.json, to) };
+  }
+
+  if (sent.code >= 300 || sent.json.error) {
+    return { error: waErrorText(sent.json, to) };
+  }
+
+  return {
+    status: "ok",
+    mode: media ? "document" : "text",
+    to: to,
+    messageId: sent.json.messages && sent.json.messages[0] && sent.json.messages[0].id
+  };
+}
+
+/** Meta raw errors are opaque to an office operator; translate the ones that
+ *  actually come up into an instruction they can act on. */
+function waErrorText(json, to) {
+  var err = (json && json.error) || {};
+  var msg = String(err.message || "WhatsApp send failed");
+  if (waIsOutsideWindow(json)) {
+    return "WhatsApp will not deliver to " + to + " because this customer has not messaged the business in the last 24 hours. " +
+           "Set WHATSAPP_TEMPLATE_NAME in Script Properties to an approved template to send anyway, or ask the customer to send any message first.";
+  }
+  if (err.code === 190) {
+    return "The WhatsApp access token has expired or been revoked. Generate a new permanent System User token in Meta Business Settings and update WHATSAPP_ACCESS_TOKEN.";
+  }
+  if (err.code === 131026) {
+    return to + " is not a valid WhatsApp number, or that account cannot receive messages from this business.";
+  }
+  if (err.code === 100 && /phone.number/i.test(msg)) {
+    return "WHATSAPP_PHONE_NUMBER_ID is wrong. Copy the Phone number ID (not the phone number) from Meta, WhatsApp, API Setup.";
+  }
+  if (err.code === 133010 || err.code === 133016) {
+    return "The business phone number is not registered for the Cloud API yet. Complete registration in Meta, WhatsApp, API Setup.";
+  }
+  return msg + (err.code ? " (Meta error " + err.code + ")" : "");
+}
+`;
 
   const handleSaveUrl = () => {
     if (sheetsUrl && !sheetsUrl.startsWith("https://script.google.com/")) {
@@ -573,7 +1119,7 @@ function applyHeaderFormat(sh) {
           const errMsg = String(e);
           console.warn("[GSheets] Clear failed:", e);
           const proceedAnyway = window.confirm(
-            `Failed to clear Google Sheets: ${errMsg}\n\nThis usually happens because your deployed Google Apps Script does not support the new clear action. To fix this, copy the updated Apps Script code from the section above, paste it in Extensions → Apps Script, and click Deploy → New Deployment.\n\nDo you want to clear your local database anyway?`
+            `Failed to clear Google Sheets: ${errMsg}\n\nThis usually happens because your deployed Google Apps Script does not support the new clear action. To fix this, copy the updated Apps Script code from the section above, paste it in Extensions → Apps Script, and click Deploy → Manage deployments → pencil (Edit) → Version: New version → Deploy.\n\nDo you want to clear your local database anyway?`
           );
           if (!proceedAnyway) return;
         }
@@ -628,7 +1174,8 @@ function applyHeaderFormat(sh) {
                 <>Open your <a href={`https://docs.google.com/spreadsheets/d/${SHEET_ID}`} target="_blank" rel="noreferrer" className="text-primary underline inline-flex items-center gap-1">Google Sheet <ExternalLink className="h-3 w-3" /></a></>,
                 "Click Extensions → Apps Script",
                 "Replace all code with the script below, then click Save (Ctrl+S)",
-                "Click Deploy → New Deployment → Web App → Execute as: Me → Access: Anyone",
+                "First time: Deploy → New Deployment → Web App → Execute as: Me → Access: Anyone",
+                "Updating later: Deploy → Manage deployments → pencil (Edit) → Version: New version → Deploy — this keeps the same URL. Saving the code alone does NOT update the live app.",
                 "Copy the Web App URL and paste it below, along with the same Shared Secret Token from the script",
                 "Click Save, then Test Connection, then Sync All Data",
               ].map((step, i) => (
@@ -1637,7 +2184,7 @@ function SettingsPage() {
   // missing or unexpected role value — a cleared key, a row typed by hand into
   // the Staff sheet — opened Settings, including the Danger Zone.
   const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
-  const [activeSection, setActiveSection] = useState<"company" | "credentials" | "database" | "backup">("company");
+  const [activeSection, setActiveSection] = useState<"company" | "credentials" | "database" | "whatsapp" | "backup">("company");
 
   if (!isAdmin) {
     return (
@@ -1674,6 +2221,12 @@ function SettingsPage() {
               label: "Database Sync",
               desc: "Google Sheets connection",
               icon: Database,
+            },
+            {
+              id: "whatsapp",
+              label: "WhatsApp",
+              desc: "Send agreements & reminders",
+              icon: MessageSquare,
             },
             {
               // ITEM-1: backup lives alongside sync but is a separate concern -
@@ -1720,6 +2273,9 @@ function SettingsPage() {
           </div>
           <div className={activeSection === "database" ? "block animate-[fade-in_0.3s_ease-out]" : "hidden"}>
             <DatabaseSettingsTab />
+          </div>
+          <div className={activeSection === "whatsapp" ? "block animate-[fade-in_0.3s_ease-out]" : "hidden"}>
+            <WhatsAppSettingsTab />
           </div>
           <div className={activeSection === "backup" ? "block animate-[fade-in_0.3s_ease-out]" : "hidden"}>
             <BackupSettingsTab />
