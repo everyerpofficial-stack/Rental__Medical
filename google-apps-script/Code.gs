@@ -105,6 +105,22 @@ function doGet(e) {
       rows = rows.filter(function(r) { return String(r[filterKey]) === String(filterValue); });
     }
 
+    // Deduplicate Staff rows by email if reading Staff tab
+    if (sheet === "Staff") {
+      var seenEmails = {};
+      var dedupedRows = [];
+      rows.forEach(function(r) {
+        var em = String(r.email || r.Email || "").toLowerCase().trim();
+        if (em && !seenEmails[em]) {
+          seenEmails[em] = true;
+          dedupedRows.push(r);
+        } else if (!em) {
+          dedupedRows.push(r);
+        }
+      });
+      rows = dedupedRows;
+    }
+
     return ContentService
       .createTextOutput(JSON.stringify({ data: rows }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -236,12 +252,23 @@ function bulkUpsertRows(sh, rows) {
       headersChanged = true;
     }
   }
-  var idCol = headers.indexOf("id");
+  var idCol = -1;
+  var emailCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var hLower = String(headers[h]).trim().toLowerCase();
+    if (hLower === "id") idCol = h;
+    if (hLower === "email") emailCol = h;
+  }
   var existingData = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
   var idToRowIndex = {};
-  if (idCol !== -1) {
-    existingData.forEach(function(r, i) { idToRowIndex[String(r[idCol])] = i; });
-  }
+  existingData.forEach(function(r, i) {
+    if (idCol !== -1 && r[idCol] !== undefined && String(r[idCol]).trim() !== "") {
+      idToRowIndex[String(r[idCol]).trim()] = i;
+    }
+    if (sh.getName() === "Staff" && emailCol !== -1 && r[emailCol]) {
+      idToRowIndex["email:" + String(r[emailCol]).toLowerCase().trim()] = i;
+    }
+  });
   var toAppend = [];
   rows.forEach(function(row) {
     var newRow = headers.map(function(h) {
@@ -250,11 +277,22 @@ function bulkUpsertRows(sh, rows) {
       if (val !== null && typeof val === "object") return JSON.stringify(val);
       return val;
     });
-    var rowId = idCol !== -1 ? String(row["id"]) : null;
+    var rowId = (idCol !== -1 && row[headers[idCol]] !== undefined) ? String(row[headers[idCol]]).trim() : (row["id"] !== undefined ? String(row["id"]).trim() : null);
+    var rowEmail = (sh.getName() === "Staff" && row["email"]) ? "email:" + String(row["email"]).toLowerCase().trim() : null;
+
+    var matchedIdx = null;
     if (rowId && idToRowIndex.hasOwnProperty(rowId)) {
-      sh.getRange(idToRowIndex[rowId] + 2, 1, 1, headers.length).setValues([newRow]);
+      matchedIdx = idToRowIndex[rowId];
+    } else if (rowEmail && idToRowIndex.hasOwnProperty(rowEmail)) {
+      matchedIdx = idToRowIndex[rowEmail];
+    }
+
+    if (matchedIdx !== null) {
+      sh.getRange(matchedIdx + 2, 1, 1, headers.length).setValues([newRow]);
     } else {
       toAppend.push(newRow);
+      if (rowId) idToRowIndex[rowId] = existingData.length + toAppend.length - 1;
+      if (rowEmail) idToRowIndex[rowEmail] = existingData.length + toAppend.length - 1;
     }
   });
   if (toAppend.length > 0) {
@@ -283,20 +321,29 @@ function upsertRow(sh, row) {
       headersChanged = true;
     }
   }
-  var idCol = headers.indexOf("id");
+  var idCol = -1;
+  var emailCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var hLower = String(headers[h]).trim().toLowerCase();
+    if (hLower === "id") idCol = h;
+    if (hLower === "email") emailCol = h;
+  }
   var newRow = headers.map(function(h) {
     var val = row[h];
     if (val === undefined) return "";
     if (val !== null && typeof val === "object") return JSON.stringify(val);
     return val;
   });
-  if (idCol === -1) { sh.appendRow(newRow); return headersChanged; }
-  var rowId = String(row["id"]);
+  var rowId = (idCol !== -1 && row[headers[idCol]] !== undefined) ? String(row[headers[idCol]]).trim() : (row["id"] !== undefined ? String(row["id"]).trim() : null);
+  var rowEmail = (sh.getName() === "Staff" && row["email"]) ? String(row["email"]).toLowerCase().trim() : null;
+
   var existingData = sh.getLastRow() > 1 && sh.getLastColumn() > 0
     ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
   var found = false;
   for (var i = 0; i < existingData.length; i++) {
-    if (String(existingData[i][idCol]) === rowId) {
+    var cellId = idCol !== -1 ? String(existingData[i][idCol]).trim() : null;
+    var cellEmail = (sh.getName() === "Staff" && emailCol !== -1) ? String(existingData[i][emailCol]).toLowerCase().trim() : null;
+    if ((rowId && cellId === rowId) || (rowEmail && cellEmail === rowEmail)) {
       sh.getRange(i + 2, 1, 1, headers.length).setValues([newRow]);
       found = true;
       break;
@@ -311,11 +358,21 @@ function upsertRow(sh, row) {
 function deleteRow(sh, id) {
   if (sh.getLastRow() < 2 || sh.getLastColumn() === 0) return;
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var idCol = headers.indexOf("id");
-  if (idCol === -1) return;
+  var idCol = -1;
+  var emailCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var hLower = String(headers[h]).trim().toLowerCase();
+    if (hLower === "id") idCol = h;
+    if (hLower === "email") emailCol = h;
+  }
+  var target = String(id).toLowerCase().trim();
   var data = sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues();
-  for (var i = 0; i < data.length; i++) {
-    if (String(data[i][idCol]) === String(id)) { sh.deleteRow(i + 2); break; }
+  for (var i = data.length - 1; i >= 0; i--) {
+    var matchId = idCol !== -1 && String(data[i][idCol]).toLowerCase().trim() === target;
+    var matchEmail = emailCol !== -1 && String(data[i][emailCol]).toLowerCase().trim() === target;
+    if (matchId || matchEmail) {
+      sh.deleteRow(i + 2);
+    }
   }
 }
 

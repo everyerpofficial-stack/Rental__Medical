@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
-  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar,
 } from "lucide-react";
 import {
   getPayments,
@@ -844,6 +844,7 @@ function AgreementPaymentHistoryModal({
   const status = rental?.status || "Active";
   const monthlyRent = rental?.monthlyRent || 0;
   const deposit = rental?.deposit || 0;
+  const rentalDate = rental?.start || (rental as any)?.startDate || "";
 
   const handleExportStatement = () => {
     const headers = ["Receipt ID", "Date", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
@@ -909,6 +910,7 @@ function AgreementPaymentHistoryModal({
         <div class="header-title">Rental Agreement Payment Statement</div>
         <div class="meta-grid">
           <div class="meta-item"><span class="meta-label">Agreement ID</span><span class="meta-val" style="font-family: monospace; font-weight: bold;">${agreementId}</span></div>
+          <div class="meta-item"><span class="meta-label">Rental Date</span><span class="meta-val">${rentalDate ? formatDateDDMMYYYY(rentalDate) : "—"}</span></div>
           <div class="meta-item"><span class="meta-label">Customer Name</span><span class="meta-val">${customerName}</span></div>
           <div class="meta-item"><span class="meta-label">Equipment</span><span class="meta-val">${equipmentName}</span></div>
           <div class="meta-item"><span class="meta-label">Monthly Rent</span><span class="meta-val">₹${monthlyRent.toLocaleString("en-IN")}</span></div>
@@ -959,17 +961,31 @@ function AgreementPaymentHistoryModal({
         <DialogHeader className="p-5 border-b border-border/60 bg-muted/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <DialogTitle className="text-[18px] font-bold">Payment History</DialogTitle>
                 <span className="font-mono text-[13px] font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-md border border-primary/20">
                   {agreementId}
                 </span>
                 <StatusBadge status={status as any} />
+                {rentalDate && (
+                  <span className="inline-flex items-center gap-1 font-mono text-[11.5px] font-semibold bg-muted px-2 py-0.5 rounded-md text-foreground border border-border/60">
+                    <Calendar className="h-3 w-3 text-primary" />
+                    Rent Date: {formatDateDDMMYYYY(rentalDate)}
+                  </span>
+                )}
               </div>
-              <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2">
+              <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                 <span>Customer: <strong className="text-foreground font-semibold">{customerName}</strong></span>
                 <span>•</span>
                 <span>Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong></span>
+                {rentalDate && (
+                  <>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">
+                      Rental Date: <strong className="text-foreground font-semibold">{formatDateDDMMYYYY(rentalDate)}</strong>
+                    </span>
+                  </>
+                )}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -984,7 +1000,7 @@ function AgreementPaymentHistoryModal({
         </DialogHeader>
 
         {/* Financial Summary Cards */}
-        <div className="p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="bg-card p-3 rounded-lg border border-border/50">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Collected</p>
             <p className="text-[18px] font-bold text-success mt-0.5">₹{totalPaid.toLocaleString("en-IN")}</p>
@@ -1000,6 +1016,13 @@ function AgreementPaymentHistoryModal({
           <div className="bg-card p-3 rounded-lg border border-border/50">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security Deposit</p>
             <p className="text-[16px] font-semibold text-foreground mt-0.5">₹{deposit.toLocaleString("en-IN")}</p>
+          </div>
+          <div className="bg-card p-3 rounded-lg border border-border/50 col-span-2 sm:col-span-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Rental Date</p>
+            <p className="text-[15px] font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
+              {rentalDate ? formatDateDDMMYYYY(rentalDate) : "—"}
+            </p>
           </div>
         </div>
 
@@ -1207,12 +1230,15 @@ function PaymentsPage() {
     const q = search.toLowerCase().trim();
     const rental = rentals.find((r: any) => r.id === g.agreementId);
     const customer = customers.find((c: any) => c.id === g.customerId || (rental && c.id === rental.customerId));
+    const formattedStartDate = g.startDate ? formatDateDDMMYYYY(g.startDate) : "";
 
     const matchesSearch = !q ||
       g.agreementId.toLowerCase().includes(q) ||
       g.customerName.toLowerCase().includes(q) ||
       g.equipment.toLowerCase().includes(q) ||
       g.latestMode.toLowerCase().includes(q) ||
+      (g.startDate && g.startDate.toLowerCase().includes(q)) ||
+      (formattedStartDate && formattedStartDate.toLowerCase().includes(q)) ||
       (rental && String(rental.serial || "").toLowerCase().includes(q)) ||
       (customer && (
         String(customer.phone || "").toLowerCase().includes(q) ||
@@ -1484,7 +1510,7 @@ function PaymentsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Agreement ID</TableHead>
+                      <TableHead>Agreement ID & Date</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Equipment</TableHead>
                       <TableHead className="text-right">Total Collected</TableHead>
@@ -1509,9 +1535,19 @@ function PaymentsPage() {
                         onClick={() => setSelectedHistoryAgreementId(g.agreementId)}
                       >
                         <TableCell>
-                          <span className="font-mono text-[12px] font-bold text-primary group-hover:underline flex items-center gap-1">
-                            {g.agreementId}
-                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono text-[12px] font-bold text-primary group-hover:underline">
+                              {g.agreementId}
+                            </span>
+                            {g.startDate ? (
+                              <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1 whitespace-nowrap">
+                                <Calendar className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                                {formatDateDDMMYYYY(g.startDate)}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground/50">—</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px] text-foreground">{g.customerName}</p>
@@ -1572,7 +1608,15 @@ function PaymentsPage() {
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div>
-                          <span className="font-mono text-[11px] font-bold text-primary">{g.agreementId}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-[11.5px] font-bold text-primary">{g.agreementId}</span>
+                            {g.startDate && (
+                              <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-0.5">
+                                <Calendar className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                                {formatDateDDMMYYYY(g.startDate)}
+                              </span>
+                            )}
+                          </div>
                           <p className="font-semibold text-[13.5px] mt-0.5">{g.customerName}</p>
                         </div>
                         <div className="flex flex-col items-end gap-1">
@@ -1628,13 +1672,25 @@ function PaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px]">{p.customer}</p>
-                          <button
-                            type="button"
-                            className="font-mono text-[10px] text-primary hover:underline font-bold text-left cursor-pointer"
-                            onClick={() => setSelectedHistoryAgreementId(p.agreement)}
-                          >
-                            {p.agreement}
-                          </button>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              className="font-mono text-[10px] text-primary hover:underline font-bold text-left cursor-pointer"
+                              onClick={() => setSelectedHistoryAgreementId(p.agreement)}
+                            >
+                              {p.agreement}
+                            </button>
+                            {(() => {
+                              const matchRental = rentals.find((r: any) => r.id === p.agreement);
+                              const agrDate = matchRental?.start || (matchRental as any)?.startDate;
+                              if (!agrDate) return null;
+                              return (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                  • <Calendar className="h-2.5 w-2.5 text-muted-foreground/60" /> {formatDateDDMMYYYY(agrDate)}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
@@ -1683,13 +1739,25 @@ function PaymentsPage() {
                           <div>
                             <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
                             <p className="font-semibold text-[13.5px] mt-0.5">{p.customer}</p>
-                            <button
-                              type="button"
-                              className="font-mono text-[10px] text-primary hover:underline font-bold"
-                              onClick={() => setSelectedHistoryAgreementId(p.agreement)}
-                            >
-                              {p.agreement}
-                            </button>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                className="font-mono text-[10px] text-primary hover:underline font-bold"
+                                onClick={() => setSelectedHistoryAgreementId(p.agreement)}
+                              >
+                                {p.agreement}
+                              </button>
+                              {(() => {
+                                const matchRental = rentals.find((r: any) => r.id === p.agreement);
+                                const agrDate = matchRental?.start || (matchRental as any)?.startDate;
+                                if (!agrDate) return null;
+                                return (
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                    · <Calendar className="h-2.5 w-2.5 text-muted-foreground/60" /> {formatDateDDMMYYYY(agrDate)}
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
                             <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>

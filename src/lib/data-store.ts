@@ -60,11 +60,31 @@ if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
 // with a password the operator chooses. An optional build-time seed is
 // supported for automated deployments: it only ever applies to a genuinely
 // empty staff list and never overwrites an existing account.
+/** Deduplicates a staff list by email so accounts are never shown twice */
+export function deduplicateStaffUsers<T extends { email?: string; [key: string]: any }>(list: T[]): T[] {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set<string>();
+  const unique: T[] = [];
+  for (const user of list) {
+    const email = String(user?.email || "").toLowerCase().trim();
+    if (!email) continue;
+    if (seen.has(email)) continue;
+    seen.add(email);
+    unique.push(user);
+  }
+  return unique;
+}
+
 if (isBrowser) {
   let staffList: any[] = [];
   try {
     const parsed = JSON.parse(localStorage.getItem("medirent-staff-users") || "[]");
-    if (Array.isArray(parsed)) staffList = parsed;
+    if (Array.isArray(parsed)) {
+      staffList = deduplicateStaffUsers(parsed);
+      if (staffList.length !== parsed.length) {
+        localStorage.setItem("medirent-staff-users", JSON.stringify(staffList));
+      }
+    }
   } catch {
     staffList = [];
   }
@@ -4687,7 +4707,7 @@ export async function syncFromSheetsToLocalStorage(force = false) {
     }
 
     if (entity.key === "medirent-staff-users") {
-      const localStaff = getStorageItem<any[]>("medirent-staff-users", []);
+      const localStaff = deduplicateStaffUsers(getStorageItem<any[]>("medirent-staff-users", []));
       // If sheet returns no users but local storage has users, push local users up to sheets
       if ((!data || data.length === 0) && localStaff.length > 0) {
         console.log(`[GSheets] Staff sheet is empty, uploading local staff accounts...`);
@@ -4780,6 +4800,9 @@ export async function syncFromSheetsToLocalStorage(force = false) {
           mergedDocs.push(...localOnly);
         }
         localStorage.setItem(entity.key, JSON.stringify(mergedDocs));
+      } else if (entity.key === "medirent-staff-users") {
+        const cleanStaff = deduplicateStaffUsers(mergedData);
+        localStorage.setItem(entity.key, JSON.stringify(cleanStaff));
       } else {
         localStorage.setItem(entity.key, JSON.stringify(mergedData));
       }

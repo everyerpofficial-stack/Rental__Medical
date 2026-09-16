@@ -34,6 +34,7 @@ import {
   formatDateDDMMYYYY,
   getLocalYYYYMMDD,
   parseLocalDate,
+  deduplicateStaffUsers,
 } from "@/lib/data-store";
 import {
   createBackupSnapshot,
@@ -987,7 +988,14 @@ function UserLoginCredentials() {
       const saved = localStorage.getItem("medirent-staff-users");
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const clean = deduplicateStaffUsers(parsed);
+            if (clean.length !== parsed.length) {
+              localStorage.setItem("medirent-staff-users", JSON.stringify(clean));
+            }
+            return clean;
+          }
         } catch (e) {
           console.error(e);
         }
@@ -1009,6 +1017,31 @@ function UserLoginCredentials() {
     }
     return [];
   });
+
+  // Re-sync and deduplicate if background sync or another tab updates staff users
+  useEffect(() => {
+    const reloadStaff = () => {
+      const saved = localStorage.getItem("medirent-staff-users");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const clean = deduplicateStaffUsers(parsed);
+            setStaffUsers(clean);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+
+    window.addEventListener("medirent-db-updated", reloadStaff);
+    window.addEventListener("storage", reloadStaff);
+    return () => {
+      window.removeEventListener("medirent-db-updated", reloadStaff);
+      window.removeEventListener("storage", reloadStaff);
+    };
+  }, []);
 
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -1063,7 +1096,7 @@ function UserLoginCredentials() {
       role: newRole,
     };
 
-    const updatedList = [...staffUsers, newUser];
+    const updatedList = deduplicateStaffUsers([...staffUsers, newUser]);
     setStaffUsers(updatedList);
     localStorage.setItem("medirent-staff-users", JSON.stringify(updatedList));
     if (isGSheetsEnabled()) {
@@ -1078,17 +1111,21 @@ function UserLoginCredentials() {
     setIsOpen(false);
   };
 
-  const handleDeleteUser = (id: string, isFirstAdmin: boolean) => {
+  const handleDeleteUser = (id: string, isFirstAdmin: boolean, userEmail?: string) => {
     if (isFirstAdmin) {
       toast.error("The primary administrator account cannot be deleted.");
       return;
     }
 
-    const updatedList = staffUsers.filter(u => u.id !== id);
+    const cleanEmail = String(userEmail || "").toLowerCase().trim();
+    const updatedList = staffUsers.filter(u => u.id !== id && (cleanEmail ? u.email.toLowerCase().trim() !== cleanEmail : true));
     setStaffUsers(updatedList);
     localStorage.setItem("medirent-staff-users", JSON.stringify(updatedList));
     if (isGSheetsEnabled()) {
       deleteRowFromSheet(SHEETS.STAFF, id);
+      if (cleanEmail) {
+        deleteRowFromSheet(SHEETS.STAFF, cleanEmail);
+      }
     }
     toast.success("Staff user deleted successfully.");
   };
@@ -1185,8 +1222,8 @@ function UserLoginCredentials() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {staffUsers.map((user) => (
-                <TableRow key={user.id} className="hover:bg-muted/5 transition-colors">
+              {deduplicateStaffUsers(staffUsers).map((user) => (
+                <TableRow key={user.id || user.email} className="hover:bg-muted/5 transition-colors">
                   <TableCell className="font-semibold text-[13px] py-3.5">{user.name}</TableCell>
                   <TableCell className="text-[13px] text-muted-foreground py-3.5">{user.email}</TableCell>
                   <TableCell className="py-3.5">
@@ -1200,7 +1237,7 @@ function UserLoginCredentials() {
                         variant="ghost"
                         size="icon"
                         disabled={!!(user as any).firstAdmin}
-                        onClick={() => handleDeleteUser(user.id, !!(user as any).firstAdmin)}
+                        onClick={() => handleDeleteUser(user.id, !!(user as any).firstAdmin, user.email)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                         title={!!(user as any).firstAdmin ? "Primary admin cannot be deleted" : "Delete User"}
                       >
@@ -1216,12 +1253,12 @@ function UserLoginCredentials() {
 
         {/* Mobile Card List — visible only on mobile */}
         <div className="sm:hidden">
-          {staffUsers.length === 0 ? (
+          {deduplicateStaffUsers(staffUsers).length === 0 ? (
             <div className="py-12 text-center text-[13px] text-muted-foreground">No staff users yet.</div>
           ) : (
             <div className="divide-y divide-border/60">
-              {staffUsers.map((user) => (
-                <div key={user.id} className="flex items-center gap-3 px-4 py-3.5">
+              {deduplicateStaffUsers(staffUsers).map((user) => (
+                <div key={user.id || user.email} className="flex items-center gap-3 px-4 py-3.5">
                   <Avatar className="h-10 w-10 shrink-0">
                     <AvatarFallback className="text-[12px] font-bold">
                       {user.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
@@ -1239,7 +1276,7 @@ function UserLoginCredentials() {
                       variant="ghost"
                       size="icon"
                       disabled={!!(user as any).firstAdmin}
-                      onClick={() => handleDeleteUser(user.id, !!(user as any).firstAdmin)}
+                      onClick={() => handleDeleteUser(user.id, !!(user as any).firstAdmin, user.email)}
                       className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       title={!!(user as any).firstAdmin ? "Primary admin cannot be deleted" : "Delete User"}
                     >
