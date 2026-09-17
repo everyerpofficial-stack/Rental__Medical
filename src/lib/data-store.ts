@@ -2429,42 +2429,61 @@ export function syncAllOwnerStatuses() {
   owners.forEach((o) => updateOwnerStatusByEquipment(o.name));
 }
 
-/** Helper to check if an equipment's owner is Deepak / Relife Medical Technologies (In-House) */
+/** Helper to check if an equipment's owner is Relife Medical Technologies (In-House) */
 export function isRelifeOwner(ownerInput?: unknown, ownersList?: any[]): boolean {
-  if (!ownerInput) return true;
-  const s = String(ownerInput).trim().toLowerCase();
+  if (ownerInput === undefined || ownerInput === null) return true;
+  const s = String(ownerInput).trim();
+  if (!s) return true;
+  const lower = s.toLowerCase();
+
+  // Explicit non-Relife identifiers (e.g. RMT-P, which was previously falsely matching due to generic "rmt" search)
+  if (lower === "rmt-p" || lower === "own-0007") return false;
+
+  // Direct matched keywords for in-house / Relife Medical Technologies
   if (
-    !s ||
-    s === "own" ||
-    s === "in-house" ||
-    s === "inhouse" ||
-    s === "medirent" ||
-    s === "medirent healthcare" ||
-    s.includes("relife") ||
-    s.includes("deepak") ||
-    s.includes("rmt")
+    lower === "own" ||
+    lower === "in-house" ||
+    lower === "inhouse" ||
+    lower === "medirent" ||
+    lower === "medirent healthcare" ||
+    lower === "relife" ||
+    lower === "relife medical technologies" ||
+    lower === "m/s relife medical technologies" ||
+    lower === "m/s relife medical technologies, mysore" ||
+    lower === "own-0001"
   ) {
     return true;
   }
-  if (ownersList && Array.isArray(ownersList)) {
+
+  // Look up in provided ownersList if available
+  if (ownersList && Array.isArray(ownersList) && ownersList.length > 0) {
     const matchedOwner = ownersList.find(
-      (o) => (o.name && String(o.name).trim().toLowerCase() === s) || (o.id && String(o.id).trim().toLowerCase() === s)
+      (o) =>
+        (o.name && String(o.name).trim().toLowerCase() === lower) ||
+        (o.id && String(o.id).trim().toLowerCase() === lower)
     );
     if (matchedOwner) {
-      const oName = String(matchedOwner.name || "").toLowerCase();
-      const oPerson = String(matchedOwner.ownerName || "").toLowerCase();
+      const matchedId = String(matchedOwner.id || "").trim().toUpperCase();
+      const matchedName = String(matchedOwner.name || "").trim().toLowerCase();
+      // If it matches OWN-0001 or exact Relife Medical Technologies name, return true
       if (
-        oName.includes("relife") ||
-        oName.includes("deepak") ||
-        oName.includes("rmt") ||
-        oPerson.includes("relife") ||
-        oPerson.includes("deepak") ||
-        oPerson.includes("rmt")
+        matchedId === "OWN-0001" ||
+        matchedName === "relife medical technologies" ||
+        matchedName === "relife" ||
+        matchedName.includes("relife medical")
       ) {
         return true;
       }
+      // If it matched any other owner in the owners list (e.g. RMT-P, Swasha, Biomedical Engineer, etc.), return false
+      return false;
     }
   }
+
+  // Fallback check for strings containing "relife" but excluding "rmt-p"
+  if (lower.includes("relife") && !lower.includes("rmt-p")) {
+    return true;
+  }
+
   return false;
 }
 
@@ -2562,8 +2581,8 @@ export function getDynamicKPIs() {
   // 4. Available Equipment availability rate
   let availableChange = "";
   let availableTrend = "up";
-  if (equip.length > 0) {
-    const rate = Math.round((availableEquip / equip.length) * 100);
+  if (relifeEquip.length > 0) {
+    const rate = Math.round((availableEquip / relifeEquip.length) * 100);
     availableChange = `${rate}%`;
     availableTrend = rate >= 50 ? "up" : "down";
   }
@@ -2571,8 +2590,8 @@ export function getDynamicKPIs() {
   // 5. Rented Equipment utilization rate
   let rentedChange = "";
   let rentedTrend = "up";
-  if (equip.length > 0) {
-    const rate = Math.round((rentedEquip / equip.length) * 100);
+  if (relifeEquip.length > 0) {
+    const rate = Math.round((rentedEquip / relifeEquip.length) * 100);
     rentedChange = `${rate}%`;
     rentedTrend = rate >= 50 ? "up" : "down";
   }
@@ -5201,9 +5220,14 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     .reduce((sum, p) => {
       const amt = cleanNum(p.amount) + cleanNum(p.discount);
       // If the payment covers multiple equipment (comma-separated list in equipmentId),
-      // prorate the amount by this item's share ratio based on its rent rate.
+      // prorate the amount by this item's share ratio based on its rent rate among the covered items.
       const eqIds = String(p.equipmentId || "").split(",").map(s => s.trim()).filter(Boolean);
-      if (eqIds.length > 1) return sum + Math.round(amt * shareRatio);
+      if (eqIds.length > 1) {
+        const coveredItems = items.filter((it: any) => eqIds.includes(String(it.equipmentId || "").trim()));
+        const coveredRentSum = coveredItems.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
+        const itemShareRatio = coveredRentSum > 0 ? (currentItemRent / coveredRentSum) : (1 / Math.max(1, eqIds.length));
+        return sum + Math.round(amt * itemShareRatio);
+      }
       return sum + amt;
     }, 0);
 

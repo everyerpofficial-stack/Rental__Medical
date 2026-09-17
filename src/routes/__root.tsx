@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { sendOtpEmail, isGSheetsEnabled, syncRowToSheet, SHEETS } from "@/lib/google-sheets";
+import { canAccessPath, getHomePathForRole, getStoredRole } from "@/lib/access";
 
 function NotFoundComponent() {
   return (
@@ -577,6 +579,22 @@ function RootComponent() {
   const queryClient = context?.queryClient || fallbackQueryClient;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  // Role-based page access, enforced here rather than only in each route's
+  // beforeLoad. Those guards skip the server render (no localStorage there),
+  // and on a typed or refreshed URL the browser reuses the server's result
+  // instead of re-running them - so a Staff user could open /settings just by
+  // typing it. This layout renders only in the browser, after sign-in, on
+  // every navigation, so checking here closes that gap for every page at once.
+  const role = isAuthenticated ? getStoredRole() : "";
+  const isPageAllowed = !isAuthenticated || canAccessPath(pathname, role);
+
+  useEffect(() => {
+    if (isPageAllowed) return;
+    router.navigate({ to: getHomePathForRole(role), replace: true });
+  }, [isPageAllowed, role, router]);
 
 
   const checkSetupAndAuth = async () => {
@@ -702,7 +720,15 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {isAuthenticated ? (
-        <Outlet />
+        isPageAllowed ? (
+          <Outlet />
+        ) : (
+          // Never mount a blocked page, even for a frame: its components read
+          // and display data the moment they render.
+          <div className="flex min-h-screen items-center justify-center bg-slate-950">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+          </div>
+        )
       ) : (
         <LoginInterface
           onLoginSuccess={() => {

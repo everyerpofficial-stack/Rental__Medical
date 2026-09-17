@@ -45,6 +45,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { QrScannerModal } from "@/components/QrScannerModal";
+import { canAccessPath } from "@/lib/access";
 
 const navSections = [
   {
@@ -77,29 +78,10 @@ const navSections = [
   },
 ] as const;
 
-// Visibility helper by role
+// Visibility helper by role. The rule itself lives in @/lib/access so the root
+// layout can enforce exactly what the navigation hides.
 export function isSectionVisibleForRole(to: string, role: string): boolean {
-  if (role === "Admin") return true;
-
-  if (role === "Accountant") {
-    // Hidden for Accountant: Dashboard, Owners, reports, settings
-    if (to === "/" || to === "/owners" || to === "/reports" || to === "/settings") {
-      return false;
-    }
-    return true;
-  }
-
-  if (role === "Staff") {
-    // Hidden for Staff: Dashboard, customers, equipment, owners, exchange, qr scanner, rent dues, reports, documents, settings
-    // Visible for Staff: Rentals, Payments, Returns
-    if (to === "/rentals" || to === "/payments" || to === "/returns") {
-      return true;
-    }
-    return false;
-  }
-
-  // Fallback for unauthenticated or unknown
-  return to !== "/settings";
+  return canAccessPath(to, role);
 }
 
 function getBottomNavItems(role: string) {

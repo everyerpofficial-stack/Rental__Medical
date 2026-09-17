@@ -1423,6 +1423,12 @@ function ReturnsPage() {
   };
 
   const runProcessReturn = () => {
+    if (isStaff) {
+      toast.error("Staff users are not authorized to process returns.");
+      setIsSubmitting(false);
+      return;
+    }
+
     if (!selectedAgreement || !returnDate || !condition) {
       toast.error("Please fill in Agreement, Return Date, and Condition before processing.");
       setIsSubmitting(false);
@@ -2730,10 +2736,12 @@ function ReturnsPage() {
                   <Receipt className="mr-1 h-3.5 w-3.5 text-muted-foreground" />
                   Print Receipt
                 </Button>
-                <Button type="button" size="sm" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting} className="h-8.5 text-[11px] font-bold flex-1 sm:flex-none">
-                  <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                  {isSubmitting ? "Processing..." : "Process Return"}
-                </Button>
+                {!isStaff && (
+                  <Button type="button" size="sm" onClick={handleProcessReturn} disabled={!selectedAgreement || isSubmitting} className="h-8.5 text-[11px] font-bold flex-1 sm:flex-none">
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                    {isSubmitting ? "Processing..." : "Process Return"}
+                  </Button>
+                )}
               </div>
             </div>
             

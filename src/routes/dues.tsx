@@ -542,30 +542,28 @@ function PayDialog({
       const standardItems = itemsToPay.filter((it) => it.state.mode !== "Cash+Bank");
       const splitItems = itemsToPay.filter((it) => it.state.mode === "Cash+Bank");
 
-      const modes = Array.from(new Set(standardItems.map((it) => it.state.mode)));
-      modes.forEach((mode) => {
-        const modeItems = standardItems.filter((it) => it.state.mode === mode);
-        const totalModeAmt = modeItems.reduce((sum, it) => sum + (Number(it.state.amount) || 0), 0);
-        const totalModeDisc = modeItems.reduce((sum, it) => sum + (Number(it.state.discount) || 0), 0);
-        const eqNames = modeItems.map((it) => getEquipmentName(it.eqId)).join(", ");
-        const eqIds = modeItems.map((it) => it.eqId).join(",");
-        const txRefs = Array.from(new Set(modeItems.map((it) => it.state.txRef).filter(Boolean))).join(", ");
+      standardItems.forEach((it) => {
+        const amt = Number(it.state.amount) || 0;
+        const itemDisc = Number(it.state.discount) || 0;
+        const eqName = getEquipmentName(it.eqId);
 
-        savePayment({
-          id: getNextPaymentNumber(),
-          date: paymentDate,
-          customer: rental.customer,
-          customerId: rental.customerId,
-          agreement: rental.id,
-          equipmentId: eqIds,
-          amount: totalModeAmt,
-          mode: mode as any,
-          type: "Rent" as const,
-          txRef: txRefs,
-          notes: `${eqNames}: Rent Payment${totalModeDisc > 0 ? ` [Discount of ₹${totalModeDisc} applied]` : ""}`,
-          status: "Paid" as const,
-          discount: totalModeDisc,
-        });
+        if (amt > 0 || itemDisc > 0) {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate,
+            customer: rental.customer,
+            customerId: rental.customerId,
+            agreement: rental.id,
+            equipmentId: it.eqId,
+            amount: amt,
+            mode: it.state.mode as any,
+            type: "Rent" as const,
+            txRef: it.state.txRef || undefined,
+            notes: `${eqName}: Rent Payment${itemDisc > 0 ? ` [Discount of ₹${itemDisc} applied]` : ""}`,
+            status: "Paid" as const,
+            discount: itemDisc,
+          });
+        }
       });
 
       splitItems.forEach((it) => {

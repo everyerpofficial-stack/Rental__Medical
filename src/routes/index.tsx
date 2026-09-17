@@ -612,7 +612,7 @@ function Dashboard() {
             <Card className="lg:col-span-1">
               <CardHeader className="border-b border-border/60 pb-3 mb-0">
                 <CardTitle>Relife Inventory Breakdown</CardTitle>
-                <p className="text-[12px] text-muted-foreground">Deepak (Relife Medical Technologies) units by category</p>
+                <p className="text-[12px] text-muted-foreground">Relife Medical Technologies units by category</p>
               </CardHeader>
               <CardContent className="pt-4">
                 <ResponsiveContainer width="100%" height={260}>
