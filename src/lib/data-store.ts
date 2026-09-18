@@ -5128,30 +5128,32 @@ export function getRentPaidForAgreement(agreementId: string, monthlyRent: any, r
 }
 
 export function getPaidForEquipment(rental: any, equipmentId: string, paymentsList: any[], excludeInitial = false): number {
-  if (!rental) return 0;
+  if (!rental || !equipmentId) return 0;
   
-  const items = rental.equipmentItems || [
-    {
-      equipmentId: rental.equipmentId,
-      serial: rental.serial,
-      monthlyRent: cleanNum(rental.monthlyRent),
-      deposit: cleanNum(rental.deposit),
-      returned: false
-    }
-  ];
+  const items: any[] = rental.equipmentItems && rental.equipmentItems.length > 0
+    ? rental.equipmentItems
+    : [
+        {
+          equipmentId: rental.equipmentId,
+          serial: rental.serial,
+          monthlyRent: cleanNum(rental.monthlyRent),
+          dailyRent: cleanNum(rental.dailyRent),
+          rentRate: cleanNum(rental.rentRate),
+          deposit: cleanNum(rental.deposit),
+          returned: false
+        }
+      ];
   
   const currentItem = items.find((it: any) => it.equipmentId === equipmentId);
   if (!currentItem) return 0;
 
   const currentItemRent = cleanNum(currentItem.monthlyRent || currentItem.dailyRent || currentItem.rentRate);
-  const totalRentalMonthlyRent = items.reduce((sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-  const shareRatio = totalRentalMonthlyRent > 0 ? (currentItemRent / totalRentalMonthlyRent) : (1 / Math.max(1, items.length));
-
+  
   const cleanId = (val: any) => String(val || "").trim().toUpperCase().replace(/^AGR-/i, "");
 
   const isRentType = (type: any) => {
     const s = String(type || "").toLowerCase();
-    return s.includes("rent");
+    return s.includes("rent") || s.includes("initial");
   };
   const isMatchAgreement = (p: any) => {
     const pAgr = cleanId(p.agreement || p.rentalId || p.agreementId);
@@ -5161,35 +5163,31 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   };
   const isPaidStatus = (status: any) => !status || status === "Paid" || status === "Completed";
 
-  // 3. Initial advance collected when the agreement was created.
+  // Initial advance collected when the agreement was created (if recorded on rental object)
   const initialTotal = (() => {
     if (excludeInitial) return 0;
     const status = rental.rentalPaymentStatus;
     if (status !== "Paid" && status !== "Partial") return 0;
     const recorded = cleanNum(rental.rentPaidAmount);
     if (recorded > 0) return recorded;
-    return status === "Paid" ? cleanNum(rental.monthlyRent) : 0;
+    return status === "Paid" ? cleanNum(rental.monthlyRent || rental.rentPaidAmount) : 0;
   })();
 
-  // If the agreement has only 1 equipment, all agreement rent payments belong to this item!
-  if (items.length === 1) {
-    const allAgreementPaid = paymentsList
-      .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
-      .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
+  // Filter all paid rent payments for this agreement
+  const agreementPayments = paymentsList.filter(
+    (p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type)
+  );
 
-    // Check whether the initial advance rent (stored on rental.rentalPaymentStatus)
-    // already exists as a separate Payment record. Only payments near the agreement
-    // start date (within 5 days) or with notes indicating agreement-creation qualify.
-    // Without this date check, any later rent-due payment was mistaken for the
-    // initial advance, causing the advance amount to be silently dropped.
-    const isInitialAlreadyBooked = paymentsList.some((p) => {
-      if (!isMatchAgreement(p) || !isPaidStatus(p.status) || !isRentType(p.type)) return false;
-      // Payments whose notes explicitly say they are agreement-creation advances
-      // are always treated as the initial booking.
+  // If single equipment, all agreement payments belong to this item!
+  if (items.length === 1) {
+    const allAgreementPaid = agreementPayments.reduce(
+      (sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount),
+      0
+    );
+
+    const isInitialAlreadyBooked = agreementPayments.some((p) => {
       const notes = String(p.notes || "").toLowerCase();
-      if (notes.includes("agreement creation") || notes.includes("advance rent")) return true;
-      // Otherwise require date proximity to the rental start (same logic as
-      // the multi-equipment path).
+      if (notes.includes("agreement creation") || notes.includes("advance rent") || notes.includes("initial")) return true;
       const pDate = parseLocalDate(p.date);
       const startDate = parseLocalDate(rental.start);
       if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
@@ -5201,75 +5199,98 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     return allAgreementPaid + initialPaid;
   }
 
-  // Multi-equipment agreement handling
-  //
-  // FIX: payments created at agreement time store equipmentId as a comma-space
-  // separated list (e.g. "EQ001, EQ002"). Three bugs were causing double-counting:
-  // 1. split(",") without trim caused " EQ002" to not match "EQ002"
-  // 2. The full payment amount was assigned to each matched item instead of being
-  //    prorated by the item's share ratio
-  // 3. isInitialAlreadyBooked used strict equality which failed on comma-lists
-  const directPaid = paymentsList
-    .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
-    .filter((p) => {
-      if (p.equipmentId === equipmentId) return true;
-      if (p.equipmentId && String(p.equipmentId).split(",").map(s => s.trim()).includes(equipmentId)) return true;
-      if (p.notes && currentItem.serial && String(p.notes).toLowerCase().includes(String(currentItem.serial).toLowerCase())) return true;
-      return false;
-    })
-    .reduce((sum, p) => {
-      const amt = cleanNum(p.amount) + cleanNum(p.discount);
-      // If the payment covers multiple equipment (comma-separated list in equipmentId),
-      // prorate the amount by this item's share ratio based on its rent rate among the covered items.
-      const eqIds = String(p.equipmentId || "").split(",").map(s => s.trim()).filter(Boolean);
-      if (eqIds.length > 1) {
-        const coveredItems = items.filter((it: any) => eqIds.includes(String(it.equipmentId || "").trim()));
-        const coveredRentSum = coveredItems.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
-        const itemShareRatio = coveredRentSum > 0 ? (currentItemRent / coveredRentSum) : (1 / Math.max(1, eqIds.length));
-        return sum + Math.round(amt * itemShareRatio);
+  // Helper to check if a payment specifies a particular equipment item
+  const matchesItem = (p: any, item: any) => {
+    if (!p || !item) return false;
+    const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
+    const targetSerial = String(item.serial || "").trim().toLowerCase();
+    const targetName = String(item.name || item.equipment || "").trim().toLowerCase();
+    const targetLabel = String(item.label || "").trim().toLowerCase();
+    const targetModel = String(item.model || "").trim().toLowerCase();
+
+    // Check equipmentId field
+    if (p.equipmentId) {
+      const pEqIds = String(p.equipmentId).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (targetEqId && pEqIds.includes(targetEqId)) return true;
+      if (targetName && pEqIds.some((id) => id === targetName || targetName.includes(id))) return true;
+    }
+
+    // Check notes field
+    if (p.notes) {
+      const notes = String(p.notes).toLowerCase();
+      if (targetSerial && targetSerial.length >= 3 && notes.includes(targetSerial)) return true;
+      if (targetEqId && targetEqId.length >= 3 && notes.includes(targetEqId)) return true;
+      if (targetName && targetName.length >= 3 && notes.includes(targetName)) return true;
+      if (targetLabel && targetLabel.length >= 3 && notes.includes(targetLabel)) return true;
+      if (targetModel && targetModel.length >= 3 && targetModel !== "standard" && notes.includes(targetModel)) return true;
+    }
+
+    return false;
+  };
+
+  // For multi-item rentals, calculate rent paid for currentItem across all payments
+  let currentItemPaid = 0;
+
+  for (const p of agreementPayments) {
+    const amt = cleanNum(p.amount) + cleanNum(p.discount);
+    if (amt <= 0) continue;
+
+    // Find which equipment items are matched by this payment
+    const matchedItems = items.filter((it: any) => matchesItem(p, it));
+
+    if (matchedItems.length > 0) {
+      // Payment specifically mentions item(s)
+      if (matchedItems.some((it: any) => it.equipmentId === equipmentId)) {
+        const coveredRentSum = matchedItems.reduce(
+          (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+          0
+        );
+        const itemRatio = coveredRentSum > 0 ? currentItemRent / coveredRentSum : 1 / matchedItems.length;
+        currentItemPaid += Math.round(amt * itemRatio);
       }
-      return sum + amt;
-    }, 0);
+    } else {
+      // General agreement payment with no item specified in notes/equipmentId
+      // Check which items were active on the payment date
+      const pDate = parseLocalDate(p.date);
+      const activeItemsOnDate = items.filter((it: any) => {
+        if (!it.returned) return true;
+        if (!it.returnedDate) return true;
+        const retD = parseLocalDate(it.returnedDate);
+        if (isNaN(retD.getTime()) || isNaN(pDate.getTime())) return true;
+        return pDate <= retD;
+      });
 
-  const sharedPaymentsPaid = paymentsList
-    .filter((p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type))
-    .filter((p) => {
-      if (p.equipmentId) return false;
-      if (p.notes) {
-        return !items.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()));
+      const activeTargetItems = activeItemsOnDate.length > 0 ? activeItemsOnDate : items;
+      if (activeTargetItems.some((it: any) => it.equipmentId === equipmentId)) {
+        const activeRentSum = activeTargetItems.reduce(
+          (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+          0
+        );
+        const itemRatio = activeRentSum > 0 ? currentItemRent / activeRentSum : 1 / activeTargetItems.length;
+        currentItemPaid += Math.round(amt * itemRatio);
       }
-      return true;
-    })
-    .reduce((sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount), 0);
+    }
+  }
 
-  const isInitialAlreadyBooked = paymentsList.some((p) => {
-    if (!isMatchAgreement(p) || !isPaidStatus(p.status)) return false;
-    if (!isRentType(p.type)) return false;
-
+  // Include initial advance if not already booked in payment records
+  const isInitialAlreadyBooked = agreementPayments.some((p) => {
+    const notes = String(p.notes || "").toLowerCase();
+    if (notes.includes("agreement creation") || notes.includes("advance rent") || notes.includes("initial")) return true;
     const pDate = parseLocalDate(p.date);
     const startDate = parseLocalDate(rental.start);
     if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
     const diffDays = Math.abs(pDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-    if (diffDays > 5) return false;
-
-    if (p.equipmentId) {
-      // FIX: use split-and-includes so comma-separated lists like "EQ001, EQ002"
-      // are correctly matched against a single equipmentId like "EQ001"
-      const ids = String(p.equipmentId).split(",").map(s => s.trim());
-      return ids.includes(equipmentId);
-    } else {
-      if (p.notes) {
-        return !items.some((it: any) => it.serial && String(p.notes).toLowerCase().includes(String(it.serial).toLowerCase()));
-      }
-      return true;
-    }
+    return diffDays <= 5;
   });
 
-  const initialPaid = isInitialAlreadyBooked ? 0 : Math.round(initialTotal * shareRatio);
+  const totalRentalMonthlyRent = items.reduce(
+    (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+    0
+  );
+  const globalShareRatio = totalRentalMonthlyRent > 0 ? currentItemRent / totalRentalMonthlyRent : 1 / Math.max(1, items.length);
+  const initialPaid = isInitialAlreadyBooked ? 0 : Math.round(initialTotal * globalShareRatio);
 
-  const totalShared = sharedPaymentsPaid;
-
-  return directPaid + Math.round(totalShared * shareRatio) + initialPaid;
+  return currentItemPaid + initialPaid;
 }
 
 /** Real outstanding rent across all unreturned equipment items on a rental,

@@ -3267,7 +3267,12 @@ function DuesPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-semibold text-[13.5px]">{item.customer}</p>
-                            <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary mt-0.5">{item.agreementId}</span>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary">{item.agreementId}</span>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded border border-border/40">
+                                <Calendar className="h-3 w-3 shrink-0 text-muted-foreground/70" /> Rent Date: <strong className="text-foreground font-mono">{item.rentDate ? formatDateDDMMYY(item.rentDate) : "—"}</strong>
+                              </span>
+                            </div>
                             {(() => {
                               const cust = customersById.get(item.customerId) || customersList.find((c: any) => c.id === item.customerId);
                               const talukName = cust?.taluk || (item as any)?.taluk;
@@ -3295,7 +3300,8 @@ function DuesPage() {
                             <span>{item.equipment}</span>
                             <span className="text-amber-700 dark:text-amber-300 font-bold">₹{item.totalDue.toLocaleString("en-IN")}</span>
                           </div>
-                          <div className="flex justify-between text-[11.5px] text-muted-foreground">
+                          <div className="grid grid-cols-2 gap-y-1.5 gap-x-2 text-[11.5px] text-muted-foreground pt-1.5 border-t border-amber-500/20">
+                            <span>Rent Date: <strong className="text-foreground font-mono">{item.rentDate ? formatDateDDMMYY(item.rentDate) : "—"}</strong></span>
                             <span>Return Date: <strong className="text-foreground font-mono">{item.date ? formatDateDDMMYY(item.date) : "Returned"}</strong></span>
                             <span>Paid: <strong className="text-success font-bold">₹{item.totalPaid.toLocaleString("en-IN")}</strong></span>
                             <span>Due: <strong className="text-amber-600 dark:text-amber-400 font-bold">₹{item.totalOutstanding.toLocaleString("en-IN")}</strong></span>
@@ -3337,7 +3343,12 @@ function DuesPage() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <p className="font-semibold text-[13.5px]">{r.customer}</p>
-                          <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary mt-0.5">{r.id}</span>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="inline-flex items-center rounded-md bg-primary/8 border border-primary/18 px-1.5 py-0.5 font-mono text-[11px] font-bold text-primary">{r.id}</span>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded border border-border/40">
+                              <Calendar className="h-3 w-3 shrink-0 text-muted-foreground/70" /> Rent Date: <strong className="text-foreground font-mono">{formatDateDDMMYY(r.start)}</strong>
+                            </span>
+                          </div>
                           {(() => {
                             const cust = customersById.get(r.customerId) || customersList.find((c: any) => c.id === r.customerId);
                             const talukName = cust?.taluk || r?.taluk;
@@ -3361,10 +3372,11 @@ function DuesPage() {
                       <div className="space-y-2 bg-muted/40 rounded-xl p-3">
                         {eqItems.map((eqItem: any) => {
                           const { outstanding, unpaidText, grandTotalPaid, balanceAsOfToday } = calcUnpaidDetailsForEquipment(r, eqItem.equipmentId);
+                          const itemStartDate = eqItem.startDate || r.start;
                           return (
                             <div key={eqItem.equipmentId} className="text-[12px] flex flex-col gap-0.5 border-b border-border/40 last:border-b-0 pb-2 last:pb-0 mb-2 last:mb-0">
                               <div className="flex items-center justify-between font-medium">
-                                <span className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-slate-800 font-semibold"}>
+                                <span className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-slate-800 dark:text-slate-200 font-semibold"}>
                                   {(() => {
                                     if (eqItem.label) return eqItem.label.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
                                     const name = eqItem.name || eqItem.equipment || getEquipmentName(eqItem.equipmentId);
@@ -3376,7 +3388,8 @@ function DuesPage() {
                                   <span className="inline-flex items-center rounded bg-primary/8 px-1.5 py-0.5 text-[9px] font-bold text-primary border border-primary/15 shrink-0">Active</span>
                                 )}
                               </div>
-                              <div className="flex justify-between text-[11.5px] text-muted-foreground mt-1">
+                              <div className="grid grid-cols-2 gap-y-1 gap-x-2 text-[11.5px] text-muted-foreground mt-1.5 pt-1.5 border-t border-border/30">
+                                <span>Rent Date: <strong className="text-foreground font-mono">{formatDateDDMMYY(itemStartDate)}</strong></span>
                                 <span>Unpaid: <strong className={eqItem.returned ? "text-muted-foreground/50" : "text-muted-foreground font-medium"}>{eqItem.returned ? (outstanding > 0 ? "Return Due" : "—") : unpaidText}</strong></span>
                                 <span>Paid: <strong className={eqItem.returned ? "line-through text-muted-foreground/60 font-medium" : "text-success"}>₹{grandTotalPaid.toLocaleString("en-IN")}</strong></span>
                                 <span>Bal: <strong className={eqItem.returned ? (outstanding > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-muted-foreground/50") : (outstanding > 0 ? "text-destructive" : "text-success")}>₹{outstanding.toLocaleString("en-IN")}</strong> {!eqItem.returned && <span className="text-[10px] text-muted-foreground font-medium ml-1">(Today: ₹{balanceAsOfToday.toLocaleString("en-IN")})</span>}</span>

@@ -1048,7 +1048,7 @@ function AgreementPaymentHistoryModal({
         </DialogHeader>
 
         {/* Financial Summary Cards */}
-        <div className="p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-card p-3 rounded-lg border border-border/50">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Collected</p>
             <p className="text-[18px] font-bold text-success mt-0.5">₹{totalPaid.toLocaleString("en-IN")}</p>
@@ -1064,13 +1064,6 @@ function AgreementPaymentHistoryModal({
           <div className="bg-card p-3 rounded-lg border border-border/50">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security Deposit</p>
             <p className="text-[16px] font-semibold text-foreground mt-0.5">₹{deposit.toLocaleString("en-IN")}</p>
-          </div>
-          <div className="bg-card p-3 rounded-lg border border-border/50 col-span-2 sm:col-span-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Rental Date</p>
-            <p className="text-[15px] font-semibold text-foreground mt-0.5 flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5 text-primary shrink-0" />
-              {rentalDate ? formatDateDDMMYYYY(rentalDate) : "—"}
-            </p>
           </div>
         </div>
 
@@ -1176,6 +1169,85 @@ function AgreementPaymentHistoryModal({
   );
 }
 
+/** Helper to extract only the model name from an equipment string or explicit model property */
+const extractModelOnly = (eqStr: string, explicitModel?: string): string => {
+  if (explicitModel && explicitModel.trim() && explicitModel.toLowerCase() !== "standard") {
+    return explicitModel.trim();
+  }
+  if (!eqStr) return "—";
+
+  // Strip serial info if appended (e.g. " - S/N: ...")
+  let clean = eqStr.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
+
+  if (clean.includes(",")) {
+    return clean
+      .split(",")
+      .map((part) => extractModelOnly(part.trim()))
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  // Remove common category prefixes to leave only the model name (e.g., "Oxygen Concentrator 5LP" -> "5LP")
+  const categoryPrefixes = [
+    "Oxygen Concentrator",
+    "Auto CPAP Machine",
+    "CPAP Machine",
+    "Bipap Machine",
+    "Bi-PAP Machine",
+    "Surgical Cot With Mattress",
+    "Surgical Cot",
+    "Foldable Wheel Chair",
+    "Wheel Chair",
+    "Patient Monitor",
+    "Syringe Pump",
+    "Infusion Pump",
+    "Patient Ventilator",
+    "Ventilator",
+  ];
+
+  for (const cat of categoryPrefixes) {
+    if (clean.toLowerCase().startsWith(cat.toLowerCase())) {
+      const remainder = clean.slice(cat.length).replace(/^[\s\-\:]+/, "").trim();
+      if (remainder) {
+        return remainder;
+      }
+    }
+  }
+
+  return clean;
+};
+
+/** Get the equipment model(s) for an agreement row */
+function getAgreementEquipmentModel(g: any, rentalsList: any[], equipmentList: any[]): string {
+  const rental = rentalsList.find((r) => r.id === g.agreementId);
+
+  if (rental) {
+    const items: any[] = Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
+      ? rental.equipmentItems.filter((it: any) => !it.returned)
+      : [];
+
+    if (items.length > 0) {
+      const models = items.map((it: any) => {
+        const eq = equipmentList.find((e) => e.id === it.equipmentId);
+        const name = it.name || eq?.name || eq?.category || rental.equipment;
+        const model = it.model || eq?.model || (items.length === 1 ? rental.model : undefined);
+        const full = formatEquipmentLabel({ name, model, serial: "" }, false);
+        return extractModelOnly(full, model);
+      }).filter(Boolean);
+
+      if (models.length > 0) {
+        return Array.from(new Set(models)).join(", ");
+      }
+    }
+
+    if (rental.model && rental.model.trim() && rental.model.toLowerCase() !== "standard") {
+      return rental.model.trim();
+    }
+  }
+
+  return extractModelOnly(g.equipment || "");
+}
+
 function PaymentsPage() {
   const dbVersion = useDatabaseTrigger();
   const [payments, setPayments] = useState(() => getPayments());
@@ -1204,6 +1276,7 @@ function PaymentsPage() {
 
   // Group payments by Agreement ID
   const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
   const agreementMap = new Map<string, {
     agreementId: string;
     customerName: string;
@@ -1672,7 +1745,7 @@ function PaymentsPage() {
                           <StatusBadge status={g.rentStatus as any} />
                         </div>
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{g.equipment}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{getAgreementEquipmentModel(g, rentalsList, equipmentList)}</p>
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
                         <span className="text-muted-foreground">{g.totalCount} Payment{g.totalCount === 1 ? "" : "s"}</span>
                         <Button size="sm" variant="ghost" className="h-6 text-[11px] text-primary p-0">
