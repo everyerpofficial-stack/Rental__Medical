@@ -801,31 +801,24 @@ const getDocDetails = (type: string) => {
 
 function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSave }: { customer: Customer | null; open: boolean; onClose: () => void; onSave?: () => void }) {
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
+  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
 
   useEffect(() => {
     setCustomer(initialCustomer);
   }, [initialCustomer]);
 
-  if (!customer) return null;
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
-  const isStaff = userRole === "Staff";
-  const isAdmin = userRole === "Admin";
-  const isAccountant = userRole === "Accountant";
-  const canEdit = isAdmin || isAccountant;
-  const canDelete = isAdmin;
-  const rentals = getRentals();
-  const payments = getPayments();
-  const documents = getDocuments();
-  const returns = getReturns();
-
-  const [previewDoc, setPreviewDoc] = useState<any | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setPreviewDoc(null);
+    }
+  }, [open]);
 
   // Load heavy file content from IndexedDB when a document is opened in preview.
   // System-generated rows (doc-agr-/doc-ret-/doc-pay-) never carry uploaded
   // bytes — they're rebuilt from their source record below — but an uploaded
   // agreement PDF has its own doc id and must still be fetched.
   const isSystemGeneratedDoc = (doc: any) =>
-    String(doc.id).startsWith("doc-agr-") || String(doc.id).startsWith("doc-ret-") || String(doc.id).startsWith("doc-pay-");
+    String(doc?.id ?? "").startsWith("doc-agr-") || String(doc?.id ?? "").startsWith("doc-ret-") || String(doc?.id ?? "").startsWith("doc-pay-");
 
   useEffect(() => {
     if (previewDoc && !previewDoc.fileData && !isSystemGeneratedDoc(previewDoc)) {
@@ -844,12 +837,31 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
     [previewDoc?.id, previewDoc?.fileData]
   );
 
+  if (!customer) return null;
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAdmin = userRole === "Admin";
+  const isAccountant = userRole === "Accountant";
+  const canEdit = isAdmin || isAccountant;
+  const canDelete = isAdmin;
+  const rentals = getRentals();
+  const payments = getPayments();
+  const documents = getDocuments();
+  const returns = getReturns();
+
   const custRentals  = rentals.filter((r) => r.customerId === customer.id);
   const custPayments = payments.filter((p) => p.customerId === customer.id);
   const custDocs = documents.filter((d) => d.customerId === customer.id || (d.rentalId && custRentals.some(r => r.id === d.rentalId)));
   const custKYCDocs = custDocs.filter((d) => d.type === "ID Proof");
 
-  const initials = customer.name.split(" ").map((n: string) => n[0]).slice(0, 2).join("");
+  const initials = (customer.name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((n: string) => n[0] || "")
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "C";
 
   // Calculate totals
   const totalPaid = custPayments.filter(p => p.status === "Paid").reduce((sum, p) => sum + p.amount, 0);
@@ -2322,12 +2334,15 @@ function CustomersPage() {
       </Card>
 
       {/* Profile Dialog */}
-      <CustomerProfileDialog
-        customer={profileCustomer}
-        open={profileOpen}
-        onClose={() => setProfileOpen(false)}
-        onSave={refresh}
-      />
+      {profileCustomer && (
+        <CustomerProfileDialog
+          key={profileCustomer.id}
+          customer={profileCustomer}
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          onSave={refresh}
+        />
+      )}
     </AppShell>
   );
 }
