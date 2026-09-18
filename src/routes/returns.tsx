@@ -68,6 +68,7 @@ import {
   sortLatestFirst,
   extractIdNumber,
   formatEquipmentLabel,
+  formatFullAddress,
 } from "@/lib/data-store";
 import { reportError } from "@/lib/error-reporting";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -1063,7 +1064,15 @@ function ReturnsPage() {
         (customer && (
           String(customer.phone || "").toLowerCase().includes(searchLower) ||
           String(customer.altPhone || "").toLowerCase().includes(searchLower) ||
-          String(customer.contactNumber3 || "").toLowerCase().includes(searchLower)
+          String(customer.contactNumber3 || "").toLowerCase().includes(searchLower) ||
+          String(customer.taluk || "").toLowerCase().includes(searchLower) ||
+          String(customer.area || "").toLowerCase().includes(searchLower) ||
+          String(customer.address || "").toLowerCase().includes(searchLower)
+        )) ||
+        (rental && (
+          String((rental as any).taluk || "").toLowerCase().includes(searchLower) ||
+          String((rental as any).area || "").toLowerCase().includes(searchLower) ||
+          String((rental as any).address || "").toLowerCase().includes(searchLower)
         ));
 
       const matchesReturnDue = !showReturnDuesOnly || (() => {
@@ -1751,15 +1760,19 @@ function ReturnsPage() {
                       const phones = [p1, p2, p3].filter(Boolean).join(", ");
                       const custAddr = selectedCustomer?.address || (selectedRental as any)?.address || "";
                       const custArea = selectedCustomer?.area || (selectedRental as any)?.area || "";
+                      const custTaluk = selectedCustomer?.taluk || (selectedRental as any)?.taluk || "";
                       const custCity = selectedCustomer?.city || (selectedRental as any)?.city || "";
                       const custState = selectedCustomer?.state || (selectedRental as any)?.state || "";
                       const custPincode = selectedCustomer?.pincode || (selectedRental as any)?.pincode || "";
 
-                      const addrParts = [custAddr, custArea, custCity, custState].filter(Boolean);
-                      let addr = addrParts.join(", ");
-                      if (custPincode) {
-                        addr = addr ? `${addr} - ${custPincode}` : custPincode;
-                      }
+                      const addr = formatFullAddress({
+                        address: custAddr,
+                        area: custArea,
+                        taluk: custTaluk,
+                        city: custCity,
+                        state: custState,
+                        pincode: custPincode,
+                      });
                       const hospital = (selectedRental as any)?.consultingHospital || (selectedCustomer as any)?.consultingHospital || (selectedRental as any)?.hospital || "";
                       const refBy = (selectedRental as any)?.referredBy || (selectedCustomer as any)?.referredBy || (selectedRental as any)?.doctor || "";
 
@@ -2844,9 +2857,7 @@ function ReturnsPage() {
                       const info = getReturnOwnerAndCategory(ret);
                       const rental = rentals.find((r) => r.id === ret.agreement);
                       const cust = (ret.customerId && customers.find((c) => c.id === ret.customerId)) || (rental?.customerId && customers.find((c) => c.id === rental.customerId)) || customers.find((c) => c.name === ret.customer);
-                      const fullAddress = cust
-                        ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ")
-                        : rental?.address || "No address provided";
+                      const fullAddress = formatFullAddress(cust, rental) || "No address provided";
                       return (
                         <TableRow key={ret.id} className="group hover:bg-muted/15 transition-colors">
                           {/* 1. Customer name with contact numbers */}

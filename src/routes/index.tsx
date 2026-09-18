@@ -465,8 +465,8 @@ function Dashboard() {
                         <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-muted-foreground" />
                       </div>
                     </div>
-                    <div className="mt-2.5 sm:mt-3.5 flex items-center text-[10px] sm:text-[11px] text-muted-foreground/75 font-medium leading-none">
-                      <span className="truncate">{k.description}</span>
+                    <div className="mt-2.5 sm:mt-3.5 flex items-center text-[10px] sm:text-[11px] text-muted-foreground/75 font-medium leading-tight">
+                      <span className="line-clamp-2" title={k.description}>{k.description}</span>
                     </div>
                   </CardContent>
                 </Card>

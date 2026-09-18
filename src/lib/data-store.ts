@@ -319,6 +319,79 @@ export function formatEquipmentLabel(
 }
 
 /**
+ * Formats a customer's address into a single cohesive line including taluk, area, city, state, and pincode.
+ * Prevents redundant repeats (e.g. if taluk is already part of the street address, area, or identical to city).
+ */
+export function formatFullAddress(
+  custOrAddress?: {
+    address?: string | null;
+    area?: string | null;
+    taluk?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pincode?: string | null;
+  } | string | null,
+  fallback?: {
+    address?: string | null;
+    area?: string | null;
+    taluk?: string | null;
+    city?: string | null;
+    state?: string | null;
+    pincode?: string | null;
+  } | string | null
+): string {
+  let addr = "";
+  let area = "";
+  let taluk = "";
+  let city = "";
+  let state = "";
+  let pincode = "";
+
+  if (typeof custOrAddress === "string") {
+    addr = custOrAddress.trim();
+  } else if (custOrAddress && typeof custOrAddress === "object") {
+    addr = (custOrAddress.address || "").trim();
+    area = (custOrAddress.area || "").trim();
+    taluk = (custOrAddress.taluk || "").trim();
+    city = (custOrAddress.city || "").trim();
+    state = (custOrAddress.state || "").trim();
+    pincode = (custOrAddress.pincode || "").trim();
+  }
+
+  if (fallback) {
+    if (typeof fallback === "string") {
+      if (!addr) addr = fallback.trim();
+    } else if (typeof fallback === "object") {
+      if (!addr) addr = (fallback.address || "").trim();
+      if (!area) area = (fallback.area || "").trim();
+      if (!taluk) taluk = (fallback.taluk || "").trim();
+      if (!city) city = (fallback.city || "").trim();
+      if (!state) state = (fallback.state || "").trim();
+      if (!pincode) pincode = (fallback.pincode || "").trim();
+    }
+  }
+
+  const parts: string[] = [];
+  if (addr) parts.push(addr);
+  if (area && !addr.toLowerCase().includes(area.toLowerCase())) {
+    parts.push(area);
+  }
+  if (taluk) {
+    const alreadyInAddr = addr.toLowerCase().includes(taluk.toLowerCase());
+    const alreadyInArea = area.toLowerCase().includes(taluk.toLowerCase());
+    const sameAsCity = Boolean(city && taluk.toLowerCase() === city.toLowerCase());
+    if (!alreadyInAddr && !alreadyInArea && !sameAsCity) {
+      parts.push(taluk);
+    }
+  }
+  if (city) parts.push(city);
+  if (state) parts.push(state);
+  if (pincode) parts.push(pincode);
+
+  return parts.filter(Boolean).join(", ");
+}
+
+/**
  * Resolves the equipment rows behind a rental (new `equipmentItems` array or the
  * legacy comma-separated `equipmentId`) and returns one display label each,
  * enriched with the model from the equipment master where the rental line item
@@ -2502,6 +2575,9 @@ export function getDynamicKPIs() {
   const availableEquip = relifeEquip.filter((e) => e.status === "Available" || e.status === "Inactive").length;
   const rentedEquip = relifeEquip.filter((e) => e.status === "Rented" || e.status === "Active").length;
 
+  const overallAvailableEquip = equip.filter((e) => e.status === "Available" || e.status === "Inactive").length;
+  const overallRentedEquip = equip.filter((e) => e.status === "Rented" || e.status === "Active").length;
+
   const now = new Date();
   const curMonth = now.getMonth();
   const curYear = now.getFullYear();
@@ -2596,12 +2672,38 @@ export function getDynamicKPIs() {
     rentedTrend = rate >= 50 ? "up" : "down";
   }
 
-  // 6. Monthly Revenue growth
+  // 6. Monthly Revenue growth (Relife vs Overall)
   const currentMonthRevenue = pay
     .filter((p) => {
       if (p.status !== "Paid") return false;
       const d = parseLocalDate(p.date);
       return !isNaN(d.getTime()) && d.getMonth() === curMonth && d.getFullYear() === curYear;
+    })
+    .reduce((sum, p) => sum + p.amount, 0);
+
+  const relifeMonthlyRevenue = pay
+    .filter((p) => {
+      if (p.status !== "Paid") return false;
+      const d = parseLocalDate(p.date);
+      if (isNaN(d.getTime()) || d.getMonth() !== curMonth || d.getFullYear() !== curYear) return false;
+
+      let isRelife = true;
+      if (p.equipmentId) {
+        const e = equip.find((item) => item.id === p.equipmentId);
+        if (e) isRelife = isRelifeOwner(e.owner, owners);
+      } else if (p.agreement || p.rentalId || p.agreementId) {
+        const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+        const r = rent.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+        if (r) {
+          const eqId = r.equipmentId || (r.equipmentItems && r.equipmentItems[0]?.equipmentId);
+          const e = equip.find((item) => item.id === eqId);
+          if (e) isRelife = isRelifeOwner(e.owner, owners);
+          else if (r.owner) isRelife = isRelifeOwner(r.owner, owners);
+        }
+      } else if (p.owner) {
+        isRelife = isRelifeOwner(p.owner, owners);
+      }
+      return isRelife;
     })
     .reduce((sum, p) => sum + p.amount, 0);
 
@@ -2627,12 +2729,6 @@ export function getDynamicKPIs() {
   }
 
   // 7. Pending Payments growth
-  // Real outstanding balance per rental (elapsed billing minus payments
-  // actually recorded), not the `status === "Overdue"` label — that field
-  // is only a nominal-end-date flag and misses rentals with real unpaid
-  // rent that are still labeled "Active" (e.g. ongoing month-to-month
-  // agreements with no formal end date), which is why this used to read
-  // ₹0 while the Rent Dues page showed large outstanding balances.
   const rentalsForPending = rent.filter((r) => r.status !== "Completed" && r.status !== "Cancelled");
   const pendingBalances = rentalsForPending.map((r) => ({ r, outstanding: getRentalOutstandingBalance(r, pay) }));
   const pendingPaymentsAmount = pendingBalances.reduce((sum, x) => sum + x.outstanding, 0);
@@ -2787,9 +2883,9 @@ export function getDynamicKPIs() {
     { label: "Active Rentals",                value: activeAgreements.toString(),   description: "Current active rental agreements" },
     { label: "Agreements Made This Month",    value: curMonthAgreements.toString(), description: "New rental agreements this month" },
     { label: "Agreements Closed This Month",  value: curMonthReturns.toString(),    description: "Equipment returns this month" },
-    { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${relifeEquip.length} units available` },
-    { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${relifeEquip.length} units rented` },
-    { label: "Monthly Revenue",     value: `₹${currentMonthRevenue.toLocaleString("en-IN")}`, description: "Payments collected this month" },
+    { label: "Available Equipment", value: availableEquip.toString(),     description: `${availableEquip} out of ${relifeEquip.length} units available (Overall: ${overallAvailableEquip} of ${equip.length})` },
+    { label: "Rented Equipment",    value: rentedEquip.toString(),        description: `${rentedEquip} out of ${relifeEquip.length} units rented (Overall: ${overallRentedEquip} of ${equip.length})` },
+    { label: "Monthly Revenue",     value: `₹${relifeMonthlyRevenue.toLocaleString("en-IN")}`, description: `Overall: ₹${currentMonthRevenue.toLocaleString("en-IN")} collected this month` },
     { label: "Pending Payments",    value: `₹${pendingPaymentsTodayAmount.toLocaleString("en-IN")}`, description: `Full Month: ₹${pendingPaymentsAmount.toLocaleString("en-IN")} · ${pendingInvoicesCount} agreement(s) with dues pending` },
     { label: "Security Deposits",   value: `₹${securityDepositsAmount.toLocaleString("en-IN")}`, description: "Refundable deposits in escrow" },
   ];
@@ -3058,14 +3154,15 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
   const customerObj = customers.find(c => c.id === rental.customerId);
 
   const customerName = rental.customer || customerObj?.name || "Valued Customer";
-  const customerAddress = customerObj?.address || "No address on file";
-  const customerArea = customerObj?.area || "";
-  const customerCity = customerObj?.city || "Mysore";
-  const customerState = customerObj?.state || "Karnataka";
-  const customerPincode = customerObj?.pincode || "";
-  const customerPhone = customerObj?.phone || "N/A";
-  const customerAltPhone = customerObj?.altPhone || "";
-  const customerEmail = customerObj?.email || "N/A";
+  const customerAddress = customerObj?.address || (rental as any)?.address || "No address on file";
+  const customerArea = customerObj?.area || (rental as any)?.area || "";
+  const customerTaluk = customerObj?.taluk || (rental as any)?.taluk || "";
+  const customerCity = customerObj?.city || (rental as any)?.city || "Mysore";
+  const customerState = customerObj?.state || (rental as any)?.state || "Karnataka";
+  const customerPincode = customerObj?.pincode || (rental as any)?.pincode || "";
+  const customerPhone = customerObj?.phone || (rental as any)?.phone || "N/A";
+  const customerAltPhone = customerObj?.altPhone || (rental as any)?.altPhone || "";
+  const customerEmail = customerObj?.email || (rental as any)?.email || "N/A";
 
   const formattedStartDate = rental.start ? formatDateDDMMYYYY(rental.start) : "N/A";
 
@@ -3482,7 +3579,7 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
     
     <div class="details-list">
       <div class="details-row"><span class="details-label">Customer Name:</span><span class="details-value">${customerName}</span></div>
-      <div class="details-row"><span class="details-label">Customer Address:</span><span class="details-value">${customerAddress}, ${customerArea ? customerArea + ', ' : ''}${customerCity}, ${customerState} - ${customerPincode}</span></div>
+      <div class="details-row"><span class="details-label">Customer Address:</span><span class="details-value">${formatFullAddress({ address: customerAddress, area: customerArea, taluk: customerTaluk, city: customerCity, state: customerState, pincode: customerPincode }) || "No address on file"}</span></div>
       <div class="details-row"><span class="details-label">Mobile Numbers:</span><span class="details-value">${customerPhone}${customerAltPhone ? ', ' + customerAltPhone : ''}</span></div>
     </div>
     

@@ -63,6 +63,7 @@ import {
   savePayment,
   getNextPaymentNumber,
   getPaidForEquipment,
+  formatFullAddress,
 } from "@/lib/data-store";
 import { useDebounce } from "@/hooks/use-debounce";
 import { EquipmentFormDialog } from "@/components/EquipmentFormDialog";
@@ -4613,13 +4614,14 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
   const customerObj = customers.find(c => c.id === rental?.customerId);
 
   const customerName = rental?.customer || customerObj?.name || "Valued Customer";
-  const customerAddress = customerObj?.address || "No address on file";
-  const customerArea = customerObj?.area || "";
-  const customerCity = customerObj?.city || "Mysore";
-  const customerState = customerObj?.state || "Karnataka";
-  const customerPincode = customerObj?.pincode || "";
-  const customerPhone = customerObj?.phone || "N/A";
-  const customerAltPhone = customerObj?.altPhone || "";
+  const customerAddress = customerObj?.address || (rental as any)?.address || "No address on file";
+  const customerArea = customerObj?.area || (rental as any)?.area || "";
+  const customerTaluk = customerObj?.taluk || (rental as any)?.taluk || "";
+  const customerCity = customerObj?.city || (rental as any)?.city || "Mysore";
+  const customerState = customerObj?.state || (rental as any)?.state || "Karnataka";
+  const customerPincode = customerObj?.pincode || (rental as any)?.pincode || "";
+  const customerPhone = customerObj?.phone || (rental as any)?.phone || "N/A";
+  const customerAltPhone = customerObj?.altPhone || (rental as any)?.altPhone || "";
 
   const formattedStartDate = rental?.start ? formatDateDDMMYYYY(rental.start) : formatDateDDMMYYYY(new Date().toISOString());
 
@@ -4931,7 +4933,7 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
               </div>
               <div>
                 <span className="font-bold inline-block w-[140px]">Customer Address:</span>
-                <span>{customerAddress}, {customerArea ? `${customerArea}, ` : ''}{customerCity}, {customerState} {customerPincode ? `- ${customerPincode}` : ''}</span>
+                <span>{formatFullAddress({ address: customerAddress, area: customerArea, taluk: customerTaluk, city: customerCity, state: customerState, pincode: customerPincode }) || "No address on file"}</span>
               </div>
               <div>
                 <span className="font-bold inline-block w-[140px]">Mobile Numbers:</span>
@@ -5215,6 +5217,7 @@ function RentalsPage() {
             if (phones.some((ph: any) => String(ph || "").replace(/\D/g, "").includes(tokenDigits))) return true;
           }
           if (wordStartsWith(customer.area, token)) return true;
+          if (wordStartsWith(customer.taluk || (r as any)?.taluk, token)) return true;
           if (wordStartsWith(customer.address, token)) return true;
         }
         return false;
@@ -5287,7 +5290,7 @@ function RentalsPage() {
                 const headers = ["Customer", "Address", "Equipment", "Rent Date", "Rent Rate", "Deposit", "Return Date", "Status"];
                 const rows = rentalsList.map(r => {
                   const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
-                  const fullAddress = cust ? [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ") : "—";
+                  const fullAddress = formatFullAddress(cust, r) || "—";
                   const eqNameWithModel = getRentalEquipmentLabels(r).join(" | ");
                   const rentRateDisplay = (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0)
                     ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day`
@@ -5488,8 +5491,7 @@ function RentalsPage() {
                     <TableCell>
                       {(() => {
                         const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
-                        if (!cust) return <span className="text-muted-foreground text-[12px]">—</span>;
-                        const fullAddress = [cust.address, cust.area, cust.city, cust.state, cust.pincode].filter(Boolean).join(", ");
+                        const fullAddress = formatFullAddress(cust, r);
                         return <p className="text-[12px] text-foreground/80 max-w-[180px] break-words whitespace-normal leading-normal">{fullAddress || "—"}</p>;
                       })()}
                     </TableCell>
