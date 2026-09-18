@@ -347,27 +347,29 @@ export function formatFullAddress(
   let state = "";
   let pincode = "";
 
+  const cleanStr = (val: any): string => (val !== undefined && val !== null ? String(val).trim() : "");
+
   if (typeof custOrAddress === "string") {
     addr = custOrAddress.trim();
   } else if (custOrAddress && typeof custOrAddress === "object") {
-    addr = (custOrAddress.address || "").trim();
-    area = (custOrAddress.area || "").trim();
-    taluk = (custOrAddress.taluk || "").trim();
-    city = (custOrAddress.city || "").trim();
-    state = (custOrAddress.state || "").trim();
-    pincode = (custOrAddress.pincode || "").trim();
+    addr = cleanStr(custOrAddress.address);
+    area = cleanStr(custOrAddress.area);
+    taluk = cleanStr(custOrAddress.taluk);
+    city = cleanStr(custOrAddress.city);
+    state = cleanStr(custOrAddress.state);
+    pincode = cleanStr(custOrAddress.pincode);
   }
 
   if (fallback) {
     if (typeof fallback === "string") {
       if (!addr) addr = fallback.trim();
     } else if (typeof fallback === "object") {
-      if (!addr) addr = (fallback.address || "").trim();
-      if (!area) area = (fallback.area || "").trim();
-      if (!taluk) taluk = (fallback.taluk || "").trim();
-      if (!city) city = (fallback.city || "").trim();
-      if (!state) state = (fallback.state || "").trim();
-      if (!pincode) pincode = (fallback.pincode || "").trim();
+      if (!addr) addr = cleanStr(fallback.address);
+      if (!area) area = cleanStr(fallback.area);
+      if (!taluk) taluk = cleanStr(fallback.taluk);
+      if (!city) city = cleanStr(fallback.city);
+      if (!state) state = cleanStr(fallback.state);
+      if (!pincode) pincode = cleanStr(fallback.pincode);
     }
   }
 
