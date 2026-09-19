@@ -39,14 +39,6 @@ import {
 } from "@/lib/data-store";
 
 export const Route = createFileRoute("/equipment")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined") {
-      const role = localStorage.getItem("medirent-user-role");
-      if (role === "Staff") {
-        throw redirect({ to: "/rentals" });
-      }
-    }
-  },
   head: () => ({ meta: [{ title: "Equipment — Relife" }] }),
   component: EquipmentPage,
 });
@@ -95,7 +87,15 @@ const categoryImages: Record<string, string> = {
   "Patient Ventilator": "/images/patient_ventilator.png",
 };
 function DeleteEquipmentDialog({ eq, trigger, onDelete }: { eq: Equipment; trigger: React.ReactNode; onDelete?: () => void }) {
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  if (userRole === "Staff") return null;
+
   const handleDelete = () => {
+    const role = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+    if (role === "Staff") {
+      toast.error("Staff users are not authorized to delete equipment.");
+      return;
+    }
     deleteEquipment(eq.id);
     toast.success(`Equipment "${eq.name}" has been deleted.`);
     if (onDelete) onDelete();
@@ -207,6 +207,7 @@ function OwnerActionDialog({
     const savedEq = {
       ...eq,
       status: actionType === "return" ? "Returned to Owner" : "Available",
+      purchaseDate: actionType === "receive" ? date : eq.purchaseDate,
       ownerDailyRate: actionType === "return" ? (eq.ownerDailyRate || 0) : rateVal,
       ownerHistory: updatedHistory,
     };
@@ -1055,16 +1056,18 @@ function EquipmentPage() {
       title="Equipment Inventory"
       subtitle="Track every device, status, and serial in real time"
       actions={
-        <EquipmentFormDialog
-          title="Add New Equipment"
-          onSave={refresh}
-          trigger={
-            <Button size="sm">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add Equipment
-            </Button>
-          }
-        />
+        canEdit ? (
+          <EquipmentFormDialog
+            title="Add New Equipment"
+            onSave={refresh}
+            trigger={
+              <Button size="sm">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Equipment
+              </Button>
+            }
+          />
+        ) : undefined
       }
     >
       <div className="mb-5 flex flex-col gap-3 border-b border-border/60 pb-5">
@@ -1111,16 +1114,18 @@ function EquipmentPage() {
       </div>
 
       {/* Mobile FAB — Add Equipment */}
-      <EquipmentFormDialog
-        title="Add New Equipment"
-        onSave={refresh}
-        trigger={
-          <button className="fab md:hidden">
-            <Plus className="h-5 w-5" />
-            Add Equipment
-          </button>
-        }
-      />
+      {canEdit && (
+        <EquipmentFormDialog
+          title="Add New Equipment"
+          onSave={refresh}
+          trigger={
+            <button className="fab md:hidden">
+              <Plus className="h-5 w-5" />
+              Add Equipment
+            </button>
+          }
+        />
+      )}
 
       {(() => {
         const allOwnerNames = Array.from(new Set(filteredEquipment.map(e => e.owner || "Unassigned").filter(Boolean)));
@@ -1219,7 +1224,7 @@ function EquipmentPage() {
                           >
                             <History className="mr-1.5 h-3.5 w-3.5" />History
                           </Button>
-                          {item.status === "UnderMaintenance" && (
+                          {canEdit && item.status === "UnderMaintenance" && (
                             <Button
                               variant="default"
                               size="sm"
@@ -1233,7 +1238,7 @@ function EquipmentPage() {
                               Mark Available
                             </Button>
                           )}
-                          {!isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
+                          {canEdit && !isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
                             <OwnerActionDialog
                               eq={item}
                               actionType="receive"
@@ -1249,7 +1254,7 @@ function EquipmentPage() {
                               }
                             />
                           )}
-                          {!isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
+                          {canEdit && !isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
                             <OwnerActionDialog
                               eq={item}
                               actionType="return"

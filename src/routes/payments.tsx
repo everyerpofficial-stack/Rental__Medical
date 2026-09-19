@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
-  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2, Package,
 } from "lucide-react";
 import {
   getPayments,
@@ -39,6 +39,7 @@ import {
   formatDateDDMMYYYY,
   getAgreementBalance,
   formatEquipmentLabel,
+  getRentalEquipmentDetailedItems,
   cleanNum,
 } from "@/lib/data-store";
 import {
@@ -85,6 +86,7 @@ const modeColors: Record<string, string> = {
   "Bank Transfer": "bg-primary/8 text-primary border-primary/18",
   "Credit Card":   "bg-destructive/8 text-destructive border-destructive/18",
   "Debit Card":    "bg-muted text-muted-foreground border-border/60",
+  "Equipment Refund": "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/25",
 };
 
 const typeColors: Record<string, string> = {
@@ -885,6 +887,7 @@ function AgreementPaymentHistoryModal({
 
   const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
   const rentals = getRentals();
+  const equipmentList = getEquipment();
   const payments = getPayments();
   const rental = rentals.find((r) => r.id === agreementId);
 
@@ -895,6 +898,8 @@ function AgreementPaymentHistoryModal({
 
   const customerName = rental?.customer || agreementPayments[0]?.customer || "Unknown Customer";
   const equipmentName = rental?.equipment || "—";
+  const eqModelItems = rental ? getRentalEquipmentDetailedItems(rental, equipmentList, undefined, false) : [];
+  const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
   const status = rental?.status || "Active";
   const monthlyRent = rental?.monthlyRent || 0;
   const deposit = rental?.deposit || 0;
@@ -1025,7 +1030,10 @@ function AgreementPaymentHistoryModal({
               <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
                 <span>Customer: <strong className="text-foreground font-semibold">{customerName}</strong></span>
                 <span>•</span>
-                <span>Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong></span>
+                <span>
+                  Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong>
+                  {modelStr && <span className="text-muted-foreground font-semibold ml-1">({modelStr})</span>}
+                </span>
                 {rentalDate && (
                   <>
                     <span>•</span>
@@ -1085,6 +1093,7 @@ function AgreementPaymentHistoryModal({
                     <TableRow>
                       <TableHead>Receipt ID</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead>Equipment</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Mode</TableHead>
                       <TableHead>Collected By</TableHead>
@@ -1098,13 +1107,29 @@ function AgreementPaymentHistoryModal({
                       <TableRow key={p.id}>
                         <TableCell className="font-mono text-[12px] font-bold text-primary">{p.id}</TableCell>
                         <TableCell className="text-[12px]">{formatDateDDMMYYYY(p.date)}</TableCell>
+                        <TableCell className="text-[12px] font-medium">
+                          <div className="max-w-[170px]" title={`${equipmentName}${modelStr ? ` - Model: ${modelStr}` : ""}`}>
+                            <span className="flex items-center gap-1.5 truncate">
+                              <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="truncate">{equipmentName}</span>
+                            </span>
+                            {modelStr && (
+                              <span className="text-[10.5px] text-muted-foreground font-medium truncate block pl-5">
+                                Model: {modelStr}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
                             {p.type}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}>
+                          <span
+                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}
+                            title={p.notes || undefined}
+                          >
                             {p.mode}
                           </span>
                         </TableCell>
@@ -1137,6 +1162,11 @@ function AgreementPaymentHistoryModal({
                       <div>
                         <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
+                        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground mt-1">
+                          <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="truncate">{equipmentName}</span>
+                          {modelStr && <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">· {modelStr}</span>}
+                        </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
@@ -1146,10 +1176,20 @@ function AgreementPaymentHistoryModal({
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                       <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground"}`}>{p.type}</span>
                       <span>·</span>
-                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
+                      <span
+                        className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}
+                        title={p.notes || undefined}
+                      >
+                        {p.mode}
+                      </span>
                       <span>·</span>
                       <span>{(p.collectedBy as string) || "Dr. Rao"}</span>
                     </div>
+                    {p.notes && (
+                      <p className="mt-1.5 text-[10.5px] text-muted-foreground italic truncate" title={p.notes}>
+                        {p.notes}
+                      </p>
+                    )}
                     <div className="mt-2 flex justify-end gap-1">
                       <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
                       <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
@@ -1217,34 +1257,49 @@ const extractModelOnly = (eqStr: string, explicitModel?: string): string => {
   return clean;
 };
 
-/** Get the equipment model(s) for an agreement row */
-function getAgreementEquipmentModel(g: any, rentalsList: any[], equipmentList: any[]): string {
-  const rental = rentalsList.find((r) => r.id === g.agreementId);
+/** Get detailed equipment name and model information for an agreement row */
+export interface AgreementEquipmentDisplay {
+  name: string;
+  model: string;
+}
 
-  if (rental) {
-    const items: any[] = Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
-      ? rental.equipmentItems.filter((it: any) => !it.returned)
-      : [];
-
-    if (items.length > 0) {
-      const models = items.map((it: any) => {
-        const eq = equipmentList.find((e) => e.id === it.equipmentId);
-        const name = it.name || eq?.name || eq?.category || rental.equipment;
-        const model = it.model || eq?.model || (items.length === 1 ? rental.model : undefined);
-        const full = formatEquipmentLabel({ name, model, serial: "" }, false);
-        return extractModelOnly(full, model);
-      }).filter(Boolean);
-
-      if (models.length > 0) {
-        return Array.from(new Set(models)).join(", ");
-      }
-    }
-
-    if (rental.model && rental.model.trim() && rental.model.toLowerCase() !== "standard") {
-      return rental.model.trim();
-    }
+function getAgreementEquipmentModelInfo(g: any, rentalsList: any[], equipmentList: any[]): AgreementEquipmentDisplay[] {
+  const rental = rentalsList.find((r) => r.id === (g.agreementId || g.agreement));
+  if (!rental) {
+    return [{ name: g.equipment || "—", model: "" }];
   }
 
+  const items = getRentalEquipmentDetailedItems(rental, equipmentList, undefined, false);
+  if (items.length > 0) {
+    return items.map((it) => {
+      let model = it.model ? String(it.model).trim() : "";
+      if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+        model = "";
+      }
+      return {
+        name: it.name || rental.equipment || "Equipment",
+        model: model,
+      };
+    });
+  }
+
+  let model = rental.model ? String(rental.model).trim() : "";
+  if (model.toLowerCase() === "standard" || model.toLowerCase() === String(rental.equipment || "").toLowerCase()) {
+    model = "";
+  }
+  return [{
+    name: rental.equipment || g.equipment || "—",
+    model: model,
+  }];
+}
+
+/** Get the equipment model(s) for an agreement row */
+function getAgreementEquipmentModel(g: any, rentalsList: any[], equipmentList: any[]): string {
+  const infos = getAgreementEquipmentModelInfo(g, rentalsList, equipmentList);
+  const models = infos.map(i => i.model).filter(Boolean);
+  if (models.length > 0) {
+    return Array.from(new Set(models)).join(", ");
+  }
   return extractModelOnly(g.equipment || "");
 }
 
@@ -1360,7 +1415,11 @@ function PaymentsPage() {
       g.latestMode.toLowerCase().includes(q) ||
       (g.startDate && g.startDate.toLowerCase().includes(q)) ||
       (formattedStartDate && formattedStartDate.toLowerCase().includes(q)) ||
-      (rental && String(rental.serial || "").toLowerCase().includes(q)) ||
+      (rental && (
+        String(rental.serial || "").toLowerCase().includes(q) ||
+        String(rental.model || "").toLowerCase().includes(q) ||
+        (Array.isArray(rental.equipmentItems) && rental.equipmentItems.some((it: any) => String(it.model || "").toLowerCase().includes(q) || String(it.name || "").toLowerCase().includes(q)))
+      )) ||
       (customer && (
         String(customer.phone || "").toLowerCase().includes(q) ||
         String(customer.altPhone || "").toLowerCase().includes(q) ||
@@ -1483,7 +1542,7 @@ function PaymentsPage() {
     .reduce((sum, p) => sum + p.amount, 0);
 
   const bankCollection = (dateFilter === "all" ? payments : filteredPayments)
-    .filter(p => p.status === "Paid" && p.mode !== "Cash")
+    .filter(p => p.status === "Paid" && p.mode !== "Cash" && p.mode !== "Equipment Refund")
     .reduce((sum, p) => sum + p.amount, 0);
 
   const formatValue = (val: number) => `₹${val.toLocaleString("en-IN")}`;
@@ -1674,9 +1733,26 @@ function PaymentsPage() {
                           <p className="font-semibold text-[13px] text-foreground">{g.customerName}</p>
                         </TableCell>
                         <TableCell>
-                          <p className="text-[12px] font-medium text-foreground/80 truncate max-w-[180px]" title={g.equipment}>
-                            {g.equipment}
-                          </p>
+                          {(() => {
+                            const eqInfos = getAgreementEquipmentModelInfo(g, rentalsList, equipmentList);
+                            return (
+                              <div className="space-y-1 max-w-[210px]">
+                                {eqInfos.map((info, idx) => (
+                                  <div key={idx} className="leading-tight">
+                                    <p className="text-[12.5px] font-semibold text-foreground/90 truncate" title={info.name}>
+                                      {info.name}
+                                    </p>
+                                    {info.model ? (
+                                      <p className="text-[11px] text-muted-foreground font-medium truncate flex items-center gap-1 mt-0.5" title={`Model: ${info.model}`}>
+                                        <span className="text-[9.5px] uppercase font-bold text-muted-foreground/70">Model:</span>
+                                        <span className="text-foreground/85 font-semibold">{info.model}</span>
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="font-display text-[14px] font-bold text-success">
@@ -1745,7 +1821,24 @@ function PaymentsPage() {
                           <StatusBadge status={g.rentStatus as any} />
                         </div>
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{getAgreementEquipmentModel(g, rentalsList, equipmentList)}</p>
+                      {(() => {
+                        const eqInfos = getAgreementEquipmentModelInfo(g, rentalsList, equipmentList);
+                        return (
+                          <div className="mt-1 space-y-0.5">
+                            {eqInfos.map((info, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground/90">
+                                <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span className="truncate font-semibold">{info.name}</span>
+                                {info.model && (
+                                  <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">
+                                    · {info.model}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
                         <span className="text-muted-foreground">{g.totalCount} Payment{g.totalCount === 1 ? "" : "s"}</span>
                         <Button size="sm" variant="ghost" className="h-6 text-[11px] text-primary p-0">
@@ -1793,7 +1886,21 @@ function PaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px]">{p.customer}</p>
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          {(() => {
+                            const eqInfos = getAgreementEquipmentModelInfo({ agreementId: p.agreement, equipment: (p as any).equipment }, rentals, equipmentList);
+                            return (
+                              <div className="space-y-0.5 mt-0.5">
+                                {eqInfos.map((info, idx) => (
+                                  <p key={idx} className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
+                                    <Package className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+                                    <span className="truncate text-foreground/85 font-medium">{info.name}</span>
+                                    {info.model && <span className="text-muted-foreground/90 font-semibold">· {info.model}</span>}
+                                  </p>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                             <button
                               type="button"
                               className="font-mono text-[10px] text-primary hover:underline font-bold text-left cursor-pointer"
@@ -1854,49 +1961,61 @@ function PaymentsPage() {
                   <div className="py-10 text-center text-[13px] text-muted-foreground">No payments match your search.</div>
                 ) : (
                   <div className="divide-y divide-border/60">
-                    {filteredPayments.map((p) => (
-                      <div key={p.id} className="px-4 py-3.5">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <div>
-                            <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
-                            <p className="font-semibold text-[13.5px] mt-0.5">{p.customer}</p>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                type="button"
-                                className="font-mono text-[10px] text-primary hover:underline font-bold"
-                                onClick={() => setSelectedHistoryAgreementId(p.agreement)}
-                              >
-                                {p.agreement}
-                              </button>
-                              {(() => {
-                                const matchRental = rentals.find((r: any) => r.id === p.agreement);
-                                const agrDate = matchRental?.start || (matchRental as any)?.startDate;
-                                if (!agrDate) return null;
-                                return (
-                                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                                    · <Calendar className="h-2.5 w-2.5 text-muted-foreground/60" /> {formatDateDDMMYYYY(agrDate)}
-                                  </span>
-                                );
-                              })()}
+                    {filteredPayments.map((p) => {
+                      const matchRental = rentals.find((r: any) => r.id === p.agreement);
+                      const eqInfos = getAgreementEquipmentModelInfo({ agreementId: p.agreement, equipment: (p as any).equipment }, rentals, equipmentList);
+                      return (
+                        <div key={p.id} className="px-4 py-3.5">
+                          <div className="flex items-start justify-between gap-2 mb-1.5">
+                            <div>
+                              <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
+                              <p className="font-semibold text-[13.5px] mt-0.5">{p.customer}</p>
+                              <div className="space-y-0.5 mt-1">
+                                {eqInfos.map((info, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground/90">
+                                    <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    <span className="truncate">{info.name}</span>
+                                    {info.model && <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">· {info.model}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                <button
+                                  type="button"
+                                  className="font-mono text-[10px] text-primary hover:underline font-bold"
+                                  onClick={() => setSelectedHistoryAgreementId(p.agreement)}
+                                >
+                                  {p.agreement}
+                                </button>
+                                {(() => {
+                                  const agrDate = matchRental?.start || (matchRental as any)?.startDate;
+                                  if (!agrDate) return null;
+                                  return (
+                                    <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                      · <Calendar className="h-2.5 w-2.5 text-muted-foreground/60" /> {formatDateDDMMYYYY(agrDate)}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
+                              <StatusBadge status={p.status} />
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
-                            <StatusBadge status={p.status} />
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span>{formatDateDDMMYYYY(p.date)}</span>
+                            <span>·</span>
+                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
+                            <span>·</span>
+                            <span>{p.type}</span>
+                          </div>
+                          <div className="mt-2 flex justify-end">
+                            <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>{formatDateDDMMYYYY(p.date)}</span>
-                          <span>·</span>
-                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
-                          <span>·</span>
-                          <span>{p.type}</span>
-                        </div>
-                        <div className="mt-2 flex justify-end">
-                          <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

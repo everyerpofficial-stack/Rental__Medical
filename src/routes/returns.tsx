@@ -1588,7 +1588,7 @@ function ReturnsPage() {
         agreement: selectedAgreement,
         equipmentId: refundTargetEquipmentId,
         amount: netRefund,
-        mode: "Cash" as any,
+        mode: "Equipment Refund" as any,
         type: "Rent" as const,
         notes: `Refund of ₹${netRefund.toLocaleString("en-IN")} from return of ${returnedNames} adjusted to ${targetEqName}`,
         status: "Paid" as const,
@@ -3097,35 +3097,128 @@ function ReturnsPage() {
                 <div className="divide-y divide-border/60">
                   {visibleReturns.map((ret) => {
                     const settlement = getReturnSettlementDisplay(ret);
+                    const rental = rentals.find((r) => r.id === ret.agreement);
+
+                    // Rent Date
+                    const rentDateVal = rental?.start || (rental as any)?.startDate;
+
+                    // Monthly Rent
+                    let monthlyRentStr = "—";
+                    if (rental) {
+                      const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                      const eqItems = rental.equipmentItems || [];
+                      let monthlyRentSum = 0;
+                      let dailyRentSum = 0;
+                      let hasDaily = false;
+                      
+                      ids.forEach((id: string) => {
+                        const item = eqItems.find((it: any) => it.equipmentId === id);
+                        if (item) {
+                          if (item.rentCycle === "Daily") {
+                            dailyRentSum += Number(item.rentRate || item.dailyRent) || 0;
+                            hasDaily = true;
+                          } else {
+                            monthlyRentSum += Number(item.rentRate || item.monthlyRent) || 0;
+                          }
+                        }
+                      });
+                      
+                      if (monthlyRentSum > 0 || dailyRentSum > 0) {
+                        if (hasDaily && dailyRentSum > 0) {
+                          monthlyRentStr = `₹${dailyRentSum.toLocaleString("en-IN")}/day`;
+                        } else {
+                          monthlyRentStr = `₹${monthlyRentSum.toLocaleString("en-IN")}/mo`;
+                        }
+                      } else if (cleanNum(ret.finalRent) > 0) {
+                        monthlyRentStr = `₹${cleanNum(ret.finalRent).toLocaleString("en-IN")}`;
+                      }
+                    } else if (cleanNum(ret.finalRent) > 0) {
+                      monthlyRentStr = `₹${cleanNum(ret.finalRent).toLocaleString("en-IN")}`;
+                    }
+
+                    // Deposit
+                    const depositVal = cleanNum(ret.deposit);
+                    const depositStr = `₹${depositVal.toLocaleString("en-IN")}`;
+
+                    // Model
+                    const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                    const eqItems = rental?.equipmentItems || [];
+                    const models = ids.map((id) => {
+                      const item = eqItems.find((it: any) => it.equipmentId === id);
+                      const eq = eqInventory.find((e) => e.id === id);
+                      return item?.model || eq?.model || "";
+                    }).filter(Boolean);
+
+                    let modelStr = models.length > 0 ? Array.from(new Set(models)).join(", ") : (rental?.model || (ret as any).model || "");
+                    if (modelStr && modelStr.toLowerCase() === "standard") modelStr = "";
+
                     return (
-                      <div
-                        key={ret.id}
-                        className="flex items-center gap-3 px-4 py-3.5"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="font-semibold text-[13.5px] truncate">{ret.customer}</p>
-                            <span className={`inline-flex items-center shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-bold border ${
-                              ret.status === "Pending Approval"
-                                ? "bg-warning/10 text-warning border-warning/25 animate-pulse"
-                                : "bg-emerald-50 text-emerald-700 border-emerald-200/50"
-                            }`}>
-                              {ret.status || "Completed"}
+                      <div key={ret.id} className="p-3.5 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-[13.5px] text-foreground leading-tight truncate">{ret.customer}</p>
+                            <p className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                              {ret.id} · Agr: {ret.agreement}
+                            </p>
+                          </div>
+                          <span className={`inline-flex items-center shrink-0 rounded-md px-2 py-0.5 text-[10.5px] font-bold border ${
+                            ret.status === "Pending Approval"
+                              ? "bg-warning/10 text-warning border-warning/25 animate-pulse"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200/50"
+                          }`}>
+                            {ret.status || "Completed"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+                          <span className="inline-flex items-center gap-1 font-semibold text-foreground bg-muted/40 px-2 py-0.5 rounded border border-border/50 max-w-full truncate">
+                            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="truncate">{ret.equipment}</span>
+                          </span>
+                          {modelStr && (
+                            <span className="inline-flex items-center gap-1 text-[10.5px] font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                              <span className="font-bold text-slate-500">Model:</span> {modelStr}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-800/60 ml-auto">
+                            <ShieldCheck className="h-3 w-3 shrink-0" />
+                            {ret.condition}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 p-2 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/50 text-[11px]">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground/80 block">Rent Date</span>
+                            <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5">
+                              <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                              {rentDateVal ? formatDateDDMMYYYY(rentDateVal) : "—"}
                             </span>
                           </div>
-                          <div className="flex items-center gap-3 mt-1">
-                            <span className="info-row min-w-0">
-                              <Package className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{ret.equipment}</span>
-                            </span>
-                            <span className="info-row shrink-0">
-                              <ShieldCheck className="h-3 w-3 shrink-0" />
-                              {ret.condition}
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground/80 block">Return Date</span>
+                            <span className="font-semibold text-foreground flex items-center gap-1 mt-0.5">
+                              <RotateCcw className="h-3 w-3 text-muted-foreground shrink-0" />
+                              {formatDateDDMMYYYY(ret.date)}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <p className="text-[10.5px] font-mono text-muted-foreground/60">{ret.id} · {formatDateDDMMYYYY(ret.date)}</p>
-                            <p className={`text-[12px] font-bold ${settlement.className}`}>{settlement.text}</p>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground/80 block">Monthly Rent</span>
+                            <span className="font-bold text-foreground mt-0.5 block">
+                              {monthlyRentStr}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-muted-foreground/80 block">Deposit</span>
+                            <span className="font-bold text-foreground mt-0.5 block">
+                              {depositStr}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-0.5">
+                          <div>
+                            <span className="text-[10px] text-muted-foreground uppercase font-bold mr-1">Settlement:</span>
+                            <span className={`text-[12px] font-bold ${settlement.className}`}>{settlement.text}</span>
                           </div>
                         </div>
 

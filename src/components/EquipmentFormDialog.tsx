@@ -77,6 +77,9 @@ function Field({ label, placeholder, type = "text", className, value, onChange }
 }
 
 export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: string; eq?: Equipment; trigger: React.ReactNode; onSave?: (savedEq?: Equipment) => void }) {
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  if (userRole === "Staff") return null;
+
   const [isOpen, setIsOpen] = useState(false);
   const [owners, setOwners] = useState<any[]>([]);
   const [category, setCategory] = useState(eq?.category || "");
@@ -170,6 +173,11 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
   }, [eq]);
 
   const handleSave = (): boolean => {
+    const role = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+    if (role === "Staff") {
+      toast.error("Staff users are not authorized to add or edit equipment.");
+      return false;
+    }
     const finalCategory = isCustomCategory ? customCategory.trim() : category;
     if (!finalCategory) {
       toast.error(isCustomCategory ? "Please enter a custom category name." : "Please select a category.");

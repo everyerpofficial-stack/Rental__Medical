@@ -98,7 +98,7 @@ const DATE_TYPE_OPTIONS: Record<string, { label: string, value: string }[]> = {
     { label: "Return Date", value: "date" }
   ],
   "Owner Statement": [
-    { label: "Agreement Date", value: "start" },
+    { label: "Date Taken", value: "start" },
     { label: "Return Date", value: "returnDate" }
   ]
 };
@@ -200,7 +200,7 @@ function ReportsPage() {
   
   const getOwnerStatementRowCalc = (item: any) => {
     const eq = equipmentList.find(e => e.id === item.equipmentId);
-    const perDayAmount = eq ? (eq.ownerDailyRate || 0) : 0;
+    const perDayAmount = item.perDayAmount ?? (eq ? (eq.ownerDailyRate || 0) : 0);
 
     if (!item.start || item.start === "—") {
       return {
@@ -209,31 +209,29 @@ function ReportsPage() {
         rowTotal: 0,
         dateTaken: "—",
         retDate: "—",
-        periodSelected: "—"
       };
     }
 
-    const rentalStart = parseLocalDate(item.start);
-    if (isNaN(rentalStart.getTime())) {
+    const takenStart = parseLocalDate(item.start);
+    if (isNaN(takenStart.getTime())) {
       return {
         daysUsed: 0,
         perDayAmount,
         rowTotal: 0,
         dateTaken: "—",
         retDate: "—",
-        periodSelected: "—"
       };
     }
 
-    const isReturned = item.returnDate && item.returnDate !== "—";
-    const rentalEnd = isReturned ? parseLocalDate(item.returnDate) : new Date();
+    const isReturned = Boolean(item.returnDate && item.returnDate !== "—");
+    const returnEnd = isReturned ? parseLocalDate(item.returnDate) : new Date();
 
     const periodStart = startDate ? parseLocalDate(startDate) : null;
     const periodEnd = endDate ? parseLocalDate(endDate) : null;
 
-    const calcStart = (periodStart && rentalStart < periodStart) ? periodStart : rentalStart;
+    const calcStart = (periodStart && takenStart < periodStart) ? periodStart : takenStart;
     
-    let rawCalcEnd = rentalEnd;
+    let rawCalcEnd = returnEnd;
     if (!isReturned && periodEnd) {
       const today = new Date();
       rawCalcEnd = periodEnd < today ? periodEnd : today;
@@ -243,41 +241,22 @@ function ReportsPage() {
     const dStart = new Date(calcStart.getFullYear(), calcStart.getMonth(), calcStart.getDate());
     const dEnd = new Date(calcEnd.getFullYear(), calcEnd.getMonth(), calcEnd.getDate());
 
-    let daysUsed = 0;
-    if (dStart <= dEnd) {
-      const diffTime = dEnd.getTime() - dStart.getTime();
-      daysUsed = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      if (daysUsed === 0 && dStart.getTime() === dEnd.getTime()) {
-        daysUsed = 1;
-      } else if (daysUsed < 0) {
-        daysUsed = 0;
-      }
-    }
-
-    const dateTaken = formatDateDDMMYYYY(item.start);
-    const retDate = isReturned ? formatDateDDMMYYYY(item.returnDate) : "Not return";
-
-    const startStr = formatDateDDMMYYYY(getLocalYYYYMMDD(dStart));
-    
-    let endStr = "Not return";
-    if (isReturned) {
-      endStr = formatDateDDMMYYYY(item.returnDate);
-      if (periodEnd && parseLocalDate(item.returnDate) > periodEnd) {
-        endStr = formatDateDDMMYYYY(getLocalYYYYMMDD(dEnd));
-      }
-    } else {
-      if (periodEnd) {
-        const today = new Date();
-        if (periodEnd < today) {
-          endStr = formatDateDDMMYYYY(getLocalYYYYMMDD(dEnd));
-        } else {
-          endStr = "Not return";
+    let daysUsed = item.historicalDays ?? 0;
+    if (!item.historicalDays) {
+      if (dStart <= dEnd) {
+        const diffTime = dEnd.getTime() - dStart.getTime();
+        daysUsed = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        if (daysUsed === 0 && dStart.getTime() === dEnd.getTime()) {
+          daysUsed = 1;
+        } else if (daysUsed < 0) {
+          daysUsed = 0;
         }
       }
     }
 
-    const periodSelected = `${startStr} To ${endStr}`;
-    const rowTotal = daysUsed * perDayAmount;
+    const dateTaken = formatDateDDMMYYYY(item.start);
+    const retDate = isReturned ? formatDateDDMMYYYY(item.returnDate) : "—";
+    const rowTotal = item.historicalCost ?? (daysUsed * perDayAmount);
 
     return {
       daysUsed,
@@ -285,7 +264,6 @@ function ReportsPage() {
       rowTotal,
       dateTaken,
       retDate,
-      periodSelected
     };
   };
 
@@ -427,102 +405,65 @@ function ReportsPage() {
       case "Owner Statement": {
         const rows: any[] = [];
         equipmentList.forEach(item => {
-          const itemRentals = rentalsList.filter((r: any) => {
-            if (r.equipmentItems && r.equipmentItems.length > 0) {
-              return r.equipmentItems.some((ei: any) => ei.equipmentId === item.id);
-            }
-            const ids = (r.equipmentId || "").split(",").map((s: string) => s.trim()).filter(Boolean);
-            return ids.includes(item.id);
-          });
-          
-          itemRentals.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-          
-          if (itemRentals.length === 0) {
-            const ownerName = item.owner || "In-House";
-            const serial = item.serial || "No Serial";
-            const model = item.model || "Standard";
-            const status = item.status === "UnderMaintenance" ? "Under Maintenance" : "IN";
-            rows.push({
-              owner: ownerName,
-              serial,
-              agreementId: "—",
-              start: "—",
-              returnDate: "—",
-              model,
-              customer: "—",
-              givenAgainTo: "—",
-              refund: "",
-              pay: "",
-              status,
-              remarks: "Available in inventory",
-              equipmentId: item.id,
-              category: item.category
-            });
-          } else {
-            itemRentals.forEach((r, idx) => {
-              const ownerName = item.owner || "In-House";
-              const serial = item.serial || "No Serial";
-              const model = item.model || "Standard";
-              const agreementId = r.id;
-              const agreementDate = r.start;
-              
-              const returnRecord = returnsList.find(ret => 
-                ret.agreement === r.id && 
-                (ret.returnedEquipmentIds ? ret.returnedEquipmentIds.includes(item.id) : true)
-              );
-              
-              const returnDate = returnRecord ? returnRecord.date : (r.status === "Completed" ? (r.end || r.start) : "—");
-              
-              let isItemReturned = false;
-              if (r.equipmentItems && r.equipmentItems.length > 0) {
-                const foundItem = r.equipmentItems.find((ei: any) => ei.equipmentId === item.id);
-                if (foundItem) {
-                  isItemReturned = foundItem.returned;
-                }
-              } else {
-                isItemReturned = r.status === "Completed";
-              }
-              
-              const status = isItemReturned ? "IN" : "OUT";
-              
-              let givenAgainTo = "—";
-              if (idx < itemRentals.length - 1) {
-                const nextRental = itemRentals[idx + 1];
-                givenAgainTo = `${nextRental.customer} & ${nextRental.id}`;
-              }
-              
-              const refundVal = returnRecord ? returnRecord.refund : "";
-              
-              const paymentsForAgreement = paymentsList.filter(p => p.agreement === r.id && p.status === "Paid" && (p.type === "Rent" || p.type === "Rent Payment"));
-              const totalRentPaid = paymentsForAgreement.reduce((sum, p) => sum + p.amount, 0);
-              
-              let rentPaidForItem = totalRentPaid;
-              if (r.equipmentItems && r.equipmentItems.length > 1) {
-                const itemMonthlyRent = r.equipmentItems.find((ei: any) => ei.equipmentId === item.id)?.monthlyRent || 0;
-                const totalMonthlyRent = r.equipmentItems.reduce((sum: number, ei: any) => sum + (ei.monthlyRent || 0), 0);
-                if (totalMonthlyRent > 0) {
-                  rentPaidForItem = Math.round(totalRentPaid * (itemMonthlyRent / totalMonthlyRent));
-                }
-              }
-              
-              const remarks = r.remarks || "";
-              
+          const ownerName = item.owner || "In-House";
+          const serial = item.serial || "No Serial";
+          const model = item.model || "Standard";
+
+          // 1. Completed historical return cycles to owner (if any)
+          if (item.ownerHistory && Array.isArray(item.ownerHistory)) {
+            const returnEvents = item.ownerHistory.filter((h: any) => h.action === "returned");
+            returnEvents.forEach((retHist: any) => {
               rows.push({
                 owner: ownerName,
                 serial,
-                agreementId,
-                start: agreementDate,
-                returnDate,
                 model,
-                customer: r.customer,
-                givenAgainTo,
-                refund: refundVal,
-                pay: rentPaidForItem,
-                status,
-                remarks,
+                start: retHist.startDate || item.purchaseDate || "—",
+                returnDate: retHist.date || "—",
                 equipmentId: item.id,
-                category: item.category
+                category: item.category,
+                perDayAmount: retHist.dailyRate || item.ownerDailyRate || 0,
+                historicalDays: retHist.days,
+                historicalCost: retHist.totalCost,
+                status: "Returned to Owner",
               });
+            });
+          }
+
+          // 2. Active holding period (if equipment is currently with us):
+          const isCurrentlyReturned = item.status === "Returned to Owner";
+          if (!isCurrentlyReturned) {
+            let currentTakenDate = item.purchaseDate || "";
+            if (item.ownerHistory && Array.isArray(item.ownerHistory)) {
+              const receives = item.ownerHistory.filter((h: any) => h.action === "received");
+              if (receives.length > 0) {
+                const sortedReceives = [...receives].sort((a: any, b: any) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
+                currentTakenDate = sortedReceives[0].date || currentTakenDate;
+              }
+            }
+
+            rows.push({
+              owner: ownerName,
+              serial,
+              model,
+              start: currentTakenDate || "—",
+              returnDate: "—", // Not returned yet: only when it is returned will the date come!
+              equipmentId: item.id,
+              category: item.category,
+              perDayAmount: item.ownerDailyRate || 0,
+              status: item.status,
+            });
+          } else if (!item.ownerHistory || !item.ownerHistory.some((h: any) => h.action === "returned")) {
+            // Equipment is marked Returned to Owner, but has no return history record
+            rows.push({
+              owner: ownerName,
+              serial,
+              model,
+              start: item.purchaseDate || "—",
+              returnDate: item.purchaseDate || "—",
+              equipmentId: item.id,
+              category: item.category,
+              perDayAmount: item.ownerDailyRate || 0,
+              status: "Returned to Owner",
             });
           }
         });
@@ -626,7 +567,6 @@ function ReportsPage() {
           serial: item.serial || "—",
           model: item.model || "—",
           dateTaken: calc.dateTaken,
-          periodSelected: calc.periodSelected,
           retDate: calc.retDate,
           daysUsed: calc.daysUsed,
           perDayAmount: calc.perDayAmount,
@@ -647,7 +587,6 @@ function ReportsPage() {
             <td style="border: 0.5pt solid #cbd5e1;">${r.category}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.model && r.model !== "Standard" && r.model !== "—" ? `${r.model} - ` : ""}${r.serial}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.dateTaken}</td>
-            <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.periodSelected}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.retDate}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.daysUsed}</td>
             <td style="text-align: right; border: 0.5pt solid #cbd5e1;">${r.perDayAmount}</td>
@@ -667,7 +606,7 @@ function ReportsPage() {
 <body>
   <table>
     <tr>
-      <td colspan="10" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 14pt; font-weight: bold; background-color: #e2efda; text-align: center; border: 0.5pt solid #cbd5e1; padding: 10px;">Owner Wise Monthly Rental Statement</td>
+      <td colspan="9" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 14pt; font-weight: bold; background-color: #e2efda; text-align: center; border: 0.5pt solid #cbd5e1; padding: 10px;">Owner Wise Monthly Rental Statement</td>
     </tr>
     <tr>
       <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; font-weight: bold; background-color: #f2f2f2; border: 0.5pt solid #cbd5e1; padding: 6px;">Owner</td>
@@ -678,13 +617,13 @@ function ReportsPage() {
       <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; border: 0.5pt solid #cbd5e1; padding: 6px;">${fromDate} To Date</td>
       <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; border: 0.5pt solid #cbd5e1; padding: 6px;">${toDate}</td>
       <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; font-weight: bold; background-color: #f2f2f2; border: 0.5pt solid #cbd5e1; padding: 6px;">Per Day Rental</td>
-      <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; border: 0.5pt solid #cbd5e1; padding: 6px;" colspan="2">${avgPerDayRental}</td>
+      <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 10pt; border: 0.5pt solid #cbd5e1; padding: 6px;">${avgPerDayRental}</td>
     </tr>
     <tr>
       <td colspan="4" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 9.5pt; color: #64748b; font-style: italic; border: 0.5pt solid #cbd5e1; padding: 6px;">Rental Asset Audit Ledger</td>
-      <td colspan="6" style="border: 0.5pt solid #cbd5e1; padding: 6px;"></td>
+      <td colspan="5" style="border: 0.5pt solid #cbd5e1; padding: 6px;"></td>
     </tr>
-    <tr><td colspan="10" style="border: none; height: 10px;"></td></tr>
+    <tr><td colspan="9" style="border: none; height: 10px;"></td></tr>
     <thead>
       <tr>
         <th style="width: 50px;">Sr. No.</th>
@@ -692,7 +631,6 @@ function ReportsPage() {
         <th style="width: 150px;">Category</th>
         <th style="width: 120px;">Machine / Serial No.</th>
         <th style="width: 100px;">Date Taken</th>
-        <th style="width: 180px;">Period Selected</th>
         <th style="width: 100px;">Return Date</th>
         <th style="width: 80px; text-align: center;">Days Used</th>
         <th style="width: 100px; text-align: right;">Per Day Amount</th>
@@ -702,7 +640,7 @@ function ReportsPage() {
     <tbody>
       ${dataRowsHtml}
       <tr>
-        <td colspan="6" style="border: none;"></td>
+        <td colspan="5" style="border: none;"></td>
         <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #f2f2f2; border: 0.5pt solid #cbd5e1; padding: 8px; font-size: 10pt; text-align: right;">Total Days</td>
         <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; border: 0.5pt solid #cbd5e1; padding: 8px; font-size: 10pt; text-align: center;">${totalDays}</td>
         <td style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: bold; background-color: #f2f2f2; border: 0.5pt solid #cbd5e1; padding: 8px; font-size: 10pt; text-align: right;">Grand Total</td>
@@ -738,7 +676,6 @@ function ReportsPage() {
             <td>${r.category}</td>
             <td style="text-align: center;">${r.model && r.model !== "Standard" && r.model !== "—" ? `<div style="font-size: 8.5px; color: #64748b; line-height: 1; margin-bottom: 2px;">${r.model}</div>` : ""}<span style="font-family: monospace; font-size: 11px; font-weight: bold;">${r.serial}</span></td>
             <td style="text-align: center;">${r.dateTaken}</td>
-            <td style="text-align: center;">${r.periodSelected}</td>
             <td style="text-align: center;">${r.retDate}</td>
             <td style="text-align: center;">${r.daysUsed}</td>
             <td style="text-align: right;">₹${r.perDayAmount.toLocaleString("en-IN")}</td>
@@ -785,7 +722,6 @@ function ReportsPage() {
                   <th>Category</th>
                   <th style="text-align: center;">Machine / Serial No.</th>
                   <th style="text-align: center;">Date Taken</th>
-                  <th>Period Selected</th>
                   <th style="text-align: center;">Return Date</th>
                   <th style="text-align: center; width: 70px;">Days Used</th>
                   <th style="text-align: right; width: 100px;">Per Day Amount</th>
@@ -795,7 +731,7 @@ function ReportsPage() {
               <tbody>
                 ${tableRowsHtml}
                 <tr class="totals-row">
-                  <td colspan="6" style="border: none; background: transparent;"></td>
+                  <td colspan="5" style="border: none; background: transparent;"></td>
                   <td style="text-align: right;">Total Days:</td>
                   <td style="text-align: center;">${totalDays}</td>
                   <td style="text-align: right;">Grand Total:</td>
@@ -1124,7 +1060,6 @@ function ReportsPage() {
             <TableHead>Category</TableHead>
             <TableHead className="text-center">Machine / Serial No.</TableHead>
             <TableHead className="text-center">Date Taken</TableHead>
-            <TableHead>Period Selected</TableHead>
             <TableHead className="text-center">Return Date</TableHead>
             <TableHead className="text-center">Days Used</TableHead>
             <TableHead className="text-right">Per Day Amount</TableHead>
@@ -1138,7 +1073,7 @@ function ReportsPage() {
 
   const renderTableRows = (data: any[]) => {
     if (data.length === 0) {
-      const colCount = activeStatement === "Owner Statement" ? 10 : activeStatement === "Exchanges Statement" ? 9 : 8;
+      const colCount = activeStatement === "Owner Statement" ? 9 : activeStatement === "Exchanges Statement" ? 9 : 8;
       return (
         <TableRow>
           <TableCell colSpan={colCount} className="py-12 text-center text-[13px] text-muted-foreground">
@@ -1303,12 +1238,7 @@ function ReportsPage() {
                 <span className="font-mono text-[12.5px]">{item.serial || "—"}</span>
               </TableCell>
               <TableCell className="text-center font-mono text-muted-foreground">{calc.dateTaken}</TableCell>
-              <TableCell className="text-[12px]">{calc.periodSelected}</TableCell>
-              <TableCell className="text-center font-mono">
-                <span className={calc.retDate === "Not return" ? "text-destructive font-semibold" : "text-slate-600"}>
-                  {calc.retDate}
-                </span>
-              </TableCell>
+              <TableCell className="text-center font-mono text-slate-600">{calc.retDate}</TableCell>
               <TableCell className="text-center font-semibold">{calc.daysUsed}</TableCell>
               <TableCell className="text-right font-medium">₹{calc.perDayAmount.toLocaleString("en-IN")}</TableCell>
               <TableCell className="text-right font-bold text-slate-900">₹{calc.rowTotal.toLocaleString("en-IN")}</TableCell>
@@ -1331,7 +1261,7 @@ function ReportsPage() {
 
       rows.push(
         <TableRow key="totals-summary" className="font-bold bg-muted/15 border-t-2 border-slate-200">
-          <TableCell colSpan={6} className="border-none bg-transparent"></TableCell>
+          <TableCell colSpan={5} className="border-none bg-transparent"></TableCell>
           <TableCell className="text-right font-bold text-slate-700">Total Days:</TableCell>
           <TableCell className="text-center font-bold text-slate-950">{totalDays}</TableCell>
           <TableCell className="text-right font-bold text-slate-700">Grand Total:</TableCell>
@@ -1494,9 +1424,9 @@ function ReportsPage() {
                     {item.model && item.model !== "Standard" && item.model !== "—" ? `${item.model} · ` : ""}
                     <span className="font-mono">{item.serial || "—"}</span>
                   </div>
-                  <div className="info-row">Taken: {calc.dateTaken} · {calc.periodSelected}</div>
+                  <div className="info-row">Taken: {calc.dateTaken}</div>
                   <div className="info-row">
-                    Returned: <span className={calc.retDate === "Not return" ? "text-destructive font-semibold" : ""}>{calc.retDate}</span> · {calc.daysUsed} days
+                    Returned: {calc.retDate} · {calc.daysUsed} days
                   </div>
                   <div className="info-row">Per Day: ₹{calc.perDayAmount.toLocaleString("en-IN")}</div>
                 </div>

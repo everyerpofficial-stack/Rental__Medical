@@ -2100,12 +2100,26 @@ export function getPayments() {
 
   const list = getStorageItem("medirent-payments", initialPayments);
   // Guarantee seed payments (e.g. PAY-0264, PAY-0265, PAY-0266) present in initialPayments are merged if missing in localStorage
+  let dirty = false;
   const mergedList = [...list];
   initialPayments.forEach((initP) => {
     if (!mergedList.some((p) => p.id === initP.id)) {
       mergedList.push(initP);
+      dirty = true;
     }
   });
+
+  // Ensure any refund adjustments previously recorded with mode "Cash" are updated to "Equipment Refund"
+  mergedList.forEach((p) => {
+    if (p && p.mode === "Cash" && p.notes && /refund.*adjusted/i.test(p.notes)) {
+      p.mode = "Equipment Refund";
+      dirty = true;
+    }
+  });
+
+  if (dirty && isBrowser) {
+    setStorageItem("medirent-payments", mergedList);
+  }
 
   const consolidated = consolidatePayments(mergedList);
   const result = sortLatestFirst(consolidated, "date");
@@ -2117,6 +2131,9 @@ export function getPayments() {
 }
 
 export function savePayment(payment: typeof initialPayments[number]) {
+  if (payment && payment.mode === "Cash" && payment.notes && /refund.*adjusted/i.test(payment.notes)) {
+    payment.mode = "Equipment Refund";
+  }
   const list = getPayments();
   const index = list.findIndex((p) => p.id === payment.id);
   if (index > -1) {
