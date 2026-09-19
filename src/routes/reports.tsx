@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer,
   Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend,
@@ -198,7 +198,19 @@ function ReportsPage() {
   const [selectedOwnerFilter, setSelectedOwnerFilter] = useState<string>("all-owners");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all-categories");
   
-  const getOwnerStatementRowCalc = (item: any) => {
+  // PERF FIX: these were bare getX() calls in the render body, so every
+  // re-render (every keystroke in search/date filters, every db-updated
+  // event) re-ran getRentals()/getCustomers()'s repair + Sheets-sync passes
+  // for all 7 datasets. Memoize on dbVersion like the other list pages do.
+  const customersList = useMemo(() => getCustomers(), [dbVersion]);
+  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const paymentsList = useMemo(() => getPayments(), [dbVersion]);
+  const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
+  const returnsList = useMemo(() => getReturns(), [dbVersion]);
+  const exchangesList = useMemo(() => getExchanges(), [dbVersion]);
+  const ownersList = useMemo(() => getOwners(), [dbVersion]);
+
+  const getOwnerStatementRowCalc = useCallback((item: any) => {
     const eq = equipmentList.find(e => e.id === item.equipmentId);
     const perDayAmount = item.perDayAmount ?? (eq ? (eq.ownerDailyRate || 0) : 0);
 
@@ -224,39 +236,190 @@ function ReportsPage() {
     }
 
     const isReturned = Boolean(item.returnDate && item.returnDate !== "—");
-    const returnEnd = isReturned ? parseLocalDate(item.returnDate) : new Date();
+    const returnEnd = isReturned ? parseLocalDate(item.returnDate) : null;
 
     const periodStart = startDate ? parseLocalDate(startDate) : null;
     const periodEnd = endDate ? parseLocalDate(endDate) : null;
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
 
-    const calcStart = (periodStart && takenStart < periodStart) ? periodStart : takenStart;
-    
-    let rawCalcEnd = returnEnd;
-    if (!isReturned && periodEnd) {
-      const today = new Date();
-      rawCalcEnd = periodEnd < today ? periodEnd : today;
-    }
-    const calcEnd = (periodEnd && rawCalcEnd > periodEnd) ? periodEnd : rawCalcEnd;
+    // Match helper for this equipment item
+    const matchesEquipment = (targetEqId?: any, targetSerial?: any) => {
+      const eqIdStr = targetEqId != null ? String(targetEqId).trim().toLowerCase() : "";
+      const itemEqIdStr = item.equipmentId != null ? String(item.equipmentId).trim().toLowerCase() : "";
+      if (itemEqIdStr && eqIdStr) {
+        const ids = eqIdStr.split(",").map((s: string) => s.trim());
+        if (ids.includes(itemEqIdStr)) return true;
+      }
 
-    const dStart = new Date(calcStart.getFullYear(), calcStart.getMonth(), calcStart.getDate());
-    const dEnd = new Date(calcEnd.getFullYear(), calcEnd.getMonth(), calcEnd.getDate());
+      const serStr = targetSerial != null ? String(targetSerial).trim().toLowerCase() : "";
+      const itemSerStr = item.serial != null ? String(item.serial).trim().toLowerCase() : "";
+      if (itemSerStr && serStr && itemSerStr !== "no serial" && itemSerStr !== "—") {
+        if (serStr === itemSerStr) return true;
+        if (serStr.includes(itemSerStr) || itemSerStr.includes(serStr)) return true;
+      }
 
-    let daysUsed = item.historicalDays ?? 0;
-    if (!item.historicalDays) {
-      if (dStart <= dEnd) {
-        const diffTime = dEnd.getTime() - dStart.getTime();
-        daysUsed = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        if (daysUsed === 0 && dStart.getTime() === dEnd.getTime()) {
-          daysUsed = 1;
-        } else if (daysUsed < 0) {
-          daysUsed = 0;
+      return false;
+    };
+
+    // Find all rental intervals for this equipment
+    const rawIntervals: { start: Date; end: Date }[] = [];
+
+    // 1. Check all rentals in rentalsList
+    rentalsList.forEach((r: any) => {
+      if (r.status === "Cancelled" || r.status === "Pending Approval") return;
+
+      const directMatch = matchesEquipment(r.equipmentId, r.serial);
+      const matchedItem = Array.isArray(r.equipmentItems)
+        ? r.equipmentItems.find((ei: any) => matchesEquipment(ei.equipmentId, ei.serial))
+        : null;
+
+      // Check if equipment was exchanged in or out of this rental
+      const exchangedIn = exchangesList.find((exc: any) =>
+        exc.status === "Completed" &&
+        exc.agreementId === r.id &&
+        matchesEquipment(exc.newEquipmentId, exc.newEquipmentSerial)
+      );
+      const exchangedOut = exchangesList.find((exc: any) =>
+        exc.status === "Completed" &&
+        exc.agreementId === r.id &&
+        matchesEquipment(exc.currentEquipmentId, exc.currentEquipmentSerial)
+      );
+
+      if (!directMatch && !matchedItem && !exchangedIn && !exchangedOut) {
+        return;
+      }
+
+      // Rental start date for this equipment
+      let rStart: Date;
+      if (exchangedIn && exchangedIn.exchangeDate) {
+        rStart = parseLocalDate(exchangedIn.exchangeDate);
+      } else {
+        rStart = parseLocalDate(r.start || r.startDate);
+      }
+      if (isNaN(rStart.getTime())) return;
+
+      // Rental end date for this equipment
+      let rEnd: Date;
+      if (exchangedOut && exchangedOut.exchangeDate) {
+        rEnd = parseLocalDate(exchangedOut.exchangeDate);
+      } else if (matchedItem?.returned && (matchedItem.returnedDate || matchedItem.returnDate)) {
+        rEnd = parseLocalDate(matchedItem.returnedDate || matchedItem.returnDate);
+      } else {
+        const retRecord = returnsList.find((ret: any) =>
+          ret.agreement === r.id &&
+          (!Array.isArray(ret.returnedEquipmentIds) || ret.returnedEquipmentIds.includes(item.equipmentId))
+        );
+        if (retRecord?.date) {
+          rEnd = parseLocalDate(retRecord.date);
+        } else if (r.returnedDate || r.returnDate) {
+          rEnd = parseLocalDate(r.returnedDate || r.returnDate);
+        } else if (r.status === "Completed") {
+          rEnd = parseLocalDate(r.end || r.endDate);
+        } else {
+          // Still on rental
+          rEnd = new Date();
+        }
+      }
+
+      if (isNaN(rEnd.getTime())) {
+        rEnd = new Date();
+      }
+
+      // Cap at today (cannot calculate future unelapsed rental days)
+      if (rEnd > today) {
+        rEnd = today;
+      }
+
+      if (rStart <= rEnd) {
+        rawIntervals.push({ start: rStart, end: rEnd });
+      }
+    });
+
+    // 2. Check if equipment was exchanged out of a rental where it was replaced in rental.equipmentItems
+    exchangesList.forEach((exc: any) => {
+      if (exc.status !== "Completed") return;
+      if (!matchesEquipment(exc.currentEquipmentId, exc.currentEquipmentSerial)) return;
+
+      // Check if we already captured this rental interval above
+      const excDate = parseLocalDate(exc.exchangeDate);
+      const alreadyCaptured = rawIntervals.some(iv => {
+        return !isNaN(excDate.getTime()) && Math.abs(iv.end.getTime() - excDate.getTime()) < 86400000;
+      });
+      if (alreadyCaptured) return;
+
+      const r = rentalsList.find((rent: any) => rent.id === exc.agreementId);
+      if (!r || r.status === "Cancelled" || r.status === "Pending Approval") return;
+
+      const rStart = parseLocalDate(r.start || r.startDate);
+      const rEnd = parseLocalDate(exc.exchangeDate);
+      if (!isNaN(rStart.getTime()) && !isNaN(rEnd.getTime()) && rStart <= rEnd) {
+        rawIntervals.push({ start: rStart, end: rEnd > today ? today : rEnd });
+      }
+    });
+
+    // 3. For each rental interval, bound it by:
+    // - equipment holding period from owner: [takenStart, returnEnd || today]
+    // - statement date filter window: [periodStart, periodEnd]
+    const validIntervals: { start: number; end: number }[] = [];
+
+    rawIntervals.forEach(iv => {
+      // Bound by owner holding period
+      let effStart = Math.max(iv.start.getTime(), takenStart.getTime());
+      let effEnd = returnEnd ? Math.min(iv.end.getTime(), returnEnd.getTime()) : iv.end.getTime();
+
+      // Bound by statement date filter
+      if (periodStart) {
+        effStart = Math.max(effStart, periodStart.getTime());
+      }
+      if (periodEnd) {
+        const periodEndCap = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate(), 23, 59, 59, 999).getTime();
+        effEnd = Math.min(effEnd, periodEndCap);
+      }
+
+      if (effStart <= effEnd) {
+        validIntervals.push({ start: effStart, end: effEnd });
+      }
+    });
+
+    // 4. Merge overlapping intervals to prevent double-counting days
+    validIntervals.sort((a, b) => a.start - b.start);
+    const merged: { start: number; end: number }[] = [];
+    for (const iv of validIntervals) {
+      if (merged.length === 0) {
+        merged.push({ ...iv });
+      } else {
+        const prev = merged[merged.length - 1];
+        if (iv.start <= prev.end) {
+          prev.end = Math.max(prev.end, iv.end);
+        } else {
+          merged.push({ ...iv });
         }
       }
     }
 
+    // 5. Calculate total rented days
+    let totalRentedDays = 0;
+    for (const m of merged) {
+      const dS = new Date(m.start);
+      const dE = new Date(m.end);
+      const dStartDay = new Date(dS.getFullYear(), dS.getMonth(), dS.getDate());
+      const dEndDay = new Date(dE.getFullYear(), dE.getMonth(), dE.getDate());
+
+      if (dStartDay <= dEndDay) {
+        const diffTime = dEndDay.getTime() - dStartDay.getTime();
+        let days = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        if (days === 0 && dStartDay.getTime() === dEndDay.getTime()) {
+          days = 1;
+        }
+        totalRentedDays += Math.max(0, days);
+      }
+    }
+
+    const daysUsed = totalRentedDays;
     const dateTaken = formatDateDDMMYYYY(item.start);
     const retDate = isReturned ? formatDateDDMMYYYY(item.returnDate) : "—";
-    const rowTotal = item.historicalCost ?? (daysUsed * perDayAmount);
+    const rowTotal = daysUsed * perDayAmount;
 
     return {
       daysUsed,
@@ -265,7 +428,7 @@ function ReportsPage() {
       dateTaken,
       retDate,
     };
-  };
+  }, [equipmentList, rentalsList, returnsList, exchangesList, startDate, endDate]);
 
   const calculateDaysUsed = (itemStart: string, itemReturnDate: string) => {
     return getOwnerStatementRowCalc({ start: itemStart, returnDate: itemReturnDate }).daysUsed;
@@ -283,18 +446,6 @@ function ReportsPage() {
     setSelectedOwnerFilter("all-owners");
     setSelectedCategoryFilter("all-categories");
   }, [activeStatement]);
-
-  // PERF FIX: these were bare getX() calls in the render body, so every
-  // re-render (every keystroke in search/date filters, every db-updated
-  // event) re-ran getRentals()/getCustomers()'s repair + Sheets-sync passes
-  // for all 7 datasets. Memoize on dbVersion like the other list pages do.
-  const customersList = useMemo(() => getCustomers(), [dbVersion]);
-  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
-  const paymentsList = useMemo(() => getPayments(), [dbVersion]);
-  const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
-  const returnsList = useMemo(() => getReturns(), [dbVersion]);
-  const exchangesList = useMemo(() => getExchanges(), [dbVersion]);
-  const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
   // Dynamic Top Customers calculation from actual database records
   const dynamicTopCustomers = customersList
