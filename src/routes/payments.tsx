@@ -1404,7 +1404,7 @@ function PaymentsPage() {
   const customers = useMemo(() => getCustomers(), [dbVersion]);
 
   // Filter agreements by search & date range
-  const filteredAgreements = agreementList.filter((g) => {
+  const filteredAgreements = (isStaff && !search.trim()) ? [] : agreementList.filter((g) => {
     const q = search.toLowerCase().trim();
     const rental = rentals.find((r: any) => r.id === g.agreementId);
     const customer = customers.find((c: any) => c.id === g.customerId || (rental && c.id === rental.customerId));
@@ -1474,54 +1474,59 @@ function PaymentsPage() {
   const rentalsById = useMemo(() => new Map(rentals.map((r: any) => [r.id, r])), [rentals]);
   const customersById = useMemo(() => new Map(customers.map((c: any) => [c.id, c])), [customers]);
 
-  const filteredPayments = useMemo(() => sortLatestFirst(payments.filter((p) => {
-    const q = debouncedSearch.toLowerCase().trim();
-    const rental = rentalsById.get(p.agreement);
-    const customer = customersById.get(p.customerId) || (rental ? customersById.get(rental.customerId) : undefined);
+  const filteredPayments = useMemo(() => {
+    if (isStaff && (!search.trim() || !debouncedSearch.trim())) {
+      return [];
+    }
+    return sortLatestFirst(payments.filter((p) => {
+      const q = debouncedSearch.toLowerCase().trim();
+      const rental = rentalsById.get(p.agreement);
+      const customer = customersById.get(p.customerId) || (rental ? customersById.get(rental.customerId) : undefined);
 
-    const matchesSearch = !q ||
-      p.id.toLowerCase().includes(q) ||
-      p.customer.toLowerCase().includes(q) ||
-      p.agreement.toLowerCase().includes(q) ||
-      p.mode.toLowerCase().includes(q) ||
-      (p.owner && p.owner.toLowerCase().includes(q)) ||
-      (rental && String(rental.serial || "").toLowerCase().includes(q)) ||
-      (customer && (
-        String(customer.phone || "").toLowerCase().includes(q) ||
-        String(customer.altPhone || "").toLowerCase().includes(q) ||
-        String(customer.contactNumber3 || "").toLowerCase().includes(q)
-      ));
+      const matchesSearch = !q ||
+        p.id.toLowerCase().includes(q) ||
+        p.customer.toLowerCase().includes(q) ||
+        p.agreement.toLowerCase().includes(q) ||
+        p.mode.toLowerCase().includes(q) ||
+        (p.owner && p.owner.toLowerCase().includes(q)) ||
+        (rental && String(rental.serial || "").toLowerCase().includes(q)) ||
+        (customer && (
+          String(customer.phone || "").toLowerCase().includes(q) ||
+          String(customer.altPhone || "").toLowerCase().includes(q) ||
+          String(customer.contactNumber3 || "").toLowerCase().includes(q)
+        ));
 
-    if (!matchesSearch) return false;
-    if (dateFilter === "all") return true;
+      if (!matchesSearch) return false;
+      if (dateFilter === "all") return true;
 
-    const pDate = parseLocalDate(p.date);
-    if (isNaN(pDate.getTime())) return false;
+      const pDate = parseLocalDate(p.date);
+      if (isNaN(pDate.getTime())) return false;
 
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
 
-    if (dateFilter === "this-month") {
-      return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
-    } else if (dateFilter === "last-month") {
-      let targetMonth = currentMonth - 1;
-      let targetYear = currentYear;
-      if (targetMonth < 0) { targetMonth = 11; targetYear -= 1; }
-      return pDate.getMonth() === targetMonth && pDate.getFullYear() === targetYear;
-    } else if (dateFilter === "custom") {
-      if (startDate) {
-        const start = parseLocalDate(startDate);
-        if (pDate < start) return false;
-      }
-      if (endDate) {
-        const end = parseLocalDate(endDate);
-        if (pDate > end) return false;
+      if (dateFilter === "this-month") {
+        return pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear;
+      } else if (dateFilter === "last-month") {
+        let targetMonth = currentMonth - 1;
+        let targetYear = currentYear;
+        if (targetMonth < 0) { targetMonth = 11; targetYear -= 1; }
+        return pDate.getMonth() === targetMonth && pDate.getFullYear() === targetYear;
+      } else if (dateFilter === "custom") {
+        if (startDate) {
+          const start = parseLocalDate(startDate);
+          if (pDate < start) return false;
+        }
+        if (endDate) {
+          const end = parseLocalDate(endDate);
+          if (pDate > end) return false;
+        }
+        return true;
       }
       return true;
-    }
-    return true;
-  }), "date"), [payments, debouncedSearch, dateFilter, startDate, endDate, rentalsById, customersById]);
+    }), "date");
+  }, [payments, search, debouncedSearch, isStaff, dateFilter, startDate, endDate, rentalsById, customersById]);
 
   // Calculate dynamic stats
   const todayStr = getLocalYYYYMMDD();
@@ -1673,10 +1678,10 @@ function PaymentsPage() {
                     />
                   </div>
                 )}
-                <div className="relative w-40 sm:w-48">
+                <div className="relative w-40 sm:w-56">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
                   <Input
-                    placeholder="Search…"
+                    placeholder={isStaff ? "Search by customer name..." : "Search…"}
                     className="pl-9 h-8 text-[12px] bg-card border-border/50"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -1707,8 +1712,18 @@ function PaymentsPage() {
                   <TableBody>
                     {filteredAgreements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={canViewPaymentHistory ? 8 : 7} className="py-10 text-center text-[13px] text-muted-foreground">
-                          No agreements match your search.
+                        <TableCell colSpan={canViewPaymentHistory ? 8 : 7} className="py-12 text-center text-[13px] text-muted-foreground">
+                          {isStaff && !search.trim() ? (
+                            <div className="flex flex-col items-center justify-center gap-2 py-4">
+                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-1">
+                                <Search className="h-5 w-5" />
+                              </div>
+                              <p className="text-[13.5px] font-semibold text-foreground">Search by customer name to view payments</p>
+                              <p className="text-[12px] text-muted-foreground max-w-sm">Enter a customer's name in the search bar above to view their agreement and payment details.</p>
+                            </div>
+                          ) : (
+                            "No agreements match your search."
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -1803,7 +1818,19 @@ function PaymentsPage() {
               {/* Mobile Agreement List */}
               <div className="sm:hidden divide-y divide-border/60">
                 {filteredAgreements.length === 0 ? (
-                  <div className="py-10 text-center text-[13px] text-muted-foreground">No agreements match your search.</div>
+                  <div className="py-12 px-4 text-center text-[13px] text-muted-foreground">
+                    {isStaff && !search.trim() ? (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-1">
+                          <Search className="h-5 w-5" />
+                        </div>
+                        <p className="text-[13.5px] font-semibold text-foreground">Search by customer name to view payments</p>
+                        <p className="text-[12px] text-muted-foreground max-w-xs">Enter a customer's name in the search bar above to view payment details.</p>
+                      </div>
+                    ) : (
+                      "No agreements match your search."
+                    )}
+                  </div>
                 ) : (
                   filteredAgreements.map((g) => (
                     <div
@@ -1885,8 +1912,18 @@ function PaymentsPage() {
                   <TableBody>
                     {filteredPayments.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-10 text-center text-[13px] text-muted-foreground">
-                          No payments match your search.
+                        <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
+                          {isStaff && !search.trim() ? (
+                            <div className="flex flex-col items-center justify-center gap-2 py-4">
+                              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-1">
+                                <Search className="h-5 w-5" />
+                              </div>
+                              <p className="text-[13.5px] font-semibold text-foreground">Search by customer name to view payments</p>
+                              <p className="text-[12px] text-muted-foreground max-w-sm">Enter a customer's name in the search bar above to view their payment receipts.</p>
+                            </div>
+                          ) : (
+                            "No payments match your search."
+                          )}
                         </TableCell>
                       </TableRow>
                     )}
@@ -1976,7 +2013,19 @@ function PaymentsPage() {
               {/* Mobile card list */}
               <div className="sm:hidden">
                 {filteredPayments.length === 0 ? (
-                  <div className="py-10 text-center text-[13px] text-muted-foreground">No payments match your search.</div>
+                  <div className="py-12 px-4 text-center text-[13px] text-muted-foreground">
+                    {isStaff && !search.trim() ? (
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-1">
+                          <Search className="h-5 w-5" />
+                        </div>
+                        <p className="text-[13.5px] font-semibold text-foreground">Search by customer name to view payments</p>
+                        <p className="text-[12px] text-muted-foreground max-w-xs">Enter a customer's name in the search bar above to view payment receipts.</p>
+                      </div>
+                    ) : (
+                      "No payments match your search."
+                    )}
+                  </div>
                 ) : (
                   <div className="divide-y divide-border/60">
                     {filteredPayments.map((p) => {
