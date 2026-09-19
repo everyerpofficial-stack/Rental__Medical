@@ -442,6 +442,8 @@ function QrCodeDialog({ eq }: { eq: Equipment }) {
 
 function EquipmentHistorySheet({ eq, open, onClose }: { eq: Equipment | null; open: boolean; onClose: () => void }) {
   if (!eq) return null;
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const canViewOwnerDetails = userRole !== "Staff" && userRole !== "Accountant";
   const rentals = getRentals();
   const returns = getReturns();
   const exchanges = getExchanges();
@@ -947,38 +949,40 @@ function EquipmentHistorySheet({ eq, open, onClose }: { eq: Equipment | null; op
         </div>
 
         {/* Section 2: Owner return & taken statement */}
-        <div className="mt-8">
-          <h3 className="mb-4 text-[13.5px] font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-1">
-            <Home className="h-4 w-4 text-amber-600" /> Owner return and taken statement
-          </h3>
-          {ownerEvents.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground text-center py-6 bg-white border border-dashed rounded-xl">No owner transfers on record.</p>
-          ) : (
-            <div className="relative pl-6 border-l-2 border-slate-200/80 space-y-4 ml-3">
-              {ownerEvents.map((ev, index) => (
-                <div key={index} className="relative">
-                  <span className={`absolute -left-[35px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border shadow-sm ${getEventBg(ev.type)}`}>
-                    {getEventIcon(ev.type)}
-                  </span>
-                  <div className="bg-white border border-slate-200/60 rounded-xl p-3 shadow-sm space-y-1 hover:border-slate-300 transition-colors">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[12.5px] font-bold text-slate-800 leading-snug">{ev.title}</span>
-                      <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                        {formatDateDDMMYYYY(ev.date)}
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-slate-600 leading-normal">{ev.description}</p>
-                    {ev.meta && (
-                      <div className="pt-1 mt-1 border-t border-slate-100 flex items-center justify-between text-[10.5px]">
-                        <span className="font-semibold font-mono text-primary/80 bg-primary/5 px-1.5 py-0.5 rounded">{ev.meta}</span>
+        {canViewOwnerDetails && (
+          <div className="mt-8">
+            <h3 className="mb-4 text-[13.5px] font-bold text-slate-800 flex items-center gap-1.5 border-b border-slate-200 pb-1">
+              <Home className="h-4 w-4 text-amber-600" /> Owner return and taken statement
+            </h3>
+            {ownerEvents.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground text-center py-6 bg-white border border-dashed rounded-xl">No owner transfers on record.</p>
+            ) : (
+              <div className="relative pl-6 border-l-2 border-slate-200/80 space-y-4 ml-3">
+                {ownerEvents.map((ev, index) => (
+                  <div key={index} className="relative">
+                    <span className={`absolute -left-[35px] top-0.5 flex h-6 w-6 items-center justify-center rounded-full border shadow-sm ${getEventBg(ev.type)}`}>
+                      {getEventIcon(ev.type)}
+                    </span>
+                    <div className="bg-white border border-slate-200/60 rounded-xl p-3 shadow-sm space-y-1 hover:border-slate-300 transition-colors">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[12.5px] font-bold text-slate-800 leading-snug">{ev.title}</span>
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                          {formatDateDDMMYYYY(ev.date)}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-[12px] text-slate-600 leading-normal">{ev.description}</p>
+                      {ev.meta && (
+                        <div className="pt-1 mt-1 border-t border-slate-100 flex items-center justify-between text-[10.5px]">
+                          <span className="font-semibold font-mono text-primary/80 bg-primary/5 px-1.5 py-0.5 rounded">{ev.meta}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -998,6 +1002,7 @@ function EquipmentPage() {
   const isStaff = userRole === "Staff";
   const isAdmin = userRole === "Admin";
   const isAccountant = userRole === "Accountant";
+  const canViewOwnerDetails = !isStaff && !isAccountant;
   const canEdit = isAdmin || isAccountant;
   const canDelete = isAdmin;
 
@@ -1085,17 +1090,19 @@ function EquipmentPage() {
           </Select>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
-            <SelectTrigger className="w-[200px] h-8 text-[12px] shrink-0"><SelectValue placeholder="All Owners" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-owners">All Owners</SelectItem>
-              {activeOwners.map((o) => {
-                const ownerRecord = ownersList.find(ow => ow.name.toLowerCase() === o.toLowerCase());
-                const displayLabel = ownerRecord?.ownerName ? `${o} (${ownerRecord.ownerName})` : o;
-                return <SelectItem key={o} value={o}>{displayLabel}</SelectItem>;
-              })}
-            </SelectContent>
-          </Select>
+          {canViewOwnerDetails && (
+            <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+              <SelectTrigger className="w-[200px] h-8 text-[12px] shrink-0"><SelectValue placeholder="All Owners" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-owners">All Owners</SelectItem>
+                {activeOwners.map((o) => {
+                  const ownerRecord = ownersList.find(ow => ow.name.toLowerCase() === o.toLowerCase());
+                  const displayLabel = ownerRecord?.ownerName ? `${o} (${ownerRecord.ownerName})` : o;
+                  return <SelectItem key={o} value={o}>{displayLabel}</SelectItem>;
+                })}
+              </SelectContent>
+            </Select>
+          )}
           <div className="flex gap-1 shrink-0">
             {["all", "available", "rented", "undermaintenance", "returnedtoowner"].map((tab) => (
               <button
@@ -1140,6 +1147,157 @@ function EquipmentPage() {
           );
         }
 
+        const renderEquipmentCard = (item: Equipment) => {
+          const Icon = categoryIcons[item.category] ?? Stethoscope;
+          return (
+            <Card
+              key={item.id}
+              className="group overflow-hidden hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)] transition-all duration-200"
+            >
+              <div className="relative flex h-40 items-center justify-center bg-white border-b border-border/50 overflow-hidden p-3">
+                {categoryImages[item.category] ? (
+                  <img
+                    src={categoryImages[item.category]}
+                    alt={item.name}
+                    className="h-full w-full object-contain transition-transform duration-305 group-hover:scale-105"
+                    style={{ filter: "brightness(1.08) contrast(1.06)" }}
+                  />
+                ) : (
+                  <div className={`metric-icon h-14 w-14 border ${categoryColors[item.category] ?? "bg-muted text-muted-foreground"}`}>
+                    <Icon className="h-7 w-7" />
+                  </div>
+                )}
+                {categoryImages[item.category] && (
+                  <div className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm ${categoryColors[item.category] ?? "text-muted-foreground"}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                )}
+                <div className="absolute right-3 top-3"><StatusBadge status={item.status} /></div>
+              </div>
+
+              <CardContent className="p-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.10em] text-primary/80">{item.category}</p>
+                <h3 className="mt-1 font-display text-[15px] font-semibold leading-snug">{item.name}</h3>
+                <p className="text-[12px] text-muted-foreground mt-0.5">{item.manufacturer} · {item.model}</p>
+
+                <div className="mt-4 space-y-1.5 text-[11px]">
+                  <div className="flex justify-between border-b border-border/40 pb-1.5">
+                    <span className="text-muted-foreground">Serial Number</span>
+                    <span className="font-mono font-medium text-foreground">{item.serial}</span>
+                  </div>
+                  {(item as any).agreementNumber && (
+                    <div className="flex justify-between border-b border-border/40 pb-1.5">
+                      <span className="text-muted-foreground">Agreement No.</span>
+                      <span className="font-mono font-medium text-foreground">{(item as any).agreementNumber}</span>
+                    </div>
+                  )}
+                  {(item as any).agreementDate && (
+                    <div className="flex justify-between border-b border-border/40 pb-1.5">
+                      <span className="text-muted-foreground">Agreement Date</span>
+                      <span className="font-medium text-foreground">{formatDateDDMMYYYY((item as any).agreementDate)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-b border-border/40 pb-1.5">
+                    <span className="text-muted-foreground">Purchased</span>
+                    <span className="font-medium text-foreground">{formatDateDDMMYYYY(item.purchaseDate) || "—"}</span>
+                  </div>
+                  {canViewOwnerDetails && (
+                    <div className="flex justify-between pb-1.5">
+                      <span className="text-muted-foreground">Daily Rate to Owner</span>
+                      <span className="font-medium text-foreground">₹{(item.ownerDailyRate || 0).toLocaleString("en-IN")}/day</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex gap-1.5 items-center flex-wrap">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1 h-8 text-[12px]"
+                    onClick={() => { setHistoryEq(item); setHistoryOpen(true); }}
+                  >
+                    <History className="mr-1.5 h-3.5 w-3.5" />History
+                  </Button>
+                  {canEdit && item.status === "UnderMaintenance" && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex-1 h-8 text-[11.5px] bg-success hover:bg-success/95 text-white font-semibold cursor-pointer"
+                      onClick={() => {
+                        saveEquipment({ ...item, status: "Available" });
+                        toast.success(`"${item.name}" marked as Available.`);
+                        refresh();
+                      }}
+                    >
+                      Mark Available
+                    </Button>
+                  )}
+                  {canEdit && canViewOwnerDetails && !isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
+                    <OwnerActionDialog
+                      eq={item}
+                      actionType="receive"
+                      onSave={refresh}
+                      trigger={
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="flex-1 h-8 text-[11.5px] bg-success hover:bg-success/95 text-white font-semibold cursor-pointer"
+                        >
+                          Receive from Owner
+                        </Button>
+                      }
+                    />
+                  )}
+                  {canEdit && canViewOwnerDetails && !isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
+                    <OwnerActionDialog
+                      eq={item}
+                      actionType="return"
+                      onSave={refresh}
+                      trigger={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 h-8 text-[11.5px] border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800 cursor-pointer"
+                        >
+                          Return to Owner
+                        </Button>
+                      }
+                    />
+                  )}
+                  <QrCodeDialog eq={item} />
+                  {canEdit && (
+                    <EquipmentFormDialog
+                      title="Edit Equipment"
+                      eq={item}
+                      onSave={refresh}
+                      trigger={
+                        <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                      }
+                    />
+                  )}
+                  {canDelete && (
+                    <DeleteEquipmentDialog eq={item} onDelete={refresh} trigger={
+                      <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    } />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        };
+
+        if (!canViewOwnerDetails) {
+          return (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8">
+              {filteredEquipment.map(renderEquipmentCard)}
+            </div>
+          );
+        }
+
         return sortedOwners.map(ownerName => {
           const ownerItems = filteredEquipment.filter(e => (e.owner || "Unassigned") === ownerName);
           if (ownerItems.length === 0) return null;
@@ -1155,150 +1313,7 @@ function EquipmentPage() {
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {ownerItems.map((item) => {
-                  const Icon = categoryIcons[item.category] ?? Stethoscope;
-                  return (
-                    <Card
-                      key={item.id}
-                      className="group overflow-hidden hover:-translate-y-1 hover:shadow-[var(--shadow-elevated)] transition-all duration-200"
-                    >
-                      <div className="relative flex h-40 items-center justify-center bg-white border-b border-border/50 overflow-hidden p-3">
-                        {categoryImages[item.category] ? (
-                          <img
-                            src={categoryImages[item.category]}
-                            alt={item.name}
-                            className="h-full w-full object-contain transition-transform duration-305 group-hover:scale-105"
-                            style={{ filter: "brightness(1.08) contrast(1.06)" }}
-                          />
-                        ) : (
-                          <div className={`metric-icon h-14 w-14 border ${categoryColors[item.category] ?? "bg-muted text-muted-foreground"}`}>
-                            <Icon className="h-7 w-7" />
-                          </div>
-                        )}
-                        {categoryImages[item.category] && (
-                          <div className={`absolute left-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm ${categoryColors[item.category] ?? "text-muted-foreground"}`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                        )}
-                        <div className="absolute right-3 top-3"><StatusBadge status={item.status} /></div>
-                      </div>
-
-                      <CardContent className="p-4">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.10em] text-primary/80">{item.category}</p>
-                        <h3 className="mt-1 font-display text-[15px] font-semibold leading-snug">{item.name}</h3>
-                        <p className="text-[12px] text-muted-foreground mt-0.5">{item.manufacturer} · {item.model}</p>
-
-                        <div className="mt-4 space-y-1.5 text-[11px]">
-                          <div className="flex justify-between border-b border-border/40 pb-1.5">
-                            <span className="text-muted-foreground">Serial Number</span>
-                            <span className="font-mono font-medium text-foreground">{item.serial}</span>
-                          </div>
-                          {(item as any).agreementNumber && (
-                            <div className="flex justify-between border-b border-border/40 pb-1.5">
-                              <span className="text-muted-foreground">Agreement No.</span>
-                              <span className="font-mono font-medium text-foreground">{(item as any).agreementNumber}</span>
-                            </div>
-                          )}
-                          {(item as any).agreementDate && (
-                            <div className="flex justify-between border-b border-border/40 pb-1.5">
-                              <span className="text-muted-foreground">Agreement Date</span>
-                              <span className="font-medium text-foreground">{formatDateDDMMYYYY((item as any).agreementDate)}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between border-b border-border/40 pb-1.5">
-                            <span className="text-muted-foreground">Purchased</span>
-                            <span className="font-medium text-foreground">{formatDateDDMMYYYY(item.purchaseDate) || "—"}</span>
-                          </div>
-                          <div className="flex justify-between pb-1.5">
-                            <span className="text-muted-foreground">Daily Rate to Owner</span>
-                            <span className="font-medium text-foreground">₹{(item.ownerDailyRate || 0).toLocaleString("en-IN")}/day</span>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex gap-1.5 items-center flex-wrap">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="flex-1 h-8 text-[12px]"
-                            onClick={() => { setHistoryEq(item); setHistoryOpen(true); }}
-                          >
-                            <History className="mr-1.5 h-3.5 w-3.5" />History
-                          </Button>
-                          {canEdit && item.status === "UnderMaintenance" && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="flex-1 h-8 text-[11.5px] bg-success hover:bg-success/95 text-white font-semibold cursor-pointer"
-                              onClick={() => {
-                                saveEquipment({ ...item, status: "Available" });
-                                toast.success(`"${item.name}" marked as Available.`);
-                                refresh();
-                              }}
-                            >
-                              Mark Available
-                            </Button>
-                          )}
-                          {canEdit && !isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
-                            <OwnerActionDialog
-                              eq={item}
-                              actionType="receive"
-                              onSave={refresh}
-                              trigger={
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  className="flex-1 h-8 text-[11.5px] bg-success hover:bg-success/95 text-white font-semibold cursor-pointer"
-                                >
-                                  Receive from Owner
-                                </Button>
-                              }
-                            />
-                          )}
-                          {canEdit && !isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
-                            <OwnerActionDialog
-                              eq={item}
-                              actionType="return"
-                              onSave={refresh}
-                              trigger={
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1 h-8 text-[11.5px] border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800 cursor-pointer"
-                                >
-                                  Return to Owner
-                                </Button>
-                              }
-                            />
-                          )}
-                          <QrCodeDialog eq={item} />
-                          {canEdit && (
-                            <EquipmentFormDialog
-                              title="Edit Equipment"
-                              eq={item}
-                              onSave={refresh}
-                              trigger={
-                                <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Edit">
-                                  <Edit className="h-3.5 w-3.5" />
-                                </Button>
-                              }
-                            />
-                          )}
-                          {canDelete && (
-                            <DeleteEquipmentDialog
-                              eq={item}
-                              onDelete={refresh}
-                              trigger={
-                                <Button variant="outline" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Delete">
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              }
-                            />
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {ownerItems.map(renderEquipmentCard)}
               </div>
             </div>
           );

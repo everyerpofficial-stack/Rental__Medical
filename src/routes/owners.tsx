@@ -344,6 +344,11 @@ function OwnerDetailsSheet({
 
   if (!owner) return null;
 
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const canViewOwnerEquipment = !isStaff && !isAccountant;
+
   const equipment = getEquipment();
   const rentals = getRentals();
   const allReturns = getReturns();
@@ -758,30 +763,31 @@ function OwnerDetailsSheet({
         <Tabs defaultValue="details" className="mt-5">
           <TabsList className="w-full">
             <TabsTrigger value="details" className="flex-1">Details &amp; Inventory</TabsTrigger>
-            <TabsTrigger value="statement" className="flex-1">Monthly Rental Statement</TabsTrigger>
+            {canViewOwnerEquipment && <TabsTrigger value="statement" className="flex-1">Monthly Rental Statement</TabsTrigger>}
           </TabsList>
 
           {/* === Details Tab === */}
           <TabsContent value="details">
             {/* Action buttons for Statement */}
+            {canViewOwnerEquipment && (
             <div className="flex gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 h-9 text-[12px] font-semibold border-primary/20 text-primary hover:bg-primary/5 flex items-center justify-center gap-1.5"
+                className="flex-1 gap-1.5 text-[12px] font-semibold"
                 onClick={handlePrintStatement}
               >
                 <Printer className="h-4 w-4" /> Print Statement
               </Button>
               <Button
-                variant="outline"
                 size="sm"
-                className="flex-1 h-9 text-[12px] font-semibold border-success/20 text-success hover:bg-success/5 flex items-center justify-center gap-1.5"
+                className="flex-1 gap-1.5 text-[12px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={handleDownloadStatement}
               >
                 <Download className="h-4 w-4" /> Download Statement
               </Button>
             </div>
+            )}
 
 
           {/* Contact Details */}
@@ -807,6 +813,7 @@ function OwnerDetailsSheet({
           </div>
 
           {/* Owned Inventory items list */}
+          {canViewOwnerEquipment && (
           <div className="space-y-3">
             <div className="flex items-center justify-between border-b border-border/60 pb-2">
               <h3 className="text-[14px] font-bold">Owned Inventory ({ownedEquipment.length})</h3>
@@ -849,10 +856,12 @@ function OwnerDetailsSheet({
               </div>
             )}
           </div>
+          )}
           </div>
           </TabsContent>
 
           {/* === Monthly Rental Statement Tab === */}
+          {canViewOwnerEquipment && (
           <TabsContent value="statement" className="pt-4 space-y-4">
             {/* Filters */}
             <div className="rounded-xl border border-border/60 bg-muted/10 p-4 space-y-3">
@@ -1000,6 +1009,7 @@ function OwnerDetailsSheet({
               </div>
             )}
           </TabsContent>
+          )}
 
         </Tabs>
       </SheetContent>
@@ -1016,7 +1026,10 @@ function OwnersPage() {
   const [selectedOwner, setSelectedOwner] = useState<OwnerItem | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const isStaff = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const canViewOwnerEquipment = !isStaff && !isAccountant;
 
   const refreshData = () => {
     setOwners(getOwners());
@@ -1132,6 +1145,8 @@ function OwnersPage() {
           <div className="absolute inset-x-0 bottom-0 h-[2px] bg-success/50" />
         </Card>
 
+        {canViewOwnerEquipment && (
+          <>
         <Card className="relative overflow-hidden hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all">
           <CardContent className="p-3 sm:p-5">
             <div className="flex items-start justify-between gap-3">
@@ -1175,6 +1190,8 @@ function OwnersPage() {
           </CardContent>
           <div className="absolute inset-x-0 bottom-0 h-[2px] bg-warning/50" />
         </Card>
+          </>
+        )}
       </div>
 
       {/* Filter strip */}
@@ -1208,7 +1225,7 @@ function OwnersPage() {
               <TableRow>
                 <TableHead>Owner Details</TableHead>
                 <TableHead>Contact Info</TableHead>
-                <TableHead className="text-right">Owned Items</TableHead>
+                {canViewOwnerEquipment && <TableHead className="text-right">Owned Items</TableHead>}
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[120px] text-right">Actions</TableHead>
               </TableRow>
@@ -1216,7 +1233,7 @@ function OwnersPage() {
             <TableBody>
               {filteredOwners.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-12 text-center text-muted-foreground text-[13px]">
+                  <TableCell colSpan={canViewOwnerEquipment ? 5 : 4} className="py-12 text-center text-muted-foreground text-[13px]">
                     No equipment owners match your search filter.
                   </TableCell>
                 </TableRow>
@@ -1244,20 +1261,22 @@ function OwnersPage() {
                           <p className="text-muted-foreground font-mono">{owner.email}</p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-[12px] font-semibold px-2 hover:bg-primary/10 hover:text-primary rounded-md"
-                          onClick={() => {
-                            setSelectedOwner(owner);
-                            setDetailsOpen(true);
-                          }}
-                        >
-                          {ownedCount} items
-                          <ExternalLink className="h-3 w-3 ml-1" />
-                        </Button>
-                      </TableCell>
+                      {canViewOwnerEquipment && (
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-[12px] font-semibold px-2 hover:bg-primary/10 hover:text-primary rounded-md"
+                            onClick={() => {
+                              setSelectedOwner(owner);
+                              setDetailsOpen(true);
+                            }}
+                          >
+                            {ownedCount} items
+                            <ExternalLink className="h-3 w-3 ml-1" />
+                          </Button>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold border ${
                           owner.status === "Active"

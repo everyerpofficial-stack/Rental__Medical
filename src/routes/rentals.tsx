@@ -2686,9 +2686,16 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
                               <span className="text-muted-foreground font-semibold shrink-0">S/N:</span> <code className="font-bold text-primary font-mono bg-background px-2 py-0.5 rounded border border-primary/25 text-[11px] break-all">{serialVal || "—"}</code>
                             </span>
-                            <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
-                              <span className="text-muted-foreground font-semibold shrink-0">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px] break-all">{ownerVal || "—"}</span>
-                            </span>
+                            {(() => {
+                              const role = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+                              const canViewOwner = role !== "Staff" && role !== "Accountant";
+                              if (!canViewOwner || !ownerVal) return null;
+                              return (
+                                <span className="text-foreground flex flex-wrap items-center gap-1 max-w-full">
+                                  <span className="text-muted-foreground font-semibold shrink-0">Owner Name:</span> <span className="font-bold text-foreground bg-background px-2 py-0.5 rounded border border-border text-[11px] break-all">{ownerVal || "—"}</span>
+                                </span>
+                              );
+                            })()}
                           </div>
                         );
                       })()}
@@ -5283,37 +5290,39 @@ function RentalsPage() {
       actions={
         activeView === "list" ? (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const headers = ["Customer", "Address", "Equipment", "Rent Date", "Rent Rate", "Deposit", "Return Date", "Status"];
-                const rows = rentalsList.map(r => {
-                  const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
-                  const fullAddress = formatFullAddress(cust, r) || "—";
-                  const eqNameWithModel = getRentalEquipmentLabels(r).join(" | ");
-                  const rentRateDisplay = (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0)
-                    ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day`
-                    : `₹${(r.monthlyRent ?? 0).toLocaleString("en-IN")}/mo`;
+            {!isStaff && !isAccountant && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const headers = ["Customer", "Address", "Equipment", "Rent Date", "Rent Rate", "Deposit", "Return Date", "Status"];
+                  const rows = rentalsList.map(r => {
+                    const cust = customersList.find(c => c.id === r.customerId) || customersList.find(c => c.name && r.customer && c.name.toLowerCase() === r.customer.toLowerCase());
+                    const fullAddress = formatFullAddress(cust, r) || "—";
+                    const eqNameWithModel = getRentalEquipmentLabels(r).join(" | ");
+                    const rentRateDisplay = (r as any).rentCycle === "Daily" || (r.monthlyRent === 0 && (r.dailyRent ?? 0) > 0)
+                      ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day`
+                      : `₹${(r.monthlyRent ?? 0).toLocaleString("en-IN")}/mo`;
 
-                  return [
-                    `${r.customer} (${r.id})`,
-                    fullAddress || "—",
-                    eqNameWithModel || r.equipment,
-                    formatDateDDMMYYYY(r.start),
-                    rentRateDisplay,
-                    (r.deposit ?? 0).toString(),
-                    r.end ? formatDateDDMMYYYY(r.end) : "Ongoing",
-                    r.status
-                  ];
-                });
-                downloadExcel("rental_agreements_export.xls", headers, rows, [200, 250, 250, 100, 110, 100, 100, 100]);
-                toast.success("Rental agreements log exported successfully.");
-              }}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Export
-            </Button>
+                    return [
+                      `${r.customer} (${r.id})`,
+                      fullAddress || "—",
+                      eqNameWithModel || r.equipment,
+                      formatDateDDMMYYYY(r.start),
+                      rentRateDisplay,
+                      (r.deposit ?? 0).toString(),
+                      r.end ? formatDateDDMMYYYY(r.end) : "Ongoing",
+                      r.status
+                    ];
+                  });
+                  downloadExcel("rental_agreements_export.xls", headers, rows, [200, 250, 250, 100, 110, 100, 100, 100]);
+                  toast.success("Rental agreements log exported successfully.");
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export
+              </Button>
+            )}
             <Button size="sm" onClick={() => setActiveView("new")}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Agreement

@@ -1199,6 +1199,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
                 )}
 
                 {/* Transaction history table */}
+                {!isStaff && !isAccountant && (
                 <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
                   <div className="px-4.5 py-3 border-b border-border/50 bg-muted/20">
                     <h4 className="text-[12.5px] font-bold text-foreground">Transaction & Invoicing History</h4>
@@ -1287,6 +1288,7 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
                     </>
                   )}
                 </div>
+                )}
               </div>
             </TabsContent>
 
@@ -1773,6 +1775,7 @@ function CustomersPage() {
   const isAccountant = userRole === "Accountant";
   const canEdit = isAdmin || isAccountant;
   const canDelete = isAdmin;
+  const canExportImport = !isStaff && !isAccountant;
 
   const refresh = () => setCustomers(getCustomers());
 
@@ -1919,43 +1922,47 @@ function CustomersPage() {
       subtitle="Manage your customer database and rental history"
       actions={
         <>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const headers = ["Customer ID", "Name", "Primary Number", "Alternative Phone", "Alternative Phone 1", "Email", "City", "State", "Taluk", "Active Rentals", "Status"];
-              const rows = customers.map(c => [
-                c.id,
-                c.name,
-                c.phone,
-                c.altPhone || "",
-                c.contactNumber3 || "",
-                c.email || "",
-                c.city,
-                c.state,
-                c.taluk || "",
-                c.rentals.toString(),
-                c.status
-              ]);
-              downloadExcel("customers_export.xls", headers, rows, [110, 200, 120, 120, 120, 220, 120, 120, 120, 110, 100]);
-              toast.success("Customer list exported successfully.");
-            }}
-          >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
-            Export
-          </Button>
-          <ImportCsvDialog
-            entityLabel="Customers"
-            columns={customerImportColumns}
-            onImportRow={importCustomerRow}
-            onComplete={refresh}
-            trigger={
-              <Button variant="outline" size="sm">
-                <Upload className="mr-1.5 h-3.5 w-3.5" />
-                Import
+          {canExportImport && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const headers = ["Customer ID", "Name", "Primary Number", "Alternative Phone", "Alternative Phone 1", "Email", "City", "State", "Taluk", "Active Rentals", "Status"];
+                  const rows = customers.map(c => [
+                    c.id,
+                    c.name,
+                    c.phone,
+                    c.altPhone || "",
+                    c.contactNumber3 || "",
+                    c.email || "",
+                    c.city,
+                    c.state,
+                    c.taluk || "",
+                    c.rentals.toString(),
+                    c.status
+                  ]);
+                  downloadExcel("customers_export.xls", headers, rows, [110, 200, 120, 120, 120, 220, 120, 120, 120, 110, 100]);
+                  toast.success("Customer list exported successfully.");
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Export
               </Button>
-            }
-          />
+              <ImportCsvDialog
+                entityLabel="Customers"
+                columns={customerImportColumns}
+                onImportRow={importCustomerRow}
+                onComplete={refresh}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    Import
+                  </Button>
+                }
+              />
+            </>
+          )}
           <CustomerFormDialog
             title="New Customer"
             onSave={refresh}

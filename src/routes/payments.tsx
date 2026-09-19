@@ -1322,6 +1322,8 @@ function PaymentsPage() {
   const isAccountant = userRole === "Accountant";
   const isAdmin = userRole === "Admin";
   const showKpiCards = !isStaff && !isAccountant;
+  const canExport = !isStaff && !isAccountant;
+  const canViewPaymentHistory = !isStaff && !isAccountant;
 
   const refresh = () => setPayments(getPayments());
 
@@ -1566,9 +1568,10 @@ function PaymentsPage() {
       title="Payments"
       subtitle="Collect rent, deposits, additional charges and track collections"
       actions={
-        <Button
-          variant="outline"
-          size="sm"
+        canExport ? (
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               const headers = ["Payment ID", "Date", "Customer", "Agreement", "Amount", "Mode", "Type", "Reference", "Status", "Collected By"];
               const rows = payments.map(p => [
@@ -1590,6 +1593,7 @@ function PaymentsPage() {
             <Download className="mr-1.5 h-3.5 w-3.5" />
             Export
           </Button>
+        ) : undefined
       }
     >
       {/* Stat cards - hidden for Staff and Accountant */}
@@ -1697,13 +1701,13 @@ function PaymentsPage() {
                       <TableHead className="text-center">Receipts</TableHead>
                       <TableHead>Latest Payment</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-24 text-right">Actions</TableHead>
+                      {canViewPaymentHistory && <TableHead className="w-24 text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredAgreements.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-10 text-center text-[13px] text-muted-foreground">
+                        <TableCell colSpan={canViewPaymentHistory ? 8 : 7} className="py-10 text-center text-[13px] text-muted-foreground">
                           No agreements match your search.
                         </TableCell>
                       </TableRow>
@@ -1711,8 +1715,10 @@ function PaymentsPage() {
                     {filteredAgreements.map((g) => (
                       <TableRow
                         key={g.agreementId}
-                        className="group cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => setSelectedHistoryAgreementId(g.agreementId)}
+                        className={`group transition-colors ${canViewPaymentHistory ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                        onClick={() => {
+                          if (canViewPaymentHistory) setSelectedHistoryAgreementId(g.agreementId);
+                        }}
                       >
                         <TableCell>
                           <div className="flex flex-col gap-0.5">
@@ -1776,16 +1782,18 @@ function PaymentsPage() {
                         <TableCell>
                           <StatusBadge status={g.rentStatus as any} />
                         </TableCell>
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-[11px] text-primary hover:bg-primary/10 px-2 font-semibold"
-                            onClick={() => setSelectedHistoryAgreementId(g.agreementId)}
-                          >
-                            <History className="mr-1 h-3.5 w-3.5" /> History
-                          </Button>
-                        </TableCell>
+                        {canViewPaymentHistory && (
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-[11px] text-primary hover:bg-primary/10 px-2 font-semibold"
+                              onClick={() => setSelectedHistoryAgreementId(g.agreementId)}
+                            >
+                              <History className="mr-1 h-3.5 w-3.5" /> History
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1800,8 +1808,10 @@ function PaymentsPage() {
                   filteredAgreements.map((g) => (
                     <div
                       key={g.agreementId}
-                      className="px-4 py-3.5 cursor-pointer hover:bg-muted/20"
-                      onClick={() => setSelectedHistoryAgreementId(g.agreementId)}
+                      className={`px-4 py-3.5 ${canViewPaymentHistory ? "cursor-pointer hover:bg-muted/20" : ""}`}
+                      onClick={() => {
+                        if (canViewPaymentHistory) setSelectedHistoryAgreementId(g.agreementId);
+                      }}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <div>
@@ -1841,9 +1851,11 @@ function PaymentsPage() {
                       })()}
                       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
                         <span className="text-muted-foreground">{g.totalCount} Payment{g.totalCount === 1 ? "" : "s"}</span>
-                        <Button size="sm" variant="ghost" className="h-6 text-[11px] text-primary p-0">
-                          View Payment History <ChevronRight className="ml-1 h-3 w-3" />
-                        </Button>
+                        {canViewPaymentHistory && (
+                          <Button size="sm" variant="ghost" className="h-6 text-[11px] text-primary p-0">
+                            View Payment History <ChevronRight className="ml-1 h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))
@@ -1901,13 +1913,19 @@ function PaymentsPage() {
                             );
                           })()}
                           <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                            <button
-                              type="button"
-                              className="font-mono text-[10px] text-primary hover:underline font-bold text-left cursor-pointer"
-                              onClick={() => setSelectedHistoryAgreementId(p.agreement)}
-                            >
-                              {p.agreement}
-                            </button>
+                            {canViewPaymentHistory ? (
+                              <button
+                                type="button"
+                                className="font-mono text-[10px] text-primary hover:underline font-bold text-left cursor-pointer"
+                                onClick={() => setSelectedHistoryAgreementId(p.agreement)}
+                              >
+                                {p.agreement}
+                              </button>
+                            ) : (
+                              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                                {p.agreement}
+                              </span>
+                            )}
                             {(() => {
                               const matchRental = rentals.find((r: any) => r.id === p.agreement);
                               const agrDate = matchRental?.start || (matchRental as any)?.startDate;
@@ -1980,13 +1998,19 @@ function PaymentsPage() {
                                 ))}
                               </div>
                               <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                <button
-                                  type="button"
-                                  className="font-mono text-[10px] text-primary hover:underline font-bold"
-                                  onClick={() => setSelectedHistoryAgreementId(p.agreement)}
-                                >
-                                  {p.agreement}
-                                </button>
+                                {canViewPaymentHistory ? (
+                                  <button
+                                    type="button"
+                                    className="font-mono text-[10px] text-primary hover:underline font-bold"
+                                    onClick={() => setSelectedHistoryAgreementId(p.agreement)}
+                                  >
+                                    {p.agreement}
+                                  </button>
+                                ) : (
+                                  <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                                    {p.agreement}
+                                  </span>
+                                )}
                                 {(() => {
                                   const agrDate = matchRental?.start || (matchRental as any)?.startDate;
                                   if (!agrDate) return null;
@@ -2025,14 +2049,16 @@ function PaymentsPage() {
       </div>
 
       {/* AGREEMENT PAYMENT HISTORY DIALOG */}
-      <AgreementPaymentHistoryModal
-        agreementId={selectedHistoryAgreementId}
-        open={!!selectedHistoryAgreementId}
-        onOpenChange={(open) => {
-          if (!open) setSelectedHistoryAgreementId(null);
-        }}
-        onRefresh={refresh}
-      />
+      {canViewPaymentHistory && (
+        <AgreementPaymentHistoryModal
+          agreementId={selectedHistoryAgreementId}
+          open={!!selectedHistoryAgreementId}
+          onOpenChange={(open) => {
+            if (!open) setSelectedHistoryAgreementId(null);
+          }}
+          onRefresh={refresh}
+        />
+      )}
     </AppShell>
   );
 }

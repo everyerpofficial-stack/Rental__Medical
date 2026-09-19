@@ -1584,6 +1584,10 @@ function DuesPage() {
   const rentalsList = useMemo(() => getRentals(), [refreshKey, dbVersion]);
   const paymentsList = useMemo(() => getPayments(), [refreshKey, dbVersion]);
   const returnsList = useMemo(() => getReturns(), [dbVersion]);
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const canExport = !isStaff && !isAccountant;
 
   const formatRupee = (val: number) => `₹${val.toLocaleString("en-IN")}`;
 
@@ -2701,17 +2705,19 @@ function DuesPage() {
       subtitle="Automated due tracking with outstanding balance calculations"
       actions={
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 font-bold gap-1.5"
-            onClick={handleExportExcel}
-            title="Export Excel Report for Rent Dues (1-10, 11-20, 21-31)"
-            aria-label="Export Excel Report"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
-            <span className="hidden md:inline">Export Excel Report</span>
-          </Button>
+          {canExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-300 font-bold gap-1.5"
+              onClick={handleExportExcel}
+              title="Export Excel Report for Rent Dues (1-10, 11-20, 21-31)"
+              aria-label="Export Excel Report"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="hidden md:inline">Export Excel Report</span>
+            </Button>
+          )}
           <Button
             size="sm"
             onClick={handleSendAllReminders}
@@ -2794,15 +2800,17 @@ function DuesPage() {
                 </TabsList>
               </Tabs>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-[12px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 gap-1.5"
-                onClick={handleExportExcel}
-                title="Export Excel Statement"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
-              </Button>
+              {canExport && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-[12px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 gap-1.5"
+                  onClick={handleExportExcel}
+                  title="Export Excel Statement"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Excel
+                </Button>
+              )}
             </div>
             {/* Mobile chips */}
             <div className="flex gap-1.5 overflow-x-auto pb-0.5 sm:hidden">

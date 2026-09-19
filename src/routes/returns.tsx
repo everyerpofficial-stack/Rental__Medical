@@ -709,6 +709,9 @@ function PayReturnDueDialog({
     onSave();
   };
 
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
+  if (userRole === "Staff") return null;
+
   return (
     <>
       {!hideTrigger && (
@@ -3043,7 +3046,7 @@ function ReturnsPage() {
                                 rental={rentals.find((r) => r.id === ret.agreement)}
                                 customer={(ret.customerId && customers.find((c) => c.id === ret.customerId)) || customers.find((c) => c.id === rentals.find((r) => r.id === ret.agreement)?.customerId) || customers.find((c) => c.name === ret.customer)}
                               />
-                              {ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
+                              {!isStaff && ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
                                 <PayReturnDueDialog ret={ret} onSave={refresh} />
                               )}
                               {isAdmin && ret.status === "Pending Approval" && (
@@ -3237,7 +3240,7 @@ function ReturnsPage() {
                             <DropdownMenuItem onSelect={() => setMobileWaReturn(ret)}>
                               <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp Message
                             </DropdownMenuItem>
-                            {ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
+                            {!isStaff && ret.refund < 0 && ret.duePaymentStatus !== "Paid" && (
                               <DropdownMenuItem onSelect={() => setMobilePayDueReturn(ret)}>
                                 <CreditCard className="h-4 w-4 text-emerald-600" /> Pay Due
                               </DropdownMenuItem>
@@ -3303,7 +3306,7 @@ function ReturnsPage() {
                 onControlledOpenChange={(v) => { if (!v) setMobileWaReturn(null); }}
               />
             )}
-            {mobilePayDueReturn && (
+            {!isStaff && mobilePayDueReturn && (
               <PayReturnDueDialog
                 ret={mobilePayDueReturn}
                 onSave={() => { refresh(); setMobilePayDueReturn(null); }}
