@@ -5095,8 +5095,8 @@ export function AgreementPreviewDialog({ rental, signatureUrl, thumbprintUrl, tr
             <div className="flex justify-between items-end mt-auto pt-6 border-t border-slate-100">
               <div className="w-[45%] text-left">
                 <span className="font-bold text-red-600 text-[13px]">For Relife Medical Technologies</span>
-                <div className="h-16 flex items-end mb-2">
-                  <img src="/images/logo.png" alt="Relife Logo" className="h-[38px] w-auto object-contain -rotate-[5deg] opacity-85" />
+                <div className="h-20 flex items-end mb-1">
+                  <img src="/images/authorized_signatory.png" alt="Authorized Signatory" className="h-[75px] w-auto object-contain" />
                 </div>
                 <span className="font-bold text-red-600 text-[12px]">(Authorized Signatory)</span>
               </div>

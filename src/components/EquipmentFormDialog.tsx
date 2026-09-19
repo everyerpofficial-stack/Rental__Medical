@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber } from "@/lib/data-store";
+import { getOwners, getEquipment, saveEquipment, getNextEquipmentNumber, EQUIPMENT_CATEGORIES, saveOwner, getNextOwnerNumber, getLocalYYYYMMDD } from "@/lib/data-store";
 import { cn, capitalizeWords } from "@/lib/utils";
 
 export const isOwnOwner = (ownerName?: any) => {
@@ -46,22 +46,7 @@ export type Equipment = {
 
 const ensureYYYYMMDD = (dateStr?: string) => {
   if (!dateStr) return "";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  
-  const parts = dateStr.split("T")[0].split(/[-/]/);
-  if (parts.length === 3) {
-    let y = parts[0];
-    let m = parts[1];
-    let d = parts[2];
-    if (parts[2].length === 4) {
-      y = parts[2];
-      m = parts[1];
-      d = parts[0];
-    }
-    const pad = (s: string) => s.length === 1 ? `0${s}` : s;
-    return `${y}-${pad(m)}-${pad(d)}`;
-  }
-  return dateStr;
+  return getLocalYYYYMMDD(dateStr);
 };
 
 

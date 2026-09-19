@@ -3687,8 +3687,8 @@ export function getAgreementHtmlContent(rentalInput: any, isPrintMode: boolean =
     <div class="signature-container">
       <div class="sig-column">
         <span style="font-weight: bold; color: #ef4444; font-size: 13px;">For Relife Medical Technologies</span>
-        <div class="sig-box">
-          <img src="${origin}/images/logo.png" alt="Relife Logo" style="height: 38px; width: auto; object-fit: contain; transform: rotate(-5deg); opacity: 0.85;" />
+        <div class="sig-box" style="height: 80px; display: flex; align-items: flex-end; margin-bottom: 4px;">
+          <img src="${origin}/images/authorized_signatory.png" alt="Authorized Signatory" style="height: 75px; width: auto; object-fit: contain;" />
         </div>
         <span style="font-weight: bold; color: #ef4444; font-size: 12px;">(Authorized Signatory)</span>
       </div>

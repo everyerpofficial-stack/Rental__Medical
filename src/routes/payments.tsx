@@ -885,7 +885,11 @@ function AgreementPaymentHistoryModal({
 }) {
   if (!agreementId) return null;
 
-  const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const isAdmin = userRole === "Admin";
+  const isStaff = userRole === "Staff";
+  const isAccountant = userRole === "Accountant";
+  const canExport = !isStaff && !isAccountant;
   const rentals = getRentals();
   const equipmentList = getEquipment();
   const payments = getPayments();
@@ -904,6 +908,13 @@ function AgreementPaymentHistoryModal({
   const monthlyRent = rental?.monthlyRent || 0;
   const deposit = rental?.deposit || 0;
   const rentalDate = rental?.start || (rental as any)?.startDate || "";
+
+  const displayEquipments: { name: string; model?: string }[] = eqModelItems.length > 0
+    ? eqModelItems.map(it => ({
+        name: it.name || equipmentName || "Medical Equipment",
+        model: (it.model && it.model.toLowerCase() !== "standard" && it.model.toLowerCase() !== it.name.toLowerCase()) ? it.model : undefined,
+      }))
+    : [{ name: equipmentName, model: modelStr || undefined }];
 
   const handleExportStatement = () => {
     const headers = ["Receipt ID", "Date", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
@@ -929,13 +940,13 @@ function AgreementPaymentHistoryModal({
 
     const tableRowsHtml = agreementPayments.map(p => `
       <tr>
-        <td style="font-family: monospace; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${p.id}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${formatDateDDMMYYYY(p.date)}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px;">${p.type}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">${p.mode}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px;">${p.collectedBy || "Admin"}</td>
-        <td style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">₹${p.amount.toLocaleString("en-IN")}</td>
-        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px;">
+        <td style="font-family: monospace; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.id}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${formatDateDDMMYYYY(p.date)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.type}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.mode}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.collectedBy || "Admin"}</td>
+        <td style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">₹${p.amount.toLocaleString("en-IN")}</td>
+        <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">
           <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: bold; border-radius: 4px; border: 1px solid ${p.status === "Paid" ? "#bbf7d0; background-color: #f0fdf4; color: #15803d;" : "#fecaca; background-color: #fef2f2; color: #b91c1c;"}">
             ${p.status}
           </span>
@@ -1016,7 +1027,7 @@ function AgreementPaymentHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="max-w-5xl lg:max-w-6xl w-[96vw] max-h-[90vh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="p-5 border-b border-border/60 bg-muted/20">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -1045,9 +1056,11 @@ function AgreementPaymentHistoryModal({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatement}>
-                <Download className="h-3.5 w-3.5" /> Excel Statement
-              </Button>
+              {canExport && (
+                <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatement}>
+                  <Download className="h-3.5 w-3.5" /> Excel Statement
+                </Button>
+              )}
               <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatementPDF}>
                 <Printer className="h-3.5 w-3.5" /> PDF Statement
               </Button>
@@ -1091,41 +1104,45 @@ function AgreementPaymentHistoryModal({
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
-                      <TableHead>Receipt ID</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Equipment</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Mode</TableHead>
-                      <TableHead>Collected By</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="whitespace-nowrap px-3">Receipt ID</TableHead>
+                      <TableHead className="whitespace-nowrap px-3">Date</TableHead>
+                      <TableHead className="whitespace-nowrap px-3 min-w-[200px]">Equipment</TableHead>
+                      <TableHead className="whitespace-nowrap px-3">Type</TableHead>
+                      <TableHead className="whitespace-nowrap px-3">Mode</TableHead>
+                      <TableHead className="whitespace-nowrap px-3">Collected By</TableHead>
+                      <TableHead className="whitespace-nowrap px-3 text-right">Amount</TableHead>
+                      <TableHead className="whitespace-nowrap px-3 text-center">Status</TableHead>
+                      <TableHead className="whitespace-nowrap px-3 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {agreementPayments.map((p) => (
                       <TableRow key={p.id}>
-                        <TableCell className="font-mono text-[12px] font-bold text-primary">{p.id}</TableCell>
-                        <TableCell className="text-[12px]">{formatDateDDMMYYYY(p.date)}</TableCell>
-                        <TableCell className="text-[12px] font-medium">
-                          <div className="max-w-[170px]" title={`${equipmentName}${modelStr ? ` - Model: ${modelStr}` : ""}`}>
-                            <span className="flex items-center gap-1.5 truncate">
-                              <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              <span className="truncate">{equipmentName}</span>
-                            </span>
-                            {modelStr && (
-                              <span className="text-[10.5px] text-muted-foreground font-medium truncate block pl-5">
-                                Model: {modelStr}
-                              </span>
-                            )}
+                        <TableCell className="font-mono text-[12px] font-bold text-primary whitespace-nowrap px-3 py-2.5">{p.id}</TableCell>
+                        <TableCell className="text-[12px] whitespace-nowrap px-3 py-2.5">{formatDateDDMMYYYY(p.date)}</TableCell>
+                        <TableCell className="text-[12px] font-medium px-3 py-2.5">
+                          <div className="space-y-1.5 min-w-[200px]">
+                            {displayEquipments.map((it, idx) => (
+                              <div key={idx} className="leading-tight">
+                                <div className="flex items-center gap-1.5 font-semibold text-foreground text-[12px]">
+                                  <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  <span>{it.name}</span>
+                                </div>
+                                {it.model && (
+                                  <span className="text-[11px] text-muted-foreground font-medium pl-5 block">
+                                    Model: {it.model}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap px-3 py-2.5">
                           <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
                             {p.type}
                           </span>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap px-3 py-2.5">
                           <span
                             className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}
                             title={p.notes || undefined}
@@ -1133,10 +1150,10 @@ function AgreementPaymentHistoryModal({
                             {p.mode}
                           </span>
                         </TableCell>
-                        <TableCell className="text-[12px] font-medium">{(p.collectedBy as string) || "Dr. Rao"}</TableCell>
-                        <TableCell className="text-right font-bold text-[13px]">₹{p.amount.toLocaleString("en-IN")}</TableCell>
-                        <TableCell><StatusBadge status={p.status} /></TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-[12px] font-medium whitespace-nowrap px-3 py-2.5">{(p.collectedBy as string) || "Dr. Rao"}</TableCell>
+                        <TableCell className="text-right font-bold text-[13px] whitespace-nowrap px-3 py-2.5">₹{p.amount.toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-center whitespace-nowrap px-3 py-2.5"><StatusBadge status={p.status} /></TableCell>
+                        <TableCell className="text-right whitespace-nowrap px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
                             {isAdmin && (
@@ -1162,10 +1179,20 @@ function AgreementPaymentHistoryModal({
                       <div>
                         <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
-                        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground mt-1">
-                          <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span className="truncate">{equipmentName}</span>
-                          {modelStr && <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">· {modelStr}</span>}
+                        <div className="space-y-1 mt-1">
+                          {displayEquipments.map((it, idx) => (
+                            <div key={idx} className="leading-tight">
+                              <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
+                                <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span>{it.name}</span>
+                              </div>
+                              {it.model && (
+                                <span className="text-[10.5px] text-muted-foreground font-medium pl-5 block">
+                                  Model: {it.model}
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1">
@@ -1192,11 +1219,13 @@ function AgreementPaymentHistoryModal({
                     )}
                     <div className="mt-2 flex justify-end gap-1">
                       <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
-                      <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      } />
+                      {isAdmin && (
+                        <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
+                          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        } />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1323,7 +1352,7 @@ function PaymentsPage() {
   const isAdmin = userRole === "Admin";
   const showKpiCards = !isStaff && !isAccountant;
   const canExport = !isStaff && !isAccountant;
-  const canViewPaymentHistory = !isStaff && !isAccountant;
+  const canViewPaymentHistory = !isAccountant;
 
   const refresh = () => setPayments(getPayments());
 
