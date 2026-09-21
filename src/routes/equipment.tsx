@@ -212,6 +212,11 @@ function OwnerActionDialog({
       }
       if (isNaN(rStart.getTime())) return;
 
+      const rStartDay = new Date(rStart.getFullYear(), rStart.getMonth(), rStart.getDate()).getTime();
+      const startDay = new Date(startD.getFullYear(), startD.getMonth(), startD.getDate()).getTime();
+      const endDay = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate()).getTime();
+      if (rStartDay < startDay || rStartDay > endDay) return;
+
       let rEnd: Date;
       if (exchangedOut && exchangedOut.exchangeDate) {
         rEnd = parseLocalDate(exchangedOut.exchangeDate);

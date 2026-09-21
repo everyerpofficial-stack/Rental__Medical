@@ -303,6 +303,12 @@ function ReportsPage() {
       }
       if (isNaN(rStart.getTime())) return;
 
+      const rStartDay = new Date(rStart.getFullYear(), rStart.getMonth(), rStart.getDate()).getTime();
+      const takenStartDay = new Date(takenStart.getFullYear(), takenStart.getMonth(), takenStart.getDate()).getTime();
+      const returnEndDay = returnEnd ? new Date(returnEnd.getFullYear(), returnEnd.getMonth(), returnEnd.getDate()).getTime() : Infinity;
+
+      if (rStartDay < takenStartDay || rStartDay > returnEndDay) return;
+
       // Rental end date for this equipment
       let rEnd: Date;
       if (exchangedOut && exchangedOut.exchangeDate) {
@@ -357,7 +363,15 @@ function ReportsPage() {
 
       const rStart = parseLocalDate(r.start || r.startDate);
       const rEnd = parseLocalDate(exc.exchangeDate);
-      if (!isNaN(rStart.getTime()) && !isNaN(rEnd.getTime()) && rStart <= rEnd) {
+      if (isNaN(rStart.getTime()) || isNaN(rEnd.getTime())) return;
+
+      const rStartDay = new Date(rStart.getFullYear(), rStart.getMonth(), rStart.getDate()).getTime();
+      const takenStartDay = new Date(takenStart.getFullYear(), takenStart.getMonth(), takenStart.getDate()).getTime();
+      const returnEndDay = returnEnd ? new Date(returnEnd.getFullYear(), returnEnd.getMonth(), returnEnd.getDate()).getTime() : Infinity;
+
+      if (rStartDay < takenStartDay || rStartDay > returnEndDay) return;
+
+      if (rStart <= rEnd) {
         rawIntervals.push({ start: rStart, end: rEnd > today ? today : rEnd });
       }
     });
