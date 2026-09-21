@@ -98,6 +98,7 @@ const DATE_TYPE_OPTIONS: Record<string, { label: string, value: string }[]> = {
     { label: "Return Date", value: "date" }
   ],
   "Owner Statement": [
+    { label: "Rental Period", value: "rentalPeriod" },
     { label: "Date Taken", value: "start" },
     { label: "Return Date", value: "returnDate" }
   ]
@@ -256,6 +257,8 @@ function ReportsPage() {
       const itemSerStr = item.serial != null ? String(item.serial).trim().toLowerCase() : "";
       if (itemSerStr && serStr && itemSerStr !== "no serial" && itemSerStr !== "—") {
         if (serStr === itemSerStr) return true;
+        const serials = serStr.split(",").map((s: string) => s.trim());
+        if (serials.includes(itemSerStr)) return true;
         if (serStr.includes(itemSerStr) || itemSerStr.includes(serStr)) return true;
       }
 
@@ -294,6 +297,8 @@ function ReportsPage() {
       let rStart: Date;
       if (exchangedIn && exchangedIn.exchangeDate) {
         rStart = parseLocalDate(exchangedIn.exchangeDate);
+      } else if (matchedItem?.itemStartDate || matchedItem?.start) {
+        rStart = parseLocalDate(matchedItem.itemStartDate || matchedItem.start);
       } else {
         rStart = parseLocalDate(r.start || r.startDate);
       }
@@ -310,20 +315,20 @@ function ReportsPage() {
           ret.agreement === r.id &&
           (!Array.isArray(ret.returnedEquipmentIds) || ret.returnedEquipmentIds.includes(item.equipmentId))
         );
-        if (retRecord?.date) {
-          rEnd = parseLocalDate(retRecord.date);
+        if (retRecord?.date || retRecord?.returnDate) {
+          rEnd = parseLocalDate(retRecord.date || retRecord.returnDate);
         } else if (r.returnedDate || r.returnDate) {
           rEnd = parseLocalDate(r.returnedDate || r.returnDate);
         } else if (r.status === "Completed") {
           rEnd = parseLocalDate(r.end || r.endDate);
         } else {
           // Still on rental
-          rEnd = new Date();
+          rEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         }
       }
 
       if (isNaN(rEnd.getTime())) {
-        rEnd = new Date();
+        rEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       }
 
       // Cap at today (cannot calculate future unelapsed rental days)
@@ -398,7 +403,7 @@ function ReportsPage() {
       }
     }
 
-    // 5. Calculate total rented days
+    // 5. Calculate total rented days (inclusive of both start and end days)
     let totalRentedDays = 0;
     for (const m of merged) {
       const dS = new Date(m.start);
@@ -408,18 +413,31 @@ function ReportsPage() {
 
       if (dStartDay <= dEndDay) {
         const diffTime = dEndDay.getTime() - dStartDay.getTime();
-        let days = Math.round(diffTime / (1000 * 60 * 60 * 24));
-        if (days === 0 && dStartDay.getTime() === dEndDay.getTime()) {
-          days = 1;
-        }
+        let days = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
         totalRentedDays += Math.max(0, days);
+      }
+    }
+
+    // Historical return fallback if no rentals were recorded
+    if (rawIntervals.length === 0 && item.historicalDays != null) {
+      if (periodStart || periodEnd) {
+        const retDateMs = returnEnd ? returnEnd.getTime() : takenStart.getTime();
+        const startCap = periodStart ? periodStart.getTime() : 0;
+        const endCap = periodEnd ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate(), 23, 59, 59, 999).getTime() : Infinity;
+        if (retDateMs >= startCap && retDateMs <= endCap) {
+          totalRentedDays = item.historicalDays;
+        }
+      } else {
+        totalRentedDays = item.historicalDays;
       }
     }
 
     const daysUsed = totalRentedDays;
     const dateTaken = formatDateDDMMYYYY(item.start);
     const retDate = isReturned ? formatDateDDMMYYYY(item.returnDate) : "—";
-    const rowTotal = daysUsed * perDayAmount;
+    const rowTotal = item.historicalCost != null && rawIntervals.length === 0 && daysUsed === item.historicalDays
+      ? item.historicalCost
+      : daysUsed * perDayAmount;
 
     return {
       daysUsed,
@@ -629,29 +647,18 @@ function ReportsPage() {
     let dateFiltered = list;
     if (dateType && dateType !== "none" && (startDate || endDate)) {
       if (activeStatement === "Owner Statement") {
-        const pStart = startDate ? parseLocalDate(startDate) : null;
-        const pEnd = endDate ? parseLocalDate(endDate) : null;
-
-        dateFiltered = list.filter(item => {
-          if (!item.start || item.start === "—") {
-            return false;
-          }
-          const rStart = parseLocalDate(item.start);
-          if (isNaN(rStart.getTime())) return false;
-          
-          const isReturned = item.returnDate && item.returnDate !== "—";
-          const rEnd = isReturned ? parseLocalDate(item.returnDate) : new Date();
-
-          if (pEnd) {
-            const pEndCap = new Date(pEnd.getFullYear(), pEnd.getMonth(), pEnd.getDate(), 23, 59, 59);
-            if (rStart > pEndCap) return false;
-          }
-          if (pStart) {
-            const pStartCap = new Date(pStart.getFullYear(), pStart.getMonth(), pStart.getDate(), 0, 0, 0);
-            if (rEnd < pStartCap) return false;
-          }
-          return true;
-        });
+        if (dateType === "returnDate") {
+          dateFiltered = list.filter(item => {
+            if (!item.returnDate || item.returnDate === "—") return false;
+            return isWithinDateRange(item.returnDate, startDate, endDate);
+          });
+        } else {
+          // Both "rentalPeriod" and "start": filter to only include records that have rental calculation amount in the selected period
+          dateFiltered = list.filter(item => {
+            const calc = getOwnerStatementRowCalc(item);
+            return calc.daysUsed > 0 || calc.rowTotal > 0;
+          });
+        }
       } else {
         dateFiltered = list.filter(item => {
           let dateVal = item[dateType];
