@@ -589,6 +589,7 @@ function ReportsPage() {
                 returnDate: retHist.date || "—",
                 equipmentId: item.id,
                 category: item.category,
+                agreementNumber: retHist.agreementNumber || item.agreementNumber || "",
                 perDayAmount: retHist.dailyRate || item.ownerDailyRate || 0,
                 historicalDays: retHist.days,
                 historicalCost: retHist.totalCost,
@@ -601,11 +602,15 @@ function ReportsPage() {
           const isCurrentlyReturned = item.status === "Returned to Owner";
           if (!isCurrentlyReturned) {
             let currentTakenDate = item.purchaseDate || "";
+            let currentAgreementNumber = item.agreementNumber || "";
             if (item.ownerHistory && Array.isArray(item.ownerHistory)) {
               const receives = item.ownerHistory.filter((h: any) => h.action === "received");
               if (receives.length > 0) {
                 const sortedReceives = [...receives].sort((a: any, b: any) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
                 currentTakenDate = sortedReceives[0].date || currentTakenDate;
+                if (sortedReceives[0].agreementNumber) {
+                  currentAgreementNumber = sortedReceives[0].agreementNumber;
+                }
               }
             }
 
@@ -617,6 +622,7 @@ function ReportsPage() {
               returnDate: "—", // Not returned yet: only when it is returned will the date come!
               equipmentId: item.id,
               category: item.category,
+              agreementNumber: currentAgreementNumber,
               perDayAmount: item.ownerDailyRate || 0,
               status: item.status,
             });
@@ -630,6 +636,7 @@ function ReportsPage() {
               returnDate: item.purchaseDate || "—",
               equipmentId: item.id,
               category: item.category,
+              agreementNumber: item.agreementNumber || "",
               perDayAmount: item.ownerDailyRate || 0,
               status: "Returned to Owner",
             });
@@ -721,6 +728,7 @@ function ReportsPage() {
           srNo: index + 1,
           owner: item.owner || "—",
           category: item.category || "—",
+          agreementNumber: item.agreementNumber || "",
           serial: item.serial || "—",
           model: item.model || "—",
           dateTaken: calc.dateTaken,
@@ -741,7 +749,7 @@ function ReportsPage() {
           <tr>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.srNo}</td>
             <td style="border: 0.5pt solid #cbd5e1;">${r.owner}</td>
-            <td style="border: 0.5pt solid #cbd5e1;">${r.category}</td>
+            <td style="border: 0.5pt solid #cbd5e1;">${r.category}${r.agreementNumber ? `<br/><span style="font-size: 8pt; color: #64748b; font-family: monospace;">${r.agreementNumber}</span>` : ""}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.model && r.model !== "Standard" && r.model !== "—" ? `${r.model} - ` : ""}${r.serial}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.dateTaken}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.retDate}</td>
@@ -830,7 +838,7 @@ function ReportsPage() {
           <tr>
             <td style="text-align: center;">${r.srNo}</td>
             <td>${r.owner}</td>
-            <td>${r.category}</td>
+            <td><div>${r.category}</div>${r.agreementNumber ? `<div style="font-size: 9px; color: #64748b; font-family: monospace; margin-top: 2px;">${r.agreementNumber}</div>` : ""}</td>
             <td style="text-align: center;">${r.model && r.model !== "Standard" && r.model !== "—" ? `<div style="font-size: 8.5px; color: #64748b; line-height: 1; margin-bottom: 2px;">${r.model}</div>` : ""}<span style="font-family: monospace; font-size: 11px; font-weight: bold;">${r.serial}</span></td>
             <td style="text-align: center;">${r.dateTaken}</td>
             <td style="text-align: center;">${r.retDate}</td>
@@ -1390,7 +1398,14 @@ function ReportsPage() {
             <TableRow key={index}>
               <TableCell className="sticky left-0 z-10 bg-card group-hover/row:bg-muted/50 text-center font-medium text-muted-foreground">{index + 1}</TableCell>
               <TableCell className="font-semibold text-slate-800">{item.owner || "—"}</TableCell>
-              <TableCell>{item.category || "—"}</TableCell>
+              <TableCell>
+                <div className="font-medium text-slate-800">{item.category || "—"}</div>
+                {item.agreementNumber && (
+                  <span className="text-[11px] font-mono text-muted-foreground block leading-tight mt-0.5">
+                    {item.agreementNumber}
+                  </span>
+                )}
+              </TableCell>
               <TableCell className="text-center font-semibold">
                 {item.model && item.model !== "Standard" && item.model !== "—" && (
                   <span className="text-[11px] text-muted-foreground block font-sans leading-none mb-0.5">{item.model}</span>
@@ -1581,7 +1596,14 @@ function ReportsPage() {
             <div key={index} className="mobile-card-item">
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-[13px] truncate">{item.owner || "—"}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{item.category || "—"}</p>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  <span>{item.category || "—"}</span>
+                  {item.agreementNumber && (
+                    <span className="block text-[9.5px] font-mono text-muted-foreground/80 mt-0.5">
+                      {item.agreementNumber}
+                    </span>
+                  )}
+                </div>
                 <div className="mt-1.5 space-y-0.5">
                   <div className="info-row">
                     {item.model && item.model !== "Standard" && item.model !== "—" ? `${item.model} · ` : ""}

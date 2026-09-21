@@ -5596,22 +5596,10 @@ function RentalsPage() {
                             {items.map((it, idx) => {
                               const strikeItem = it.returned && !isCompleted;
                               return (
-                                <div key={idx} className="flex flex-col gap-0.5">
+                                <div key={idx}>
                                   <span className={strikeItem ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-[12.5px] text-foreground/80 leading-normal font-medium"}>
                                     {it.label}
                                   </span>
-                                  {(() => {
-                                    const eq = it.equipmentId ? equipmentById.get(it.equipmentId) : (it.serial ? equipmentBySerial.get(String(it.serial).trim().toLowerCase()) : null);
-                                    const itemOwner = eq?.owner || it.owner;
-                                    if (canViewOwnerDetails && itemOwner && !isOwnOwner(itemOwner)) {
-                                      return (
-                                        <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 w-fit">
-                                          Owner: {itemOwner}
-                                        </span>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
                                 </div>
                               );
                             })}
