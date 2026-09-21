@@ -141,6 +141,7 @@ function OwnerActionDialog({
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState(getLocalYYYYMMDD());
   const [dailyRate, setDailyRate] = useState(eq.ownerDailyRate?.toString() || "");
+  const [agreementNumber, setAgreementNumber] = useState(eq.agreementNumber || "");
   const [notes, setNotes] = useState("");
 
   // Get previous receive/purchase date if we are doing a return
@@ -174,6 +175,7 @@ function OwnerActionDialog({
     if (open) {
       setDate(getLocalYYYYMMDD());
       setDailyRate(eq.ownerDailyRate?.toString() || "");
+      setAgreementNumber(eq.agreementNumber || "");
       setNotes("");
     }
   }, [open, eq]);
@@ -194,6 +196,7 @@ function OwnerActionDialog({
       action: actionType === "return" ? "returned" : "received",
       dailyRate: rateVal,
       notes: notes.trim(),
+      ...(actionType === "receive" && agreementNumber.trim() ? { agreementNumber: agreementNumber.trim() } : {}),
     };
 
     if (actionType === "return" && calculation) {
@@ -209,6 +212,7 @@ function OwnerActionDialog({
       status: actionType === "return" ? "Returned to Owner" : "Available",
       purchaseDate: actionType === "receive" ? date : eq.purchaseDate,
       ownerDailyRate: actionType === "return" ? (eq.ownerDailyRate || 0) : rateVal,
+      agreementNumber: actionType === "receive" ? (agreementNumber.trim() || eq.agreementNumber || "") : eq.agreementNumber,
       ownerHistory: updatedHistory,
     };
 
@@ -257,6 +261,12 @@ function OwnerActionDialog({
               <span className="text-muted-foreground">Owner:</span>
               <span className="font-semibold text-slate-700">{eq.owner || "Company"}</span>
             </div>
+            {eq.agreementNumber && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Owner Agreement No:</span>
+                <span className="font-mono font-semibold text-slate-700">{eq.agreementNumber}</span>
+              </div>
+            )}
             {actionType === "return" && startDate && (
               <div className="flex justify-between pt-1 border-t border-slate-200/60 mt-1">
                 <span className="text-muted-foreground">Received Date:</span>
@@ -278,19 +288,32 @@ function OwnerActionDialog({
           </div>
 
           {actionType === "receive" && (
-            <div className="space-y-1.5">
-              <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Daily Rate to Owner (₹)
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                value={dailyRate}
-                onChange={(e) => setDailyRate(e.target.value)}
-                placeholder="e.g. 50"
-                className="bg-white border-slate-200 h-10 text-[13px] rounded-lg focus-visible:ring-1 focus-visible:ring-primary/45"
-              />
-            </div>
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Owner Agreement Number
+                </Label>
+                <Input
+                  value={agreementNumber}
+                  onChange={(e) => setAgreementNumber(e.target.value)}
+                  placeholder="e.g. AGR-OWN-101"
+                  className="bg-white border-slate-200 h-10 text-[13px] rounded-lg focus-visible:ring-1 focus-visible:ring-primary/45"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  Daily Rate to Owner (₹)
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={dailyRate}
+                  onChange={(e) => setDailyRate(e.target.value)}
+                  placeholder="e.g. 50"
+                  className="bg-white border-slate-200 h-10 text-[13px] rounded-lg focus-visible:ring-1 focus-visible:ring-primary/45"
+                />
+              </div>
+            </>
           )}
           {actionType === "return" && (
             <div className="space-y-1.5 bg-slate-50/80 p-3 rounded-xl border border-slate-100/60 flex justify-between items-center text-[12.5px]">
@@ -567,7 +590,7 @@ function EquipmentHistorySheet({ eq, open, onClose }: { eq: Equipment | null; op
           : `Received from owner "${eq.owner || "Company"}" and brought into available inventory.`),
         meta: isReturn 
           ? `Payout: ₹${(hist.totalCost || 0).toLocaleString("en-IN")} (${hist.days || 0} days @ ₹${hist.dailyRate || 0}/day)`
-          : `Rate: ₹${(hist.dailyRate || 0).toLocaleString("en-IN")}/day`
+          : `Rate: ₹${(hist.dailyRate || 0).toLocaleString("en-IN")}/day${hist.agreementNumber ? ` • Agr: ${hist.agreementNumber}` : ""}`
       });
     });
   }
@@ -749,6 +772,12 @@ function EquipmentHistorySheet({ eq, open, onClose }: { eq: Equipment | null; op
         <div class="info-label">Serial Number</div>
         <div class="info-value" style="font-family: monospace;">${eq.serial}</div>
       </div>
+      ${eq.agreementNumber ? `
+      <div class="info-item">
+        <div class="info-label">Owner Agreement Number</div>
+        <div class="info-value" style="font-family: monospace;">${eq.agreementNumber}</div>
+      </div>
+      ` : ""}
       <div class="info-item">
         <div class="info-label">Category / Model</div>
         <div class="info-value">${eq.category} (Model: ${eq.model || "—"})</div>
@@ -899,6 +928,14 @@ function EquipmentHistorySheet({ eq, open, onClose }: { eq: Equipment | null; op
                 ₹{(Number(eq.ownerDailyRate) || 0).toLocaleString("en-IN")}/day
               </p>
             </div>
+            {eq.agreementNumber && (
+              <div className="space-y-0.5 col-span-2 pt-2 border-t border-slate-100">
+                <span className="text-slate-400 text-[11px]">Owner Agreement Number</span>
+                <p className="font-mono font-semibold text-slate-700">
+                  {eq.agreementNumber}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1039,6 +1076,7 @@ function EquipmentPage() {
       String(e.serial || "").toLowerCase().includes(q) ||
       String(e.model || "").toLowerCase().includes(q) ||
       String(e.owner || "").toLowerCase().includes(q) ||
+      String(e.agreementNumber || "").toLowerCase().includes(q) ||
       (activeCustomer && (
         String(activeCustomer.name || "").toLowerCase().includes(q) ||
         String(activeCustomer.phone || "").toLowerCase().includes(q) ||
@@ -1187,7 +1225,7 @@ function EquipmentPage() {
                   </div>
                   {(item as any).agreementNumber && (
                     <div className="flex justify-between border-b border-border/40 pb-1.5">
-                      <span className="text-muted-foreground">Agreement No.</span>
+                      <span className="text-muted-foreground">Owner Agreement No.</span>
                       <span className="font-mono font-medium text-foreground">{(item as any).agreementNumber}</span>
                     </div>
                   )}

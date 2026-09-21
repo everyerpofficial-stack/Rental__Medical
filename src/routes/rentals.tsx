@@ -5140,6 +5140,8 @@ function RentalsPage() {
   const [visibleCount, setVisibleCount] = useState(RENTALS_PAGE_SIZE);
   const [rentalsList, setRentalsList] = useState(() => getRentals());
 
+  const [ownerFilter, setOwnerFilter] = useState("all-owners");
+
   const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
   const isStaff = userRole === "Staff";
   const isAccountant = userRole === "Accountant";
@@ -5147,6 +5149,7 @@ function RentalsPage() {
   const canEdit = isAdmin || isAccountant;
   const canCancel = isAdmin;
   const canApprove = isAdmin;
+  const canViewOwnerDetails = !isStaff && !isAccountant;
 
   const refresh = () => setRentalsList(getRentals());
 
@@ -5175,6 +5178,59 @@ function RentalsPage() {
   const paymentsForDues = useMemo(() => getPayments(), [dbVersion]);
   const returnsList = useMemo(() => getReturns(), [dbVersion]);
   const equipmentMasterList = useMemo(() => getEquipment(), [dbVersion]);
+  const ownersList = useMemo(() => getOwners(), [dbVersion]);
+
+  const equipmentById = useMemo(
+    () => new Map<string, any>(equipmentMasterList.map((e: any) => [e.id, e])),
+    [equipmentMasterList]
+  );
+  const equipmentBySerial = useMemo(
+    () => new Map<string, any>(equipmentMasterList.filter((e: any) => e.serial).map((e: any) => [String(e.serial).trim().toLowerCase(), e])),
+    [equipmentMasterList]
+  );
+
+  const activeOwners = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of equipmentMasterList) {
+      if (e.owner) set.add(e.owner);
+    }
+    for (const o of ownersList) {
+      if (o.name) set.add(o.name);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [equipmentMasterList, ownersList]);
+
+  const getRentalOwners = useCallback((r: any): string[] => {
+    const owners = new Set<string>();
+    if (r.owner) {
+      owners.add(String(r.owner).trim());
+    }
+    if (Array.isArray(r.equipmentItems) && r.equipmentItems.length > 0) {
+      for (const item of r.equipmentItems) {
+        if (item.owner) owners.add(String(item.owner).trim());
+        if (item.equipmentId) {
+          const eq = equipmentById.get(item.equipmentId);
+          if (eq?.owner) owners.add(String(eq.owner).trim());
+        }
+        if (item.serial) {
+          const eq = equipmentBySerial.get(String(item.serial).trim().toLowerCase());
+          if (eq?.owner) owners.add(String(eq.owner).trim());
+        }
+      }
+    }
+    if (r.equipmentId) {
+      const ids = String(r.equipmentId).split(",").map((s: string) => s.trim()).filter(Boolean);
+      for (const id of ids) {
+        const eq = equipmentById.get(id);
+        if (eq?.owner) owners.add(String(eq.owner).trim());
+      }
+    }
+    if (r.serial) {
+      const eq = equipmentBySerial.get(String(r.serial).trim().toLowerCase());
+      if (eq?.owner) owners.add(String(eq.owner).trim());
+    }
+    return Array.from(owners);
+  }, [equipmentById, equipmentBySerial]);
 
   /** ITEM-16: real unpaid balance, used by the "Pending Dues" quick filter and
    *  by the Overdue badge - the stored status label alone can be stale. */
@@ -5240,6 +5296,14 @@ function RentalsPage() {
           : statusLower === targetFilter);
       if (!matchesStatus) return false;
 
+      if (ownerFilter !== "all-owners") {
+        const rOwners = getRentalOwners(r);
+        const matchesOwner = rOwners.some(
+          (o) => o.toLowerCase() === ownerFilter.toLowerCase()
+        );
+        if (!matchesOwner) return false;
+      }
+
       // ITEM-16 quick filters
       if (quickFilter === "active") {
         return r.status === "Active" || r.status === "Overdue";
@@ -5271,11 +5335,11 @@ function RentalsPage() {
       if (aValid !== bValid) return aValid ? -1 : 1;
       return extractIdNumber(b.id) - extractIdNumber(a.id);
     });
-  }, [rentalsList, debouncedSearch, statusFilter, quickFilter, customersById, outstandingByRental]);
+  }, [rentalsList, debouncedSearch, statusFilter, quickFilter, ownerFilter, customersById, outstandingByRental, getRentalOwners]);
 
   useEffect(() => {
     setVisibleCount(RENTALS_PAGE_SIZE);
-  }, [debouncedSearch, statusFilter, quickFilter]);
+  }, [debouncedSearch, statusFilter, quickFilter, ownerFilter]);
 
   const visibleRentals = useMemo(
     () => filteredRentals.slice(0, visibleCount),
@@ -5386,8 +5450,27 @@ function RentalsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            {canViewOwnerDetails && (
+              <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+                <SelectTrigger className="w-full sm:w-[180px] md:w-[200px] h-9 text-[12px] bg-card shrink-0">
+                  <SelectValue placeholder="All Owners" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all-owners">All Owners</SelectItem>
+                  {activeOwners.map((o) => {
+                    const ownerRecord = ownersList.find((ow) => ow.name.toLowerCase() === o.toLowerCase());
+                    const displayLabel = ownerRecord?.ownerName ? `${o} (${ownerRecord.ownerName})` : o;
+                    return (
+                      <SelectItem key={o} value={o}>
+                        {displayLabel}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[150px] h-9 text-[12px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px] h-9 text-[12px] bg-card shrink-0"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
@@ -5513,10 +5596,22 @@ function RentalsPage() {
                             {items.map((it, idx) => {
                               const strikeItem = it.returned && !isCompleted;
                               return (
-                                <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                <div key={idx} className="flex flex-col gap-0.5">
                                   <span className={strikeItem ? "line-through text-muted-foreground/60 text-[12px] font-medium" : "text-[12.5px] text-foreground/80 leading-normal font-medium"}>
                                     {it.label}
                                   </span>
+                                  {(() => {
+                                    const eq = it.equipmentId ? equipmentById.get(it.equipmentId) : (it.serial ? equipmentBySerial.get(String(it.serial).trim().toLowerCase()) : null);
+                                    const itemOwner = eq?.owner || it.owner;
+                                    if (canViewOwnerDetails && itemOwner && !isOwnOwner(itemOwner)) {
+                                      return (
+                                        <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 w-fit">
+                                          Owner: {itemOwner}
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
                                 </div>
                               );
                             })}

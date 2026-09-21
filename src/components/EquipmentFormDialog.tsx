@@ -78,6 +78,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
   const [purchaseCost, setPurchaseCost] = useState(eq?.purchaseCost?.toString() || "");
   const [status, setStatus] = useState(eq?.status || "Available");
   const [ownerDailyRate, setOwnerDailyRate] = useState(eq?.ownerDailyRate?.toString() || "");
+  const [agreementNumber, setAgreementNumber] = useState(eq?.agreementNumber || "");
 
   // New Owner Quick-Add States
   const [isAddingNewOwner, setIsAddingNewOwner] = useState(false);
@@ -134,6 +135,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       setPurchaseCost(eq?.purchaseCost?.toString() || "");
       setStatus(eq?.status || "Available");
       setOwnerDailyRate(eq?.ownerDailyRate?.toString() || "");
+      setAgreementNumber(eq?.agreementNumber || "");
 
       // Reset new owner states
       setIsAddingNewOwner(false);
@@ -244,6 +246,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
       purchaseDate: isOwn ? "" : purchaseDate,
       purchaseCost: isOwn ? 0 : (parseFloat(purchaseCost) || 0),
       ownerDailyRate: isOwn ? 0 : (parseFloat(ownerDailyRate) || 0),
+      agreementNumber: isOwn ? "" : agreementNumber.trim(),
       ownerHistory: eq?.ownerHistory || [],
     } as any;
     saveEquipment(savedEq);
@@ -412,6 +415,7 @@ export function EquipmentFormDialog({ title, eq, trigger, onSave }: { title: str
             </div>
             {!isOwnOwner(isAddingNewOwner ? newOwnerOrg : owner) && (
               <>
+                <Field label="Owner Agreement Number" placeholder="e.g. AGR-OWN-101" value={agreementNumber} onChange={(e) => setAgreementNumber(e.target.value)} />
                 <Field label="Purchase Date"    type="date"   value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} />
                 <Field label="Daily Rate to Owner (₹)" placeholder="e.g. 50" value={ownerDailyRate} onChange={(e) => setOwnerDailyRate(e.target.value)} />
               </>

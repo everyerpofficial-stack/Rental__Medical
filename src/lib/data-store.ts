@@ -446,6 +446,7 @@ export interface RentalEquipmentDetailItem {
   name: string;
   model?: string;
   serial?: string;
+  owner?: string;
   returned: boolean;
   returnedDate?: string;
 }
@@ -483,12 +484,14 @@ export function getRentalEquipmentDetailedItems(
       serial: rental.serial,
     }, includeSerial);
 
+    const singleEq = rental.equipmentId ? byId.get(rental.equipmentId) : null;
     return [{
       equipmentId: rental.equipmentId || "",
       label: label === "Equipment" && !rental.equipment ? "Medical Equipment" : label,
       name: rental.equipment || "Medical Equipment",
       model: rental.model,
       serial: rental.serial,
+      owner: singleEq?.owner || rental.owner,
       returned: isReturned,
       returnedDate: retDateRaw ? String(retDateRaw) : undefined,
     }];
@@ -525,6 +528,7 @@ export function getRentalEquipmentDetailedItems(
       name,
       model,
       serial,
+      owner: eq?.owner || item.owner,
       returned: isReturned,
       returnedDate: retDateRaw ? String(retDateRaw) : undefined,
     };

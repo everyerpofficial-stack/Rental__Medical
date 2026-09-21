@@ -959,7 +959,7 @@ function ReportsPage() {
         ]);
         break;
       case "Equipment Statement":
-        headers = ["Equipment ID", "Category", "Serial", "Model", "Manufacturer", "Owner", "Status", "Purchase Date", "Daily Rate to Owner"];
+        headers = ["Equipment ID", "Category", "Serial", "Model", "Manufacturer", "Owner", "Owner Agreement No.", "Status", "Purchase Date", "Daily Rate to Owner"];
         rows = filteredData.map(e => [
           e.id,
           e.category,
@@ -967,6 +967,7 @@ function ReportsPage() {
           e.model,
           e.manufacturer,
           e.owner,
+          e.agreementNumber || "—",
           e.status,
           formatDateDDMMYYYY(e.purchaseDate),
           (e.ownerDailyRate || 0).toString()
@@ -1162,6 +1163,7 @@ function ReportsPage() {
             <TableHead>Model</TableHead>
             <TableHead>Manufacturer</TableHead>
             <TableHead>Owner</TableHead>
+            <TableHead>Owner Agreement No.</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Purchase Date</TableHead>
             <TableHead className="text-right">Daily Rate to Owner</TableHead>
@@ -1312,6 +1314,7 @@ function ReportsPage() {
               <TableCell>{item.model}</TableCell>
               <TableCell>{item.manufacturer}</TableCell>
               <TableCell>{item.owner}</TableCell>
+              <TableCell className="font-mono text-muted-foreground">{item.agreementNumber || "—"}</TableCell>
               <TableCell>
                 <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold border ${
                   item.status === "Available" ? "bg-success/10 text-success border-success/20" :
@@ -1506,6 +1509,9 @@ function ReportsPage() {
                 <div className="mt-1.5 space-y-0.5">
                   <div className="info-row">{item.model} · {item.manufacturer}</div>
                   <div className="info-row">Owner: {item.owner}</div>
+                  {item.agreementNumber && (
+                    <div className="info-row">Owner Agr: <span className="font-mono">{item.agreementNumber}</span></div>
+                  )}
                   <div className="info-row">Purchased: {formatDateDDMMYYYY(item.purchaseDate)}</div>
                   <div className="info-row">Daily Rate: ₹{(item.ownerDailyRate || 0).toLocaleString("en-IN")}</div>
                 </div>
