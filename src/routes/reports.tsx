@@ -248,18 +248,17 @@ function ReportsPage() {
     const matchesEquipment = (targetEqId?: any, targetSerial?: any) => {
       const eqIdStr = targetEqId != null ? String(targetEqId).trim().toLowerCase() : "";
       const itemEqIdStr = item.equipmentId != null ? String(item.equipmentId).trim().toLowerCase() : "";
-      if (itemEqIdStr && eqIdStr) {
-        const ids = eqIdStr.split(",").map((s: string) => s.trim());
+      if (itemEqIdStr && eqIdStr && itemEqIdStr !== "—" && eqIdStr !== "—") {
+        const ids = eqIdStr.split(/[,;/]+/).map((s: string) => s.trim().toLowerCase());
         if (ids.includes(itemEqIdStr)) return true;
       }
 
       const serStr = targetSerial != null ? String(targetSerial).trim().toLowerCase() : "";
       const itemSerStr = item.serial != null ? String(item.serial).trim().toLowerCase() : "";
-      if (itemSerStr && serStr && itemSerStr !== "no serial" && itemSerStr !== "—") {
+      if (itemSerStr && serStr && itemSerStr !== "no serial" && itemSerStr !== "—" && serStr !== "no serial" && serStr !== "—") {
         if (serStr === itemSerStr) return true;
-        const serials = serStr.split(",").map((s: string) => s.trim());
+        const serials = serStr.split(/[,;/]+/).map((s: string) => s.trim().toLowerCase());
         if (serials.includes(itemSerStr)) return true;
-        if (serStr.includes(itemSerStr) || itemSerStr.includes(serStr)) return true;
       }
 
       return false;
@@ -297,8 +296,8 @@ function ReportsPage() {
       let rStart: Date;
       if (exchangedIn && exchangedIn.exchangeDate) {
         rStart = parseLocalDate(exchangedIn.exchangeDate);
-      } else if (matchedItem?.itemStartDate || matchedItem?.start) {
-        rStart = parseLocalDate(matchedItem.itemStartDate || matchedItem.start);
+      } else if (matchedItem?.startDate || matchedItem?.itemStartDate || matchedItem?.start) {
+        rStart = parseLocalDate(matchedItem.startDate || matchedItem.itemStartDate || matchedItem.start);
       } else {
         rStart = parseLocalDate(r.start || r.startDate);
       }
@@ -313,7 +312,7 @@ function ReportsPage() {
       } else {
         const retRecord = returnsList.find((ret: any) =>
           ret.agreement === r.id &&
-          (!Array.isArray(ret.returnedEquipmentIds) || ret.returnedEquipmentIds.includes(item.equipmentId))
+          (!Array.isArray(ret.returnedEquipmentIds) || ret.returnedEquipmentIds.some((id: any) => String(id).trim().toLowerCase() === String(item.equipmentId).trim().toLowerCase()))
         );
         if (retRecord?.date || retRecord?.returnDate) {
           rEnd = parseLocalDate(retRecord.date || retRecord.returnDate);
