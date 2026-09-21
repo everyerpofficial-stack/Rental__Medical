@@ -417,26 +417,10 @@ function ReportsPage() {
       }
     }
 
-    // Historical return fallback if no rentals were recorded
-    if (rawIntervals.length === 0 && item.historicalDays != null) {
-      if (periodStart || periodEnd) {
-        const retDateMs = returnEnd ? returnEnd.getTime() : takenStart.getTime();
-        const startCap = periodStart ? periodStart.getTime() : 0;
-        const endCap = periodEnd ? new Date(periodEnd.getFullYear(), periodEnd.getMonth(), periodEnd.getDate(), 23, 59, 59, 999).getTime() : Infinity;
-        if (retDateMs >= startCap && retDateMs <= endCap) {
-          totalRentedDays = item.historicalDays;
-        }
-      } else {
-        totalRentedDays = item.historicalDays;
-      }
-    }
-
     const daysUsed = totalRentedDays;
     const dateTaken = formatDateDDMMYYYY(item.start);
     const retDate = isReturned ? formatDateDDMMYYYY(item.returnDate) : "—";
-    const rowTotal = item.historicalCost != null && rawIntervals.length === 0 && daysUsed === item.historicalDays
-      ? item.historicalCost
-      : daysUsed * perDayAmount;
+    const rowTotal = daysUsed * perDayAmount;
 
     return {
       daysUsed,
@@ -749,7 +733,7 @@ function ReportsPage() {
           <tr>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.srNo}</td>
             <td style="border: 0.5pt solid #cbd5e1;">${r.owner}</td>
-            <td style="border: 0.5pt solid #cbd5e1;">${r.category}${r.agreementNumber ? `<br/><span style="font-size: 8pt; color: #64748b; font-family: monospace;">${r.agreementNumber}</span>` : ""}</td>
+            <td style="border: 0.5pt solid #cbd5e1;">${r.category}${r.agreementNumber ? `<br/><span style="font-size: 8pt; font-weight: bold; font-family: monospace; color: #0f172a;">Own AgrID: ${r.agreementNumber}</span>` : ""}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.model && r.model !== "Standard" && r.model !== "—" ? `${r.model} - ` : ""}${r.serial}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.dateTaken}</td>
             <td style="text-align: center; border: 0.5pt solid #cbd5e1;">${r.retDate}</td>
@@ -838,7 +822,7 @@ function ReportsPage() {
           <tr>
             <td style="text-align: center;">${r.srNo}</td>
             <td>${r.owner}</td>
-            <td><div>${r.category}</div>${r.agreementNumber ? `<div style="font-size: 9px; color: #64748b; font-family: monospace; margin-top: 2px;">${r.agreementNumber}</div>` : ""}</td>
+            <td><div>${r.category}</div>${r.agreementNumber ? `<div style="font-size: 9.5px; font-weight: bold; font-family: monospace; color: #0f172a; margin-top: 2px;">Own AgrID: ${r.agreementNumber}</div>` : ""}</td>
             <td style="text-align: center;">${r.model && r.model !== "Standard" && r.model !== "—" ? `<div style="font-size: 8.5px; color: #64748b; line-height: 1; margin-bottom: 2px;">${r.model}</div>` : ""}<span style="font-family: monospace; font-size: 11px; font-weight: bold;">${r.serial}</span></td>
             <td style="text-align: center;">${r.dateTaken}</td>
             <td style="text-align: center;">${r.retDate}</td>
@@ -1401,9 +1385,9 @@ function ReportsPage() {
               <TableCell>
                 <div className="font-medium text-slate-800">{item.category || "—"}</div>
                 {item.agreementNumber && (
-                  <span className="text-[11px] font-mono text-muted-foreground block leading-tight mt-0.5">
-                    {item.agreementNumber}
-                  </span>
+                  <div className="text-[11px] font-mono font-bold text-slate-900 block leading-tight mt-0.5">
+                    Own AgrID: {item.agreementNumber}
+                  </div>
                 )}
               </TableCell>
               <TableCell className="text-center font-semibold">
@@ -1599,8 +1583,8 @@ function ReportsPage() {
                 <div className="text-[10px] text-muted-foreground mt-0.5">
                   <span>{item.category || "—"}</span>
                   {item.agreementNumber && (
-                    <span className="block text-[9.5px] font-mono text-muted-foreground/80 mt-0.5">
-                      {item.agreementNumber}
+                    <span className="block text-[9.5px] font-mono font-bold text-slate-900 mt-0.5">
+                      Own AgrID: {item.agreementNumber}
                     </span>
                   )}
                 </div>

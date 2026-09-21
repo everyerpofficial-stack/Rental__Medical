@@ -157,18 +157,123 @@ function OwnerActionDialog({
     return eq.purchaseDate || getLocalYYYYMMDD();
   }, [eq, actionType, open]);
 
-  // Calculate days and cost
+  // Calculate days and cost based on actual rentals
   const calculation = useMemo(() => {
     if (actionType !== "return" || !startDate || !date) return null;
     const startD = parseLocalDate(startDate);
     const endD = parseLocalDate(date);
     if (isNaN(startD.getTime()) || isNaN(endD.getTime())) return null;
-    const diff = endD.getTime() - startD.getTime();
-    const days = Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+
+    const rentalsList = getRentals();
+    const returnsList = getReturns();
+    const exchangesList = getExchanges();
+
+    const matchesEq = (targetEqId?: any, targetSerial?: any) => {
+      const eqIdStr = targetEqId != null ? String(targetEqId).trim().toLowerCase() : "";
+      const thisEqId = eq.id ? String(eq.id).trim().toLowerCase() : "";
+      if (thisEqId && eqIdStr) {
+        const ids = eqIdStr.split(/[,;/]+/).map((s: string) => s.trim().toLowerCase());
+        if (ids.includes(thisEqId)) return true;
+      }
+
+      const serStr = targetSerial != null ? String(targetSerial).trim().toLowerCase() : "";
+      const thisSer = eq.serial ? String(eq.serial).trim().toLowerCase() : "";
+      if (thisSer && serStr && thisSer !== "no serial" && thisSer !== "—") {
+        if (serStr === thisSer) return true;
+        const serials = serStr.split(/[,;/]+/).map((s: string) => s.trim().toLowerCase());
+        if (serials.includes(thisSer)) return true;
+      }
+
+      return false;
+    };
+
+    const rawIntervals: { start: Date; end: Date }[] = [];
+    rentalsList.forEach((r: any) => {
+      if (r.status === "Cancelled" || r.status === "Pending Approval") return;
+      const directMatch = matchesEq(r.equipmentId, r.serial);
+      const matchedItem = Array.isArray(r.equipmentItems)
+        ? r.equipmentItems.find((ei: any) => matchesEq(ei.equipmentId, ei.serial))
+        : null;
+      const exchangedIn = exchangesList.find((exc: any) =>
+        exc.status === "Completed" && exc.agreementId === r.id && matchesEq(exc.newEquipmentId, exc.newEquipmentSerial)
+      );
+      const exchangedOut = exchangesList.find((exc: any) =>
+        exc.status === "Completed" && exc.agreementId === r.id && matchesEq(exc.currentEquipmentId, exc.currentEquipmentSerial)
+      );
+      if (!directMatch && !matchedItem && !exchangedIn && !exchangedOut) return;
+
+      let rStart: Date;
+      if (exchangedIn && exchangedIn.exchangeDate) {
+        rStart = parseLocalDate(exchangedIn.exchangeDate);
+      } else if (matchedItem?.startDate || matchedItem?.itemStartDate || matchedItem?.start) {
+        rStart = parseLocalDate(matchedItem.startDate || matchedItem.itemStartDate || matchedItem.start);
+      } else {
+        rStart = parseLocalDate(r.start || r.startDate);
+      }
+      if (isNaN(rStart.getTime())) return;
+
+      let rEnd: Date;
+      if (exchangedOut && exchangedOut.exchangeDate) {
+        rEnd = parseLocalDate(exchangedOut.exchangeDate);
+      } else if (matchedItem?.returned && (matchedItem.returnedDate || matchedItem.returnDate)) {
+        rEnd = parseLocalDate(matchedItem.returnedDate || matchedItem.returnDate);
+      } else {
+        const retRecord = returnsList.find((ret: any) =>
+          ret.agreement === r.id &&
+          (!Array.isArray(ret.returnedEquipmentIds) || ret.returnedEquipmentIds.some((id: any) => String(id).trim().toLowerCase() === String(eq.id).trim().toLowerCase()))
+        );
+        if (retRecord?.date || retRecord?.returnDate) {
+          rEnd = parseLocalDate(retRecord.date || retRecord.returnDate);
+        } else if (r.returnedDate || r.returnDate) {
+          rEnd = parseLocalDate(r.returnedDate || r.returnDate);
+        } else if (r.status === "Completed") {
+          rEnd = parseLocalDate(r.end || r.endDate);
+        } else {
+          rEnd = endD;
+        }
+      }
+      if (isNaN(rEnd.getTime())) rEnd = endD;
+      if (rStart <= rEnd) {
+        rawIntervals.push({ start: rStart, end: rEnd });
+      }
+    });
+
+    const validIntervals: { start: number; end: number }[] = [];
+    rawIntervals.forEach(iv => {
+      const effStart = Math.max(iv.start.getTime(), startD.getTime());
+      const effEnd = Math.min(iv.end.getTime(), endD.getTime());
+      if (effStart <= effEnd) {
+        validIntervals.push({ start: effStart, end: effEnd });
+      }
+    });
+
+    validIntervals.sort((a, b) => a.start - b.start);
+    const merged: { start: number; end: number }[] = [];
+    for (const iv of validIntervals) {
+      if (merged.length === 0) merged.push({ ...iv });
+      else {
+        const prev = merged[merged.length - 1];
+        if (iv.start <= prev.end) prev.end = Math.max(prev.end, iv.end);
+        else merged.push({ ...iv });
+      }
+    }
+
+    let rentedDays = 0;
+    for (const m of merged) {
+      const dS = new Date(m.start);
+      const dE = new Date(m.end);
+      const dStartDay = new Date(dS.getFullYear(), dS.getMonth(), dS.getDate());
+      const dEndDay = new Date(dE.getFullYear(), dE.getMonth(), dE.getDate());
+      if (dStartDay <= dEndDay) {
+        const diffTime = dEndDay.getTime() - dStartDay.getTime();
+        rentedDays += Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      }
+    }
+
     const rate = eq.ownerDailyRate || 0;
-    const totalCost = days * rate;
-    return { days, totalCost };
-  }, [startDate, date, eq.ownerDailyRate, actionType]);
+    const totalCost = rentedDays * rate;
+    return { days: rentedDays, totalCost };
+  }, [startDate, date, eq, actionType]);
 
   // Reset dialog state when opened
   useEffect(() => {
