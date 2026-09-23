@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -821,6 +821,22 @@ function PayReturnDueDialog({
   );
 }
 
+function parseEquipmentIds(val: any): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map((s) => String(s).trim()).filter(Boolean);
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.map((s) => String(s).trim()).filter(Boolean);
+      } catch {}
+    }
+    return trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 // Compact single-line Final Settlement summary for the mobile return card —
 // mirrors the same status logic used in the desktop table's "Final Settlement" column.
 function getReturnSettlementDisplay(ret: any): { text: string; className: string } {
@@ -908,9 +924,11 @@ function ReturnsPage() {
   const [mobilePayDueReturn, setMobilePayDueReturn] = useState<any>(null);
 
   const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
-  const isStaff = userRole === "Staff";
-  const isAdmin = userRole === "Admin";
-  const isAccountant = userRole === "Accountant";
+  const roleNormalized = String(userRole || "").toLowerCase().trim();
+  const isStaff = roleNormalized === "staff";
+  const isAdmin = roleNormalized === "admin";
+  const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account";
+  const canFilterByOwner = !isStaff;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -969,34 +987,29 @@ function ReturnsPage() {
   const [historyCategoryFilter, setHistoryCategoryFilter] = useState("all-categories");
   const [showReturnDuesOnly, setShowReturnDuesOnly] = useState(false);
 
-  const activeOwners = Array.from(new Set(eqInventory.map((e) => e.owner).filter(Boolean)));
-  const activeCategories = Array.from(new Set(eqInventory.map((e) => e.category).filter(Boolean)));
+  const equipmentById = useMemo(
+    () => new Map<string, any>(eqInventory.map((e: any) => [e.id, e])),
+    [eqInventory]
+  );
+  const equipmentBySerial = useMemo(
+    () => new Map<string, any>(eqInventory.filter((e: any) => e.serial).map((e: any) => [String(e.serial).trim().toLowerCase(), e])),
+    [eqInventory]
+  );
 
-  const getReturnOwnerAndCategory = (ret: typeof mockReturns[number]) => {
-    const eqIds = ret.returnedEquipmentIds || [];
-    if (eqIds.length > 0) {
-      const firstEq = eqInventory.find(e => e.id === eqIds[0]);
-      if (firstEq) {
-        const ownerObj = owners.find(o => o.name.toLowerCase() === firstEq.owner?.toLowerCase());
-        return {
-          owner: ownerObj?.ownerName || firstEq.owner || "In-House",
-          category: firstEq.category || "Other"
-        };
-      }
+  const activeOwners = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of eqInventory) {
+      if (e.owner) set.add(String(e.owner).trim());
     }
-    const rental = rentals.find(r => r.id === ret.agreement);
-    if (rental) {
-      const eq = eqInventory.find(e => e.id === rental.equipmentId);
-      if (eq) {
-        const ownerObj = owners.find(o => o.name.toLowerCase() === eq.owner?.toLowerCase());
-        return {
-          owner: ownerObj?.ownerName || eq.owner || "In-House",
-          category: eq.category || "Other"
-        };
-      }
+    for (const o of owners) {
+      if (o.name) set.add(String(o.name).trim());
     }
-    return { owner: "Unknown", category: "Unknown" };
-  };
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [eqInventory, owners]);
+
+  const activeCategories = useMemo(() => {
+    return Array.from(new Set(eqInventory.map((e) => e.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  }, [eqInventory]);
 
   // ITEM-9: belt-and-braces - never render the same return record twice even if
   // storage or a Google Sheets pull hands us a repeated id.
@@ -1039,12 +1052,157 @@ function ReturnsPage() {
   }, [customers]);
   const customersById = useMemo(() => new Map<string, any>(customers.map((c: any) => [c.id, c])), [customers]);
 
+  const getReturnOwners = useCallback((ret: any): string[] => {
+    const ownerSet = new Set<string>();
+
+    const addOwner = (raw?: string) => {
+      if (!raw) return;
+      const str = String(raw).trim();
+      if (!str) return;
+      ownerSet.add(str);
+      const strLower = str.toLowerCase();
+      const match = owners.find(
+        (o) =>
+          o.name.toLowerCase() === strLower ||
+          (o.ownerName && o.ownerName.toLowerCase() === strLower) ||
+          o.id.toLowerCase() === strLower
+      );
+      if (match) {
+        if (match.name) ownerSet.add(match.name.trim());
+        if (match.ownerName) ownerSet.add(match.ownerName.trim());
+      }
+    };
+
+    if (ret.owner) addOwner(ret.owner);
+
+    const eqIds = parseEquipmentIds(ret.returnedEquipmentIds);
+    for (const id of eqIds) {
+      const eq = equipmentById.get(id);
+      if (eq?.owner) addOwner(eq.owner);
+    }
+
+    const rental = rentalsById.get(ret.agreement);
+    if (rental) {
+      if (rental.owner) addOwner(rental.owner);
+      if (Array.isArray(rental.equipmentItems)) {
+        for (const item of rental.equipmentItems) {
+          if (item.owner) addOwner(item.owner);
+          if (item.equipmentId) {
+            const eq = equipmentById.get(item.equipmentId);
+            if (eq?.owner) addOwner(eq.owner);
+          }
+          if (item.serial) {
+            const eq = equipmentBySerial.get(String(item.serial).trim().toLowerCase());
+            if (eq?.owner) addOwner(eq.owner);
+          }
+        }
+      }
+      if (rental.equipmentId) {
+        const ids = String(rental.equipmentId).split(",").map((s: string) => s.trim()).filter(Boolean);
+        for (const id of ids) {
+          const eq = equipmentById.get(id);
+          if (eq?.owner) addOwner(eq.owner);
+        }
+      }
+      if (rental.serial) {
+        const eq = equipmentBySerial.get(String(rental.serial).trim().toLowerCase());
+        if (eq?.owner) addOwner(eq.owner);
+      }
+    }
+
+    // Fallback: match by ret.equipment text if no owner found yet
+    if (ownerSet.size === 0 && ret.equipment) {
+      const eqStr = String(ret.equipment).toLowerCase();
+      const matchedEq = eqInventory.find((e) => {
+        const name = (e.name || "").toLowerCase();
+        const model = (e.model || "").toLowerCase();
+        const serial = (e.serial || "").toLowerCase();
+        return (name && eqStr.includes(name)) || (model && eqStr.includes(model)) || (serial && eqStr.includes(serial));
+      });
+      if (matchedEq?.owner) addOwner(matchedEq.owner);
+    }
+
+    return Array.from(ownerSet);
+  }, [equipmentById, equipmentBySerial, eqInventory, owners, rentalsById]);
+
+  const getReturnOwnerAndCategory = useCallback((ret: typeof mockReturns[number]) => {
+    const eqIds = parseEquipmentIds(ret.returnedEquipmentIds);
+    let foundEq: any = null;
+    for (const id of eqIds) {
+      const eq = equipmentById.get(id);
+      if (eq) {
+        foundEq = eq;
+        break;
+      }
+    }
+
+    const rental = rentalsById.get(ret.agreement);
+    if (!foundEq && rental) {
+      if (Array.isArray(rental.equipmentItems)) {
+        for (const item of rental.equipmentItems) {
+          if (item.equipmentId) {
+            const eq = equipmentById.get(item.equipmentId);
+            if (eq) { foundEq = eq; break; }
+          }
+        }
+      }
+      if (!foundEq && rental.equipmentId) {
+        const ids = String(rental.equipmentId).split(",").map((s: string) => s.trim()).filter(Boolean);
+        for (const id of ids) {
+          const eq = equipmentById.get(id);
+          if (eq) { foundEq = eq; break; }
+        }
+      }
+    }
+
+    if (!foundEq && ret.equipment) {
+      const eqStr = String(ret.equipment).toLowerCase();
+      foundEq = eqInventory.find((e) => {
+        const name = (e.name || "").toLowerCase();
+        const model = (e.model || "").toLowerCase();
+        return (name && eqStr.includes(name)) || (model && eqStr.includes(model));
+      });
+    }
+
+    if (foundEq) {
+      const ownerObj = owners.find(
+        (o) =>
+          o.name.toLowerCase() === String(foundEq.owner || "").toLowerCase() ||
+          (o.ownerName && o.ownerName.toLowerCase() === String(foundEq.owner || "").toLowerCase())
+      );
+      return {
+        owner: ownerObj?.name || foundEq.owner || "In-House",
+        category: foundEq.category || "Other",
+      };
+    }
+
+    return { owner: "Unknown", category: "Unknown" };
+  }, [equipmentById, eqInventory, owners, rentalsById]);
+
   const filteredReturns = useMemo(() => sortLatestFirst(
     uniqueReturns.filter((ret) => {
       const info = getReturnOwnerAndCategory(ret);
-      const matchesOwner = historyOwnerFilter === "all-owners" || info.owner === historyOwnerFilter;
       const matchesCategory = historyCategoryFilter === "all-categories" || info.category === historyCategoryFilter;
       
+      let matchesOwner = true;
+      if (canFilterByOwner && historyOwnerFilter !== "all-owners") {
+        const selectedOwnerRecord = owners.find(
+          (ow) =>
+            ow.name.toLowerCase() === historyOwnerFilter.toLowerCase() ||
+            (ow.ownerName && ow.ownerName.toLowerCase() === historyOwnerFilter.toLowerCase())
+        );
+        const filterAliases = new Set<string>([historyOwnerFilter.toLowerCase()]);
+        if (selectedOwnerRecord) {
+          if (selectedOwnerRecord.name) filterAliases.add(selectedOwnerRecord.name.toLowerCase());
+          if (selectedOwnerRecord.ownerName) filterAliases.add(selectedOwnerRecord.ownerName.toLowerCase());
+          if (selectedOwnerRecord.id) filterAliases.add(selectedOwnerRecord.id.toLowerCase());
+        }
+        const rOwners = getReturnOwners(ret);
+        matchesOwner = rOwners.some((o) => filterAliases.has(o.toLowerCase()));
+      }
+      if (!matchesOwner) return false;
+      if (!matchesCategory) return false;
+
       const rental = rentalsById.get(ret.agreement);
       const customer =
         (ret.customerId ? customersById.get(ret.customerId) : undefined) ||
@@ -1078,6 +1236,8 @@ function ReturnsPage() {
           String((rental as any).address || "").toLowerCase().includes(searchLower)
         ));
 
+      if (!matchesSearch) return false;
+
       const matchesReturnDue = !showReturnDuesOnly || (() => {
         if (ret.refund >= 0) return false;
         const totalDue = Math.abs(ret.refund);
@@ -1093,10 +1253,10 @@ function ReturnsPage() {
         return status !== "Paid" && pendingDue > 0;
       })();
 
-      return matchesOwner && matchesCategory && matchesSearch && matchesReturnDue;
+      return matchesReturnDue;
     }),
     "date"
-  ), [uniqueReturns, historyOwnerFilter, historyCategoryFilter, showReturnDuesOnly, debouncedHistorySearch, rentalsById, customersByName, customersById, eqInventory, owners]);
+  ), [uniqueReturns, canFilterByOwner, historyOwnerFilter, historyCategoryFilter, showReturnDuesOnly, debouncedHistorySearch, rentalsById, customersByName, customersById, owners, getReturnOwners, getReturnOwnerAndCategory]);
 
   // PERF: mount a page of history rows at a time.
   const [historyVisibleCount, setHistoryVisibleCount] = useState(RETURNS_PAGE_SIZE);
@@ -2806,13 +2966,26 @@ function ReturnsPage() {
                   <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground/60" />
                 </div>
 
-                <Select value={historyOwnerFilter} onValueChange={setHistoryOwnerFilter}>
-                  <SelectTrigger className="w-full sm:w-[130px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Owner" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all-owners">All Owners</SelectItem>
-                    {activeOwners.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {canFilterByOwner && (
+                  <Select value={historyOwnerFilter} onValueChange={setHistoryOwnerFilter}>
+                    <SelectTrigger className="w-full sm:w-[150px] md:w-[170px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="All Owners" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all-owners">All Owners</SelectItem>
+                      {activeOwners.map((o) => {
+                        const ownerRecord = owners.find(
+                          (ow) =>
+                            ow.name.toLowerCase() === o.toLowerCase() ||
+                            (ow.ownerName && ow.ownerName.toLowerCase() === o.toLowerCase())
+                        );
+                        const displayLabel =
+                          ownerRecord?.ownerName && ownerRecord.name && ownerRecord.ownerName.toLowerCase() !== o.toLowerCase()
+                            ? `${o} (${ownerRecord.ownerName})`
+                            : o;
+                        return <SelectItem key={o} value={o}>{displayLabel}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 <Select value={historyCategoryFilter} onValueChange={setHistoryCategoryFilter}>
                   <SelectTrigger className="w-full sm:w-[140px] h-8.5 text-[11.5px] bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
@@ -2886,7 +3059,7 @@ function ReturnsPage() {
                                 if (!str) return "";
                                 return str.replace(/\s*-\s*S\/N:.*$/i, "").replace(/\s*S\/N:.*$/i, "").trim();
                               };
-                              const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                              const ids: string[] = parseEquipmentIds(ret.returnedEquipmentIds);
                               const labels = ids
                                 .map((id) => {
                                   const eq = eqInventory.find((e) => e.id === id);
@@ -2921,7 +3094,7 @@ function ReturnsPage() {
                           <TableCell className="text-right text-[12.5px] font-semibold whitespace-nowrap">
                             {(() => {
                               if (rental) {
-                                const ids = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                                const ids = parseEquipmentIds(ret.returnedEquipmentIds);
                                 const eqItems = rental.equipmentItems || [];
                                 let monthlyRentSum = 0;
                                 let dailyRentSum = 0;
@@ -3108,7 +3281,7 @@ function ReturnsPage() {
                     // Monthly Rent
                     let monthlyRentStr = "—";
                     if (rental) {
-                      const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                      const ids: string[] = parseEquipmentIds(ret.returnedEquipmentIds);
                       const eqItems = rental.equipmentItems || [];
                       let monthlyRentSum = 0;
                       let dailyRentSum = 0;
@@ -3144,7 +3317,7 @@ function ReturnsPage() {
                     const depositStr = `₹${depositVal.toLocaleString("en-IN")}`;
 
                     // Model
-                    const ids: string[] = Array.isArray(ret.returnedEquipmentIds) ? ret.returnedEquipmentIds : [];
+                    const ids: string[] = parseEquipmentIds(ret.returnedEquipmentIds);
                     const eqItems = rental?.equipmentItems || [];
                     const models = ids.map((id) => {
                       const item = eqItems.find((it: any) => it.equipmentId === id);

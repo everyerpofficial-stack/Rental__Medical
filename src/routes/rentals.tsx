@@ -257,6 +257,93 @@ interface AdditionalItem {
   isCustom?: boolean;
 }
 
+const DEFAULT_ADDITIONAL_ITEMS: AdditionalItem[] = [
+  { name: "Humidifier Bottle", amount: 0, status: "Not Paid", selected: false },
+  { name: "Bipap Mask", amount: 0, status: "Not Paid", selected: false },
+  { name: "Bipap Hose Pipe", amount: 0, status: "Not Paid", selected: false },
+  { name: "Oxygen Nasal Cannula", amount: 0, status: "Not Paid", selected: false },
+  { name: "Installation Charge", amount: 0, status: "Not Paid", selected: false },
+  { name: "One Side Transport", amount: 0, status: "Not Paid", selected: false },
+  { name: "Another Side Transport", amount: 0, status: "Not Paid", selected: false },
+  { name: "Nebulizer", amount: 0, status: "Not Paid", selected: false },
+  { name: "Pulse Oximeter", amount: 0, status: "Not Paid", selected: false },
+  { name: "10mtr Oxygen Cannula", amount: 0, status: "Not Paid", selected: false },
+];
+
+function isDraftNotEmpty(draft: any): boolean {
+  if (!draft || typeof draft !== "object") return false;
+  if (draft.selectedCustomerId) return true;
+  if (draft.isNewCustomer && (
+    (draft.custName && String(draft.custName).trim()) ||
+    (draft.custPhone && String(draft.custPhone).trim()) ||
+    (draft.custAddress && String(draft.custAddress).trim()) ||
+    (draft.custEmail && String(draft.custEmail).trim()) ||
+    (draft.custAadhaar && String(draft.custAadhaar).trim()) ||
+    (draft.custPan && String(draft.custPan).trim()) ||
+    (draft.custAltPhone && String(draft.custAltPhone).trim()) ||
+    (draft.custContactNumber3 && String(draft.custContactNumber3).trim()) ||
+    (draft.custNotes && String(draft.custNotes).trim()) ||
+    (Array.isArray(draft.custFiles) && draft.custFiles.length > 0)
+  )) return true;
+  if (Array.isArray(draft.selectedEquipments) && draft.selectedEquipments.some(
+    (e: any) => e.equipmentId || e.serial || (e.rentRate && e.rentRate !== "0" && e.rentRate !== "") || (e.deposit && e.deposit !== "0" && e.deposit !== "")
+  )) return true;
+  if ((draft.remarks && String(draft.remarks).trim()) ||
+      (draft.consultingHospital && String(draft.consultingHospital).trim()) ||
+      (draft.referredBy && String(draft.referredBy).trim())) return true;
+  if (Number(draft.deliveryCharges) > 0 || Number(draft.removalCharges) > 0 ||
+      Number(draft.installationCharges) > 0 || Number(draft.additionalCharges) > 0 ||
+      Number(draft.rentalDiscount) > 0) return true;
+  if (draft.rentalPaymentStatus && draft.rentalPaymentStatus !== "Not Paid") return true;
+  if (draft.depositPaymentStatus && draft.depositPaymentStatus !== "Not Paid") return true;
+  if ((draft.rentPaidAmount && String(draft.rentPaidAmount).trim() && draft.rentPaidAmount !== "0") ||
+      (draft.depositPaidAmount && String(draft.depositPaidAmount).trim() && draft.depositPaidAmount !== "0") ||
+      (draft.cashPaidAmount && String(draft.cashPaidAmount).trim() && draft.cashPaidAmount !== "0") ||
+      (draft.bankUpiPaidAmount && String(draft.bankUpiPaidAmount).trim() && draft.bankUpiPaidAmount !== "0")) return true;
+  if (draft.signatureUrl || draft.thumbprintUrl || draft.capturedLocation ||
+      (Array.isArray(draft.deliveryPhotos) && draft.deliveryPhotos.length > 0) || draft.signedDocUrl) return true;
+  if (Array.isArray(draft.additionalItems) && draft.additionalItems.some((i: any) => i.selected || i.isCustom)) return true;
+  return false;
+}
+
+function saveDraftToStorage(draftData: any) {
+  try {
+    localStorage.setItem("medirent_new_agreement_draft", JSON.stringify(draftData));
+  } catch (err) {
+    try {
+      // If local storage quota is reached, strip heavy attachments to preserve all text & commercial fields
+      const lightweightDraft = {
+        ...draftData,
+        custFiles: [],
+        deliveryPhotos: [],
+        signatureUrl: null,
+        thumbprintUrl: null,
+        signedDocUrl: null,
+      };
+      localStorage.setItem("medirent_new_agreement_draft", JSON.stringify(lightweightDraft));
+    } catch (innerErr) {
+      console.warn("Could not save agreement draft due to storage quota:", innerErr);
+    }
+  }
+}
+
+function formatTimeAgo(isoString?: string): string {
+  if (!isoString) return "";
+  try {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    if (isNaN(diffMs) || diffMs < 0) return "";
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return "just now";
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return new Date(isoString).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
 function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, onSave, inline, onClose }: {
   trigger?: React.ReactNode; title?: string; rental?: Rental; onSave?: () => void; inline?: boolean; onClose?: () => void;
 }) {
@@ -462,6 +549,189 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [hasDraft, setHasDraft] = useState(false);
   const [approvalStatus, setApprovalStatus] = useState<"Active">("Active");
 
+  const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(() => {
+    const defaultItems: AdditionalItem[] = DEFAULT_ADDITIONAL_ITEMS.map(i => ({
+      ...i,
+      selected: i.name === "Installation Charge" ? !!rental?.installationCharges : false,
+    }));
+
+    if (rental?.additionalItems) {
+      return rental.additionalItems as AdditionalItem[];
+    }
+    
+    // For legacy edit support
+    if (rental) {
+      if (rental.installationCharges) {
+        const inst = defaultItems.find(i => i.name === "Installation Charge");
+        if (inst) {
+          inst.amount = rental.installationCharges;
+          inst.selected = true;
+        }
+      }
+      if (rental.additionalCharges) {
+        const transport = defaultItems.find(i => i.name === "One Side Transport");
+        if (transport) {
+          transport.amount = rental.additionalCharges;
+          transport.selected = true;
+        }
+      }
+    }
+    return defaultItems;
+  });
+
+  const [draftSavedAt, setDraftSavedAt] = useState<string>("");
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string>("");
+  const isInitializedRef = useRef(false);
+  const latestDraftStateRef = useRef<any>(null);
+
+  const restoreDraftData = (draft: any) => {
+    if (!draft) return;
+    const allRentals = getRentals();
+    const isIdTaken = allRentals.some((r: any) => r.id === draft.agreementId);
+    setAgreementId(isIdTaken ? peekNextAgreementNumber() : (draft.agreementId || peekNextAgreementNumber()));
+    if (draft.agreementDate) setAgreementDate(draft.agreementDate);
+    if (draft.endDate) setEndDate(draft.endDate);
+    setConsultingHospital(draft.consultingHospital || "");
+    setReferredBy(draft.referredBy || "");
+    setIsNewCustomer(!!draft.isNewCustomer);
+    setSelectedCustomerId(draft.selectedCustomerId);
+    setCustName(draft.custName || "");
+    setCustPhone(draft.custPhone || "");
+    setCustAltPhone(draft.custAltPhone || "");
+    setCustContactNumber3(draft.custContactNumber3 || "");
+    setCustEmail(draft.custEmail || "");
+    setCustAadhaar(draft.custAadhaar || "");
+    setCustPan(draft.custPan || "");
+    setCustAddress(draft.custAddress || "");
+    setCustArea(draft.custArea || "");
+    setCustTaluk(draft.custTaluk || "");
+    setCustCity(draft.custCity || "Mysore");
+    setCustState(draft.custState || "Karnataka");
+    setCustPincode(draft.custPincode || "");
+    setCustNotes(draft.custNotes || "");
+    if (Array.isArray(draft.custFiles)) setCustFiles(draft.custFiles);
+    if (Array.isArray(draft.selectedEquipments) && draft.selectedEquipments.length > 0) {
+      setSelectedEquipments(draft.selectedEquipments);
+      prevNeededAutoItemsRef.current = getNeededAutoItemsForEquipments(draft.selectedEquipments);
+    }
+    setDeliveryCharges(draft.deliveryCharges || "0");
+    setRemovalCharges(draft.removalCharges || "0");
+    setInstallationCharges(draft.installationCharges || "0");
+    setAdditionalCharges(draft.additionalCharges || "0");
+    setRentalDiscount(draft.rentalDiscount || "0");
+    setRentalDiscountMode(draft.rentalDiscountMode || "amount");
+    setRemarks(draft.remarks || "");
+    setRentalPaymentStatus(draft.rentalPaymentStatus || "Not Paid");
+    setDepositPaymentStatus(draft.depositPaymentStatus || "Not Paid");
+    setRentPaidAmount(draft.rentPaidAmount || "");
+    setDepositPaidAmount(draft.depositPaidAmount || "");
+    setCashPaidAmount(draft.cashPaidAmount || "");
+    setBankUpiPaidAmount(draft.bankUpiPaidAmount || "");
+    setPaymentMode(draft.paymentMode || "Cash");
+    setPaymentDate(draft.paymentDate || getLocalYYYYMMDD());
+    setPaymentCollectedBy(draft.paymentCollectedBy || "");
+    if (Array.isArray(draft.additionalItems) && draft.additionalItems.length > 0) {
+      setAdditionalItems(draft.additionalItems);
+    }
+    if (draft.signatureUrl) setSignatureUrl(draft.signatureUrl);
+    if (draft.thumbprintUrl) setThumbprintUrl(draft.thumbprintUrl);
+    if (draft.capturedLocation) setCapturedLocation(draft.capturedLocation);
+    if (Array.isArray(draft.deliveryPhotos)) setDeliveryPhotos(draft.deliveryPhotos);
+    if (draft.signedDocUrl) setSignedDocUrl(draft.signedDocUrl);
+    if (draft.signedDocName) setSignedDocName(draft.signedDocName);
+  };
+
+  const resetFormToFresh = () => {
+    setAgreementId(peekNextAgreementNumber());
+    setAgreementDate(getLocalYYYYMMDD());
+    setEndDate("");
+    setConsultingHospital("");
+    setReferredBy("");
+    setIsNewCustomer(false);
+    setSelectedCustomerId(undefined);
+    setCustName("");
+    setCustPhone("");
+    setCustAltPhone("");
+    setCustContactNumber3("");
+    setCustEmail("");
+    setCustAadhaar("");
+    setCustPan("");
+    setCustAddress("");
+    setCustArea("");
+    setCustTaluk("");
+    setCustCity("Mysore");
+    setCustState("Karnataka");
+    setCustPincode("");
+    setCustNotes("");
+    setCustFiles([]);
+    setSelectedEquipments([{ equipmentId: "", serial: "", rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" }]);
+    setDeliveryCharges("0");
+    setRemovalCharges("0");
+    setInstallationCharges("0");
+    setAdditionalCharges("0");
+    setRentalDiscount("0");
+    setRentalDiscountMode("amount");
+    setRemarks("");
+    setRentalPaymentStatus("Not Paid");
+    setDepositPaymentStatus("Not Paid");
+    setRentPaidAmount("");
+    setDepositPaidAmount("");
+    setCashPaidAmount("");
+    setBankUpiPaidAmount("");
+    setPaymentMode("Cash");
+    setPaymentDate(getLocalYYYYMMDD());
+    setPaymentCollectedBy("");
+    setSignatureUrl(null);
+    setThumbprintUrl(null);
+    setCapturedLocation(null);
+    setDeliveryPhotos([]);
+    setSignedDocUrl(null);
+    setSignedDocName("");
+    setAdditionalItems(DEFAULT_ADDITIONAL_ITEMS.map(i => ({ ...i })));
+    prevNeededAutoItemsRef.current = new Set();
+  };
+
+  const handleDiscardDraft = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    localStorage.removeItem("medirent_new_agreement_draft");
+    setHasDraft(false);
+    setDraftSavedAt("");
+    setDraftSaveStatus("");
+    resetFormToFresh();
+    toast.info("Draft discarded. Starting fresh agreement.");
+  };
+
+  const handleRestoreDraft = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const savedDraft = localStorage.getItem("medirent_new_agreement_draft");
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft);
+        restoreDraftData(draft);
+        toast.success("Draft agreement details restored!");
+        setHasDraft(true);
+        setDraftSavedAt(draft.savedAt || "");
+      } catch (err) {
+        toast.error("Failed to restore draft.");
+      }
+    }
+  };
+
+  const handleBackToRentals = () => {
+    if (!rental && latestDraftStateRef.current && isDraftNotEmpty(latestDraftStateRef.current)) {
+      saveDraftToStorage({
+        ...latestDraftStateRef.current,
+        savedAt: new Date().toISOString(),
+      });
+      toast.info("Unsaved changes saved as draft. You can continue anytime.");
+    }
+    if (onClose) {
+      onClose();
+    } else {
+      setOpen(false);
+    }
+  };
+
   const handleRentPaidAmountChange = (val: string) => {
     setRentPaidAmount(val);
   };
@@ -516,123 +786,127 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
   const handleSaveDraftAndAddEquipment = (e: React.MouseEvent) => {
     e.preventDefault();
-    const draft = {
-      agreementId,
-      agreementDate,
-      endDate,
-      consultingHospital,
-      referredBy,
-      isNewCustomer,
-      selectedCustomerId,
-      custName,
-      custPhone,
-      custAltPhone,
-      custContactNumber3,
-      custEmail,
-      custAadhaar,
-      custPan,
-      custAddress,
-      custArea,
-      custTaluk,
-      custCity,
-      custState,
-      custPincode,
-      custNotes,
-      custFiles,
-      selectedEquipments,
-      deliveryCharges,
-      removalCharges,
-      installationCharges,
-      additionalCharges,
-      rentalDiscount,
-      rentalDiscountMode,
-      remarks,
-      rentalPaymentStatus,
-      depositPaymentStatus,
-      rentPaidAmount,
-      depositPaidAmount,
-      cashPaidAmount,
-      bankUpiPaidAmount,
-      paymentMode,
-      paymentDate,
-      paymentCollectedBy,
-      approvalStatus,
-      additionalItems,
-      signatureUrl,
-      thumbprintUrl,
-    };
-        localStorage.setItem("medirent_new_agreement_draft", JSON.stringify(draft));
+    if (latestDraftStateRef.current) {
+      saveDraftToStorage({
+        ...latestDraftStateRef.current,
+        savedAt: new Date().toISOString(),
+      });
+    }
     toast.success("Current agreement details saved to draft.");
     setOpen(false);
     if (onClose) onClose();
     window.location.href = "/equipment?addNew=true";
   };
 
-  const handleRestoreDraft = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const savedDraft = localStorage.getItem("medirent_new_agreement_draft");
-    if (savedDraft) {
-      try {
-        const draft = JSON.parse(savedDraft);
-        setAgreementId(draft.agreementId || peekNextAgreementNumber());
-        setAgreementDate(draft.agreementDate || getLocalYYYYMMDD());
-        setEndDate(draft.endDate || getLocalYYYYMMDD(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
-        setConsultingHospital(draft.consultingHospital || "");
-        setReferredBy(draft.referredBy || "");
-        setIsNewCustomer(draft.isNewCustomer || false);
-        setSelectedCustomerId(draft.selectedCustomerId);
-        setCustName(draft.custName || "");
-        setCustPhone(draft.custPhone || "");
-        setCustAltPhone(draft.custAltPhone || "");
-        setCustContactNumber3(draft.custContactNumber3 || "");
-        setCustEmail(draft.custEmail || "");
-        setCustAadhaar(draft.custAadhaar || "");
-        setCustPan(draft.custPan || "");
-        setCustAddress(draft.custAddress || "");
-        setCustArea(draft.custArea || "");
-        setCustTaluk(draft.custTaluk || "");
-        setCustCity(draft.custCity || "Mysore");
-        setCustState(draft.custState || "Karnataka");
-        setCustPincode(draft.custPincode || "");
-        setCustNotes(draft.custNotes || "");
-        setCustFiles(draft.custFiles || []);
-        setSelectedEquipments(draft.selectedEquipments || [{ equipmentId: "", serial: "", rentCycle: "Monthly", rentRate: "", monthlyRent: "", dailyRent: "", deposit: "" }]);
-        setDeliveryCharges(draft.deliveryCharges || "0");
-        setRemovalCharges(draft.removalCharges || "0");
-        setInstallationCharges(draft.installationCharges || "0");
-        setAdditionalCharges(draft.additionalCharges || "0");
-        setRentalDiscount(draft.rentalDiscount || "0");
-        setRentalDiscountMode(draft.rentalDiscountMode || "amount");
-        setRemarks(draft.remarks || "");
-        setRentalPaymentStatus(draft.rentalPaymentStatus || "Not Paid");
-        setDepositPaymentStatus(draft.depositPaymentStatus || "Not Paid");
-        setRentPaidAmount(draft.rentPaidAmount || "");
-        setDepositPaidAmount(draft.depositPaidAmount || "");
-        setCashPaidAmount(draft.cashPaidAmount || "");
-        setBankUpiPaidAmount(draft.bankUpiPaidAmount || "");
-        setPaymentMode(draft.paymentMode || "Cash");
-        setPaymentDate(draft.paymentDate || getLocalYYYYMMDD());
-        setPaymentCollectedBy(draft.paymentCollectedBy || "");
-        setApprovalStatus("Active");
-        setAdditionalItems(draft.additionalItems || []);
-        prevNeededAutoItemsRef.current = getNeededAutoItemsForEquipments(draft.selectedEquipments || []);
-        setSignatureUrl(draft.signatureUrl || null);
-        setThumbprintUrl(draft.thumbprintUrl || null);
+  const currentFormData = useMemo(() => ({
+    agreementId,
+    agreementDate,
+    endDate,
+    consultingHospital,
+    referredBy,
+    isNewCustomer,
+    selectedCustomerId,
+    custName,
+    custPhone,
+    custAltPhone,
+    custContactNumber3,
+    custEmail,
+    custAadhaar,
+    custPan,
+    custAddress,
+    custArea,
+    custTaluk,
+    custCity,
+    custState,
+    custPincode,
+    custNotes,
+    custFiles,
+    selectedEquipments,
+    deliveryCharges,
+    removalCharges,
+    installationCharges,
+    additionalCharges,
+    rentalDiscount,
+    rentalDiscountMode,
+    remarks,
+    rentalPaymentStatus,
+    depositPaymentStatus,
+    rentPaidAmount,
+    depositPaidAmount,
+    cashPaidAmount,
+    bankUpiPaidAmount,
+    paymentMode,
+    paymentDate,
+    paymentCollectedBy,
+    additionalItems,
+    signatureUrl,
+    thumbprintUrl,
+    capturedLocation,
+    deliveryPhotos,
+    signedDocUrl,
+    signedDocName,
+  }), [
+    agreementId, agreementDate, endDate, consultingHospital, referredBy,
+    isNewCustomer, selectedCustomerId, custName, custPhone, custAltPhone,
+    custContactNumber3, custEmail, custAadhaar, custPan, custAddress,
+    custArea, custTaluk, custCity, custState, custPincode, custNotes,
+    custFiles, selectedEquipments, deliveryCharges, removalCharges,
+    installationCharges, additionalCharges, rentalDiscount, rentalDiscountMode,
+    remarks, rentalPaymentStatus, depositPaymentStatus, rentPaidAmount,
+    depositPaidAmount, cashPaidAmount, bankUpiPaidAmount, paymentMode,
+    paymentDate, paymentCollectedBy, additionalItems, signatureUrl,
+    thumbprintUrl, capturedLocation, deliveryPhotos, signedDocUrl, signedDocName
+  ]);
 
-        toast.success("Draft agreement details restored!");
-        setHasDraft(false);
-      } catch (err) {
-        toast.error("Failed to restore draft.");
+  latestDraftStateRef.current = currentFormData;
+
+  // Continuous auto-save draft effect
+  useEffect(() => {
+    if (rental || !isInitializedRef.current) return;
+    if (!isDraftNotEmpty(currentFormData)) return;
+
+    const timer = setTimeout(() => {
+      const now = new Date();
+      const draftToSave = {
+        ...currentFormData,
+        savedAt: now.toISOString(),
+      };
+      saveDraftToStorage(draftToSave);
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      setDraftSaveStatus(`Draft saved at ${timeStr}`);
+      setDraftSavedAt(draftToSave.savedAt);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [currentFormData, rental]);
+
+  // Synchronous flush on unmount
+  useEffect(() => {
+    return () => {
+      if (rental) return;
+      if (latestDraftStateRef.current && isDraftNotEmpty(latestDraftStateRef.current)) {
+        saveDraftToStorage({
+          ...latestDraftStateRef.current,
+          savedAt: new Date().toISOString(),
+        });
       }
-    }
-  };
+    };
+  }, [rental]);
 
-  const handleDiscardDraft = (e: React.MouseEvent) => {
-    e.preventDefault();
-    localStorage.removeItem("medirent_new_agreement_draft");
-    setHasDraft(false);
-    toast.success("Draft agreement details discarded.");
-  };
+  // Synchronous flush on window unload / refresh
+  useEffect(() => {
+    if (rental) return;
+    const handleBeforeUnload = () => {
+      if (latestDraftStateRef.current && isDraftNotEmpty(latestDraftStateRef.current)) {
+        saveDraftToStorage({
+          ...latestDraftStateRef.current,
+          savedAt: new Date().toISOString(),
+        });
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [rental]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !rental) {
@@ -650,12 +924,31 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     prevOpenRef.current = open;
     if (open && justOpened) {
       setIsSubmitting(false);
-      const savedDraft = localStorage.getItem("medirent_new_agreement_draft");
-      if (savedDraft) {
-        setHasDraft(true);
-      } else {
-        setHasDraft(false);
+
+      // Auto-restore unsaved draft for new rental agreements
+      if (!rental) {
+        const savedDraftStr = localStorage.getItem("medirent_new_agreement_draft");
+        if (savedDraftStr) {
+          try {
+            const draft = JSON.parse(savedDraftStr);
+            if (isDraftNotEmpty(draft)) {
+              restoreDraftData(draft);
+              setHasDraft(true);
+              setDraftSavedAt(draft.savedAt || "");
+              const timeStr = draft.savedAt ? new Date(draft.savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+              if (timeStr) setDraftSaveStatus(`Draft restored (saved at ${timeStr})`);
+              isInitializedRef.current = true;
+              return;
+            }
+          } catch (err) {
+            console.warn("Failed to parse saved agreement draft:", err);
+          }
+        }
       }
+
+      setHasDraft(false);
+      setDraftSavedAt("");
+      setDraftSaveStatus("");
       setAgreementId(rental?.id || peekNextAgreementNumber());
       setAgreementDate(rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
       setEndDate(rental?.end ? getLocalYYYYMMDD(rental.end) : "");
@@ -846,18 +1139,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       }
 
       // Reset additional items
-      const defaultItems: AdditionalItem[] = [
-        { name: "Humidifier Bottle", amount: 0, status: "Not Paid", selected: false },
-        { name: "Bipap Mask", amount: 0, status: "Not Paid", selected: false },
-        { name: "Bipap Hose Pipe", amount: 0, status: "Not Paid", selected: false },
-        { name: "Oxygen Nasal Cannula", amount: 0, status: "Not Paid", selected: false },
-        { name: "Installation Charge", amount: 0, status: "Not Paid", selected: rental?.installationCharges ? true : false },
-        { name: "One Side Transport", amount: 0, status: "Not Paid", selected: false },
-        { name: "Another Side Transport", amount: 0, status: "Not Paid", selected: false },
-        { name: "Nebulizer", amount: 0, status: "Not Paid", selected: false },
-        { name: "Pulse Oximeter", amount: 0, status: "Not Paid", selected: false },
-        { name: "10mtr Oxygen Cannula", amount: 0, status: "Not Paid", selected: false },
-      ];
+      const defaultItems: AdditionalItem[] = DEFAULT_ADDITIONAL_ITEMS.map(i => ({
+        ...i,
+        selected: i.name === "Installation Charge" ? !!rental?.installationCharges : false,
+      }));
       let initialAdditionalItems = defaultItems;
       if (typeof window !== "undefined" && !rental) {
         const params = new URLSearchParams(window.location.search);
@@ -900,46 +1185,9 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           window.history.replaceState({}, document.title, newUrl);
         }
       }
+      isInitializedRef.current = true;
     }
   }, [open, rental]);
-  
-  const [additionalItems, setAdditionalItems] = useState<AdditionalItem[]>(() => {
-    const defaultItems: AdditionalItem[] = [
-      { name: "Humidifier Bottle", amount: 0, status: "Not Paid", selected: false },
-      { name: "Bipap Mask", amount: 0, status: "Not Paid", selected: false },
-      { name: "Bipap Hose Pipe", amount: 0, status: "Not Paid", selected: false },
-      { name: "Oxygen Nasal Cannula", amount: 0, status: "Not Paid", selected: false },
-      { name: "Installation Charge", amount: 0, status: "Not Paid", selected: rental?.installationCharges ? true : false },
-      { name: "One Side Transport", amount: 0, status: "Not Paid", selected: false },
-      { name: "Another Side Transport", amount: 0, status: "Not Paid", selected: false },
-      { name: "Nebulizer", amount: 0, status: "Not Paid", selected: false },
-      { name: "Pulse Oximeter", amount: 0, status: "Not Paid", selected: false },
-      { name: "10mtr Oxygen Cannula", amount: 0, status: "Not Paid", selected: false },
-    ];
-
-    if (rental?.additionalItems) {
-      return rental.additionalItems as AdditionalItem[];
-    }
-    
-    // For legacy edit support
-    if (rental) {
-      if (rental.installationCharges) {
-        const inst = defaultItems.find(i => i.name === "Installation Charge");
-        if (inst) {
-          inst.amount = rental.installationCharges;
-          inst.selected = true;
-        }
-      }
-      if (rental.additionalCharges) {
-        const transport = defaultItems.find(i => i.name === "One Side Transport");
-        if (transport) {
-          transport.amount = rental.additionalCharges;
-          transport.selected = true;
-        }
-      }
-    }
-    return defaultItems;
-  });
 
   const updateCalculatedCharges = (items: AdditionalItem[], changedItemName?: string) => {
     // Only update installation charges if that item specifically changed, or if no specific item was passed (e.g. initialization)
@@ -1908,7 +2156,14 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       });
     }
 
-        toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
+    if (!rental) {
+      localStorage.removeItem("medirent_new_agreement_draft");
+      setHasDraft(false);
+      setDraftSavedAt("");
+      setDraftSaveStatus("");
+    }
+
+    toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
 
     // Deliver the agreement PDF to the customer's WhatsApp. Deliberately not
     // awaited: the send is a multi-second round trip to Meta and the operator
@@ -1957,23 +2212,53 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
             <p className="text-[11px] text-muted-foreground mt-0.5">Process and register rental agreement details</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={onClose} className="h-8.5 text-xs font-semibold gap-1.5 shadow-sm">
-          <X className="h-3.5 w-3.5 text-muted-foreground" /> Back to Rentals
-        </Button>
+        <div className="flex items-center gap-2">
+          {!rental && draftSaveStatus && (
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted/50 border border-border/50">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              {draftSaveStatus}
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={handleBackToRentals} className="h-8.5 text-xs font-semibold gap-1.5 shadow-sm">
+            <X className="h-3.5 w-3.5 text-muted-foreground" /> Back to Rentals
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 mt-4 items-start relative w-full max-w-full min-w-0">
         {/* Left Column: Scrollable Form */}
         <div className="flex-1 space-y-4 w-full max-w-full min-w-0">
             {hasDraft && (
-              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg text-xs font-semibold mb-2">
-                <span>We found a saved draft. Would you like to restore your progress?</span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="h-7 text-[11px] bg-background text-primary border-primary/20 hover:bg-primary/5" onClick={handleRestoreDraft}>
-                    Restore Draft
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-3.5 py-2.5 rounded-lg text-xs font-medium mb-2 animate-[fade-in_0.2s_ease-out]">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span>
+                    <strong>Draft Restored:</strong> Continuing from your unsaved agreement {draftSavedAt ? `(saved ${formatTimeAgo(draftSavedAt)})` : ""}.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px] bg-background text-destructive hover:bg-destructive/10 border-destructive/30 hover:border-destructive/50 font-semibold"
+                    onClick={handleDiscardDraft}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    Discard & Start Fresh
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground hover:text-destructive" onClick={handleDiscardDraft}>
-                    Discard
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => setHasDraft(false)}
+                    title="Dismiss alert"
+                  >
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
@@ -5136,6 +5421,16 @@ function RentalsPage() {
   const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues" | "cancelled" | "pending">("all");
   const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
+
+  const hasSavedDraft = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const draftStr = localStorage.getItem("medirent_new_agreement_draft");
+      return !!draftStr && isDraftNotEmpty(JSON.parse(draftStr));
+    } catch {
+      return false;
+    }
+  }, [activeView]);
   // PERF: render the first page only; the rest load on demand.
   const [visibleCount, setVisibleCount] = useState(RENTALS_PAGE_SIZE);
   const [rentalsList, setRentalsList] = useState(() => getRentals());
@@ -5143,12 +5438,14 @@ function RentalsPage() {
   const [ownerFilter, setOwnerFilter] = useState("all-owners");
 
   const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
-  const isStaff = userRole === "Staff";
-  const isAccountant = userRole === "Accountant";
-  const isAdmin = userRole === "Admin";
+  const roleNormalized = userRole.toLowerCase().trim();
+  const isStaff = roleNormalized === "staff";
+  const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account";
+  const isAdmin = roleNormalized === "admin";
   const canEdit = isAdmin || isAccountant;
   const canCancel = isAdmin;
   const canApprove = isAdmin;
+  const canFilterByOwner = !isStaff;
   const canViewOwnerDetails = !isStaff && !isAccountant;
 
   const refresh = () => setRentalsList(getRentals());
@@ -5296,10 +5593,21 @@ function RentalsPage() {
           : statusLower === targetFilter);
       if (!matchesStatus) return false;
 
-      if (ownerFilter !== "all-owners") {
+      if (canFilterByOwner && ownerFilter !== "all-owners") {
+        const selectedOwnerRecord = ownersList.find(
+          (ow) =>
+            ow.name.toLowerCase() === ownerFilter.toLowerCase() ||
+            (ow.ownerName && ow.ownerName.toLowerCase() === ownerFilter.toLowerCase())
+        );
+        const filterTargetValues = new Set<string>([ownerFilter.toLowerCase()]);
+        if (selectedOwnerRecord) {
+          if (selectedOwnerRecord.name) filterTargetValues.add(selectedOwnerRecord.name.toLowerCase());
+          if (selectedOwnerRecord.ownerName) filterTargetValues.add(selectedOwnerRecord.ownerName.toLowerCase());
+          if (selectedOwnerRecord.id) filterTargetValues.add(selectedOwnerRecord.id.toLowerCase());
+        }
         const rOwners = getRentalOwners(r);
         const matchesOwner = rOwners.some(
-          (o) => o.toLowerCase() === ownerFilter.toLowerCase()
+          (o) => filterTargetValues.has(o.toLowerCase())
         );
         if (!matchesOwner) return false;
       }
@@ -5387,9 +5695,14 @@ function RentalsPage() {
                 Export
               </Button>
             )}
-            <Button size="sm" onClick={() => setActiveView("new")}>
+            <Button size="sm" onClick={() => setActiveView("new")} className="relative font-semibold">
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New Agreement
+              {hasSavedDraft && (
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
+                  Draft
+                </span>
+              )}
             </Button>
           </>
         ) : null
@@ -5450,7 +5763,7 @@ function RentalsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            {canViewOwnerDetails && (
+            {canFilterByOwner && (
               <Select value={ownerFilter} onValueChange={setOwnerFilter}>
                 <SelectTrigger className="w-full sm:w-[180px] md:w-[200px] h-9 text-[12px] bg-card shrink-0">
                   <SelectValue placeholder="All Owners" />
@@ -6015,9 +6328,14 @@ function RentalsPage() {
 
       {/* Mobile FAB */}
       {activeView === "list" && (
-        <button className="fab md:hidden" onClick={() => setActiveView("new")}>
+        <button className="fab md:hidden relative" onClick={() => setActiveView("new")}>
           <Plus className="h-5 w-5" />
           New Agreement
+          {hasSavedDraft && (
+            <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500 text-white font-bold">
+              Draft
+            </span>
+          )}
         </button>
       )}
     </AppShell>
