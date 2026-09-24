@@ -889,7 +889,7 @@ function AgreementPaymentHistoryModal({
   const isAdmin = userRole === "Admin";
   const isStaff = userRole === "Staff";
   const isAccountant = userRole === "Accountant";
-  const canExport = !isStaff && !isAccountant;
+  const canExport = !isStaff;
   const rentals = getRentals();
   const equipmentList = getEquipment();
   const payments = getPayments();
@@ -1352,7 +1352,7 @@ function PaymentsPage() {
   const isAdmin = userRole === "Admin";
   const showKpiCards = !isStaff && !isAccountant;
   const canExport = !isStaff && !isAccountant;
-  const canViewPaymentHistory = !isAccountant;
+  const canViewPaymentHistory = true;
 
   const refresh = () => setPayments(getPayments());
 

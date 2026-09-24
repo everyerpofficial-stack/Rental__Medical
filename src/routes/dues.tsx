@@ -920,6 +920,51 @@ function PayDialog({
                         }
                       }
 
+                      let lastPaymentDisplayAmount = 0;
+                      if (lastPayment) {
+                        const rawAmt = cleanNum(lastPayment.amount);
+                        if (eqItems.length > 1) {
+                          const targetItemRent = cleanNum(item.monthlyRent || item.dailyRent || item.rentRate);
+                          const matchedEqItems = eqItems.filter((it: any) => {
+                            if (!lastPayment.equipmentId && !lastPayment.notes) return true;
+
+                            const tEqId = String(it.equipmentId || "").trim().toLowerCase();
+                            const tSerial = String(it.serial || "").trim().toLowerCase();
+                            const tName = String(it.name || it.equipment || "").trim().toLowerCase();
+                            const tLabel = String(it.label || "").trim().toLowerCase();
+                            const tModel = String(it.model || "").trim().toLowerCase();
+
+                            if (lastPayment.equipmentId) {
+                              const pEqIds = String(lastPayment.equipmentId).split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+                              if (tEqId && pEqIds.includes(tEqId)) return true;
+                              if (tName && pEqIds.some((id: string) => id === tName || tName.includes(id))) return true;
+                            }
+
+                            if (lastPayment.notes) {
+                              const notes = String(lastPayment.notes).toLowerCase();
+                              if (tSerial && tSerial.length >= 3 && notes.includes(tSerial)) return true;
+                              if (tEqId && tEqId.length >= 3 && notes.includes(tEqId)) return true;
+                              if (tName && tName.length >= 3 && notes.includes(tName)) return true;
+                              if (tLabel && tLabel.length >= 3 && notes.includes(tLabel)) return true;
+                              if (tModel && tModel.length >= 3 && tModel !== "standard" && notes.includes(tModel)) return true;
+                            }
+
+                            return false;
+                          });
+
+                          const coveredItems = matchedEqItems.length > 0 ? matchedEqItems : eqItems;
+                          const coveredRentSum = coveredItems.reduce(
+                            (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+                            0
+                          );
+
+                          const shareRatio = coveredRentSum > 0 ? targetItemRent / coveredRentSum : 1 / coveredItems.length;
+                          lastPaymentDisplayAmount = Math.round(rawAmt * shareRatio);
+                        } else {
+                          lastPaymentDisplayAmount = rawAmt;
+                        }
+                      }
+
                       return (
                         <div
                           key={item.equipmentId}
@@ -978,7 +1023,7 @@ function PayDialog({
                                 {lastPayment ? (
                                   <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-400 bg-blue-50/90 dark:bg-blue-950/50 px-2.5 py-1 rounded-md border border-blue-200/80 dark:border-blue-800/60 shadow-2xs">
                                     <Clock className="h-3.5 w-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
-                                    Last Payment: <strong>₹{(cleanNum(lastPayment.amount) || 0).toLocaleString("en-IN")}</strong> on {formatDateDDMMYYYY(lastPayment.date)} ({lastPayment.mode || "Cash"})
+                                    Last Payment: <strong>₹{lastPaymentDisplayAmount.toLocaleString("en-IN")}</strong> on {formatDateDDMMYYYY(lastPayment.date)} ({lastPayment.mode || "Cash"})
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1.5 text-[10.5px] font-medium text-muted-foreground/80 bg-muted/40 px-2.5 py-0.5 rounded-md border border-border/40">
@@ -2430,8 +2475,8 @@ function DuesPage() {
         const retDateFormatted = retDateRaw ? formatDateDDMMYYYY(retDateRaw) : "";
         const returnDurationCell = retDateFormatted ? `Returned on\n${retDateFormatted}` : "Return Due";
 
-        const custTaluk = cust?.taluk || (item as any)?.taluk || "";
-        const depositCell = custTaluk ? `${item.deposit || 0}\nTaluk: ${custTaluk}` : (item.deposit || 0);
+        const custTaluk = String(cust?.taluk || (item as any)?.taluk || "").replace(/^taluk\s*[:\-]?\s*/i, "").trim();
+        const depositCell = custTaluk ? `${item.deposit || 0}\n${custTaluk}` : (item.deposit || 0);
 
         rows.push([
           slNo++,
@@ -2588,8 +2633,8 @@ function DuesPage() {
           }
         }
 
-        const custTaluk = cust?.taluk || r?.taluk || (item as any)?.taluk || "";
-        const depositCell = custTaluk ? `${combinedDeposit}\nTaluk: ${custTaluk}` : combinedDeposit;
+        const custTaluk = String(cust?.taluk || r?.taluk || (item as any)?.taluk || "").replace(/^taluk\s*[:\-]?\s*/i, "").trim();
+        const depositCell = custTaluk ? `${combinedDeposit}\n${custTaluk}` : combinedDeposit;
 
         rows.push([
           slNo++,
@@ -2630,8 +2675,8 @@ function DuesPage() {
           const depVal = Number(ei.deposit) || (eqItems.length === 1 ? Number(r.deposit) : 0) || 0;
           const itemStartDate = ei.startDate || r.start;
 
-          const custTaluk = cust?.taluk || r?.taluk || (item as any)?.taluk || "";
-          const depositCell = custTaluk ? `${depVal}\nTaluk: ${custTaluk}` : depVal;
+          const custTaluk = String(cust?.taluk || r?.taluk || (item as any)?.taluk || "").replace(/^taluk\s*[:\-]?\s*/i, "").trim();
+          const depositCell = custTaluk ? `${depVal}\n${custTaluk}` : depVal;
 
           if (ei.returned) {
             const { outstanding } = calcUnpaidDetailsForEquipment(r, ei.equipmentId);

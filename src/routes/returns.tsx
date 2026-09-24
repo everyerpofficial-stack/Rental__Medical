@@ -1063,9 +1063,9 @@ function ReturnsPage() {
       const strLower = str.toLowerCase();
       const match = owners.find(
         (o) =>
-          o.name.toLowerCase() === strLower ||
-          (o.ownerName && o.ownerName.toLowerCase() === strLower) ||
-          o.id.toLowerCase() === strLower
+          (o.name && String(o.name).toLowerCase() === strLower) ||
+          (o.ownerName && String(o.ownerName).toLowerCase() === strLower) ||
+          (o.id && String(o.id).toLowerCase() === strLower)
       );
       if (match) {
         if (match.name) ownerSet.add(match.name.trim());
@@ -1114,9 +1114,9 @@ function ReturnsPage() {
     if (ownerSet.size === 0 && ret.equipment) {
       const eqStr = String(ret.equipment).toLowerCase();
       const matchedEq = eqInventory.find((e) => {
-        const name = (e.name || "").toLowerCase();
-        const model = (e.model || "").toLowerCase();
-        const serial = (e.serial || "").toLowerCase();
+        const name = String(e.name || "").toLowerCase();
+        const model = String(e.model || "").toLowerCase();
+        const serial = String(e.serial || "").toLowerCase();
         return (name && eqStr.includes(name)) || (model && eqStr.includes(model)) || (serial && eqStr.includes(serial));
       });
       if (matchedEq?.owner) addOwner(matchedEq.owner);
@@ -1158,17 +1158,18 @@ function ReturnsPage() {
     if (!foundEq && ret.equipment) {
       const eqStr = String(ret.equipment).toLowerCase();
       foundEq = eqInventory.find((e) => {
-        const name = (e.name || "").toLowerCase();
-        const model = (e.model || "").toLowerCase();
+        const name = String(e.name || "").toLowerCase();
+        const model = String(e.model || "").toLowerCase();
         return (name && eqStr.includes(name)) || (model && eqStr.includes(model));
       });
     }
 
     if (foundEq) {
+      const targetOwnerLower = String(foundEq.owner || "").toLowerCase();
       const ownerObj = owners.find(
         (o) =>
-          o.name.toLowerCase() === String(foundEq.owner || "").toLowerCase() ||
-          (o.ownerName && o.ownerName.toLowerCase() === String(foundEq.owner || "").toLowerCase())
+          (o.name && String(o.name).toLowerCase() === targetOwnerLower) ||
+          (o.ownerName && String(o.ownerName).toLowerCase() === targetOwnerLower)
       );
       return {
         owner: ownerObj?.name || foundEq.owner || "In-House",
@@ -1186,19 +1187,20 @@ function ReturnsPage() {
       
       let matchesOwner = true;
       if (canFilterByOwner && historyOwnerFilter !== "all-owners") {
+        const targetOwnerLower = String(historyOwnerFilter || "").toLowerCase();
         const selectedOwnerRecord = owners.find(
           (ow) =>
-            ow.name.toLowerCase() === historyOwnerFilter.toLowerCase() ||
-            (ow.ownerName && ow.ownerName.toLowerCase() === historyOwnerFilter.toLowerCase())
+            (ow.name && String(ow.name).toLowerCase() === targetOwnerLower) ||
+            (ow.ownerName && String(ow.ownerName).toLowerCase() === targetOwnerLower)
         );
-        const filterAliases = new Set<string>([historyOwnerFilter.toLowerCase()]);
+        const filterAliases = new Set<string>([targetOwnerLower]);
         if (selectedOwnerRecord) {
-          if (selectedOwnerRecord.name) filterAliases.add(selectedOwnerRecord.name.toLowerCase());
-          if (selectedOwnerRecord.ownerName) filterAliases.add(selectedOwnerRecord.ownerName.toLowerCase());
-          if (selectedOwnerRecord.id) filterAliases.add(selectedOwnerRecord.id.toLowerCase());
+          if (selectedOwnerRecord.name) filterAliases.add(String(selectedOwnerRecord.name).toLowerCase());
+          if (selectedOwnerRecord.ownerName) filterAliases.add(String(selectedOwnerRecord.ownerName).toLowerCase());
+          if (selectedOwnerRecord.id) filterAliases.add(String(selectedOwnerRecord.id).toLowerCase());
         }
         const rOwners = getReturnOwners(ret);
-        matchesOwner = rOwners.some((o) => filterAliases.has(o.toLowerCase()));
+        matchesOwner = rOwners.some((o) => filterAliases.has(String(o || "").toLowerCase()));
       }
       if (!matchesOwner) return false;
       if (!matchesCategory) return false;
