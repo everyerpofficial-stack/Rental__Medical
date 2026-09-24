@@ -5308,11 +5308,12 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     const isInitialAlreadyBooked = agreementPayments.some((p) => {
       const notes = String(p.notes || "").toLowerCase();
       if (notes.includes("agreement creation") || notes.includes("advance rent") || notes.includes("initial")) return true;
+      if (p.paymentType === "Initial Rent") return true;
       const pDate = parseLocalDate(p.date);
       const startDate = parseLocalDate(rental.start);
       if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
       const diffDays = Math.abs(pDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-      return diffDays <= 5;
+      return diffDays <= 5 && cleanNum(p.amount) >= initialTotal;
     });
     const initialPaid = isInitialAlreadyBooked ? 0 : initialTotal;
 
@@ -5396,11 +5397,12 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   const isInitialAlreadyBooked = agreementPayments.some((p) => {
     const notes = String(p.notes || "").toLowerCase();
     if (notes.includes("agreement creation") || notes.includes("advance rent") || notes.includes("initial")) return true;
+    if (p.paymentType === "Initial Rent") return true;
     const pDate = parseLocalDate(p.date);
     const startDate = parseLocalDate(rental.start);
     if (isNaN(pDate.getTime()) || isNaN(startDate.getTime())) return false;
     const diffDays = Math.abs(pDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-    return diffDays <= 5;
+    return diffDays <= 5 && cleanNum(p.amount) >= initialTotal;
   });
 
   const totalRentalMonthlyRent = items.reduce(
