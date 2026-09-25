@@ -14,7 +14,7 @@ export type UserRole = "Admin" | "Accountant" | "Staff" | string;
 const ACCOUNTANT_BLOCKED = new Set(["/", "/owners", "/reports", "/settings"]);
 
 /** The only pages Staff may open. Everything else is blocked. */
-const STAFF_ALLOWED = new Set(["/rentals", "/equipment", "/payments", "/returns"]);
+const STAFF_ALLOWED = new Set(["/rentals", "/equipment", "/payments", "/returns", "/customers"]);
 
 /** "/customers/" and "/customers" are the same page. */
 function normalizePath(pathname: string): string {

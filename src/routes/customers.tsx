@@ -838,10 +838,11 @@ function CustomerProfileDialog({ customer: initialCustomer, open, onClose, onSav
   );
 
   if (!customer) return null;
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
-  const isStaff = userRole === "Staff";
-  const isAdmin = userRole === "Admin";
-  const isAccountant = userRole === "Accountant";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const roleNormalized = String(userRole || "").toLowerCase().trim();
+  const isStaff = roleNormalized === "staff" || userRole === "Staff";
+  const isAdmin = roleNormalized === "admin" || userRole === "Admin";
+  const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account" || userRole === "Accountant";
   const canEdit = isAdmin || isAccountant;
   const canDelete = isAdmin;
   const rentals = getRentals();
@@ -1769,10 +1770,11 @@ function CustomersPage() {
   const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all-status");
 
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
-  const isStaff = userRole === "Staff";
-  const isAdmin = userRole === "Admin";
-  const isAccountant = userRole === "Accountant";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const roleNormalized = String(userRole || "").toLowerCase().trim();
+  const isStaff = roleNormalized === "staff" || userRole === "Staff";
+  const isAdmin = roleNormalized === "admin" || userRole === "Admin";
+  const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account" || userRole === "Accountant";
   const canEdit = isAdmin || isAccountant;
   const canDelete = isAdmin;
   const canExportImport = !isStaff && !isAccountant;
@@ -1831,69 +1833,74 @@ function CustomersPage() {
     return sum;
   }, [returnDueMap]);
 
-  const filteredCustomers = useMemo(() => sortLatestFirst(
-    customers.filter((c) => {
-      const q = debouncedSearch.toLowerCase().trim();
-      const tokens = q.split(/\s+/).filter(Boolean);
-      const custRentals = rentalsByCustomer.get(c.id) || [];
+  const filteredCustomers = useMemo(() => {
+    if (isStaff && !debouncedSearch.trim()) {
+      return [];
+    }
+    return sortLatestFirst(
+      customers.filter((c) => {
+        const q = debouncedSearch.toLowerCase().trim();
+        const tokens = q.split(/\s+/).filter(Boolean);
+        const custRentals = rentalsByCustomer.get(c.id) || [];
 
-      const wordStartsWith = (text: unknown, token: string) => {
-        if (!text) return false;
-        const words = String(text).toLowerCase().split(/[\s,./\\()-]+/).filter(Boolean);
-        return words.some(w => w.startsWith(token));
-      };
+        const wordStartsWith = (text: unknown, token: string) => {
+          if (!text) return false;
+          const words = String(text).toLowerCase().split(/[\s,./\\()-]+/).filter(Boolean);
+          return words.some(w => w.startsWith(token));
+        };
 
-      const matchesSearch = !q || tokens.every((token) => {
-        // Name: word prefix match (e.g. "Srinivas" starts with "srini")
-        if (wordStartsWith(c.name, token)) return true;
+        const matchesSearch = !q || tokens.every((token) => {
+          // Name: word prefix match (e.g. "Srinivas" starts with "srini")
+          if (wordStartsWith(c.name, token)) return true;
 
-        // Customer ID (e.g. CUS-0061 or 0061)
-        if (String(c.id || "").toLowerCase().includes(token)) return true;
+          // Customer ID (e.g. CUS-0061 or 0061)
+          if (String(c.id || "").toLowerCase().includes(token)) return true;
 
-        // Phone numbers
-        const tokenDigits = token.replace(/\D/g, "");
-        if (tokenDigits.length >= 2) {
-          if (String(c.phone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
-          if (String(c.altPhone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
-          if (String(c.contactNumber3 || "").replace(/\D/g, "").includes(tokenDigits)) return true;
-        } else {
-          if (String(c.phone || "").toLowerCase().includes(token)) return true;
-          if (String(c.altPhone || "").toLowerCase().includes(token)) return true;
-          if (String(c.contactNumber3 || "").toLowerCase().includes(token)) return true;
-        }
+          // Phone numbers
+          const tokenDigits = token.replace(/\D/g, "");
+          if (tokenDigits.length >= 2) {
+            if (String(c.phone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+            if (String(c.altPhone || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+            if (String(c.contactNumber3 || "").replace(/\D/g, "").includes(tokenDigits)) return true;
+          } else {
+            if (String(c.phone || "").toLowerCase().includes(token)) return true;
+            if (String(c.altPhone || "").toLowerCase().includes(token)) return true;
+            if (String(c.contactNumber3 || "").toLowerCase().includes(token)) return true;
+          }
 
-        // Area & City (word prefix match)
-        if (wordStartsWith(c.area || "", token)) return true;
-        if (wordStartsWith(c.city || "", token)) return true;
+          // Area & City (word prefix match)
+          if (wordStartsWith(c.area || "", token)) return true;
+          if (wordStartsWith(c.city || "", token)) return true;
 
-        // Aadhaar & PAN
-        if (c.aadhaar && String(c.aadhaar).toLowerCase().includes(token)) return true;
-        if (c.pan && String(c.pan).toLowerCase().includes(token)) return true;
+          // Aadhaar & PAN
+          if (c.aadhaar && String(c.aadhaar).toLowerCase().includes(token)) return true;
+          if (c.pan && String(c.pan).toLowerCase().includes(token)) return true;
 
-        // Active Rental Serials / Equipment names
-        const hasRentalMatch = custRentals.some(r =>
-          (r.serial && wordStartsWith(r.serial, token)) ||
-          (r.equipment && wordStartsWith(r.equipment, token)) ||
-          (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.serial && wordStartsWith(ei.serial, token)))
-        );
-        if (hasRentalMatch) return true;
+          // Active Rental Serials / Equipment names
+          const hasRentalMatch = custRentals.some(r =>
+            (r.serial && wordStartsWith(r.serial, token)) ||
+            (r.equipment && wordStartsWith(r.equipment, token)) ||
+            (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.serial && wordStartsWith(ei.serial, token)))
+          );
+          if (hasRentalMatch) return true;
 
-        return false;
-      });
+          return false;
+        });
 
-      const matchesCity =
-        cityFilter === "all" || String(c.city || "").toLowerCase() === cityFilter.toLowerCase();
-      const matchesStatus =
-        statusFilter === "all-status"
-          ? true
-          : statusFilter === "KYC Pending"
-            ? kycPendingSet.has(c.id)
-            : statusFilter === "Return Due" || statusFilter === "Return Due (Pay)"
-              ? returnDueSet.has(c.id)
-              : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
-      return matchesSearch && matchesCity && matchesStatus;
-    })
-  ), [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer]);
+        const matchesCity =
+          cityFilter === "all" || String(c.city || "").toLowerCase() === cityFilter.toLowerCase();
+        const matchesStatus =
+          statusFilter === "all-status"
+            ? true
+            : statusFilter === "KYC Pending"
+              ? kycPendingSet.has(c.id)
+              : statusFilter === "Return Due" || statusFilter === "Return Due (Pay)"
+                ? returnDueSet.has(c.id)
+                : String(c.status || "").toLowerCase() === statusFilter.toLowerCase();
+        return matchesSearch && matchesCity && matchesStatus;
+      })
+    );
+  }, [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer, isStaff]);
 
   // PERF: render the first page only; the rest load on demand. Large customer
   // books used to mount every row at once, which froze the tab on each filter change.
@@ -1976,42 +1983,44 @@ function CustomersPage() {
         </>
       }
     >
-      {/* Stat cards */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {[
-          { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
-          { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
-          { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
-          { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
-          { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
-        ].map((s, i) => {
-          const isSelected = statusFilter === s.key;
-          return (
-            <Card 
-              key={s.l} 
-              className={`cursor-pointer transition-all hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1} ${
-                isSelected ? "ring-2 ring-primary/60 border-primary bg-primary/5" : "border-border/60"
-              }`}
-              onClick={() => setStatusFilter(isSelected ? "all-status" : s.key)}
-            >
-              <CardContent className="p-3.5 sm:p-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9 shrink-0">
-                    <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight truncate">{s.l}</p>
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <p className={`mt-0.5 font-display text-[18px] sm:text-[20px] font-bold ${s.color}`}>{s.v}</p>
-                      {s.sub && <span className="text-[10px] font-mono font-bold text-muted-foreground/80">{s.sub}</span>}
+      {/* Stat cards - hidden for Staff */}
+      {!isStaff && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {[
+            { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
+            { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
+            { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
+            { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
+            { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
+          ].map((s, i) => {
+            const isSelected = statusFilter === s.key;
+            return (
+              <Card 
+                key={s.l} 
+                className={`cursor-pointer transition-all hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1} ${
+                  isSelected ? "ring-2 ring-primary/60 border-primary bg-primary/5" : "border-border/60"
+                }`}
+                onClick={() => setStatusFilter(isSelected ? "all-status" : s.key)}
+              >
+                <CardContent className="p-3.5 sm:p-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="metric-icon h-8 w-8 sm:h-9 sm:w-9 shrink-0">
+                      <s.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${s.color}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/65 leading-tight truncate">{s.l}</p>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <p className={`mt-0.5 font-display text-[18px] sm:text-[20px] font-bold ${s.color}`}>{s.v}</p>
+                        {s.sub && <span className="text-[10px] font-mono font-bold text-muted-foreground/80">{s.sub}</span>}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Table card */}
       <Card className="overflow-hidden">
@@ -2021,7 +2030,7 @@ function CustomersPage() {
             <div className="relative flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
-                placeholder="Search by name, phone, ID…"
+                placeholder={isStaff ? "Search customer by name, phone, ID, serial…" : "Search by name, phone, ID…"}
                 className="pl-9 h-9 text-[13px] bg-card border-border/50 w-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2030,22 +2039,32 @@ function CustomersPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground shrink-0">
                 <Users className="h-3.5 w-3.5" />
-                <span><strong className="text-foreground">{filteredCustomers.length}</strong> customers</span>
+                <span>
+                  {isStaff && !debouncedSearch.trim() ? (
+                    "Type to search customer"
+                  ) : (
+                    <>
+                      <strong className="text-foreground">{filteredCustomers.length}</strong> {filteredCustomers.length === 1 ? "customer" : "customers"}
+                    </>
+                  )}
+                </span>
               </div>
-              <Button
-                variant={statusFilter === "Return Due" ? "default" : "outline"}
-                size="sm"
-                className={`h-8 text-[12px] font-bold gap-1.5 shrink-0 transition-all ${
-                  statusFilter === "Return Due"
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                    : "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                }`}
-                onClick={() => setStatusFilter(statusFilter === "Return Due" ? "all-status" : "Return Due")}
-                title="Filter customers with Return Due balance"
-              >
-                <CreditCard className="h-3.5 w-3.5" />
-                Return Due ({returnDueSet.size})
-              </Button>
+              {!isStaff && (
+                <Button
+                  variant={statusFilter === "Return Due" ? "default" : "outline"}
+                  size="sm"
+                  className={`h-8 text-[12px] font-bold gap-1.5 shrink-0 transition-all ${
+                    statusFilter === "Return Due"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                      : "border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                  }`}
+                  onClick={() => setStatusFilter(statusFilter === "Return Due" ? "all-status" : "Return Due")}
+                  title="Filter customers with Return Due balance"
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Return Due ({returnDueSet.size})
+                </Button>
+              )}
               <div className="flex-1" />
               <Select value={cityFilter} onValueChange={setCityFilter}>
                 <SelectTrigger className="w-[120px] h-8 text-[12px] shrink-0">
@@ -2095,7 +2114,19 @@ function CustomersPage() {
                 {filteredCustomers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
-                      No customers match your search or filter.
+                      {isStaff && !debouncedSearch.trim() ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+                            <Search className="h-6 w-6" />
+                          </div>
+                          <p className="text-[14px] font-semibold text-foreground">Search Customer History</p>
+                          <p className="text-[12px] text-muted-foreground mt-1 max-w-sm">
+                            Enter a customer name, phone number, customer ID, or serial number in the search box above to view their details and rental history.
+                          </p>
+                        </div>
+                      ) : (
+                        "No customers match your search or filter."
+                      )}
                     </TableCell>
                   </TableRow>
                 )}
@@ -2229,7 +2260,19 @@ function CustomersPage() {
           <div className="md:hidden divide-y divide-border/60">
             {filteredCustomers.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
-                No customers match your search or filter.
+                {isStaff && !debouncedSearch.trim() ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+                      <Search className="h-6 w-6" />
+                    </div>
+                    <p className="text-[14px] font-semibold text-foreground">Search Customer History</p>
+                    <p className="text-[12px] text-muted-foreground mt-1 max-w-sm">
+                      Enter a customer name, phone number, customer ID, or serial number in the search box above to view their details and rental history.
+                    </p>
+                  </div>
+                ) : (
+                  "No customers match your search or filter."
+                )}
               </div>
             ) : (
               visibleCustomers.map((c, idx) => (

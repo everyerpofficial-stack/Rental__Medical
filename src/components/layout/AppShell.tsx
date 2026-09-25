@@ -88,9 +88,9 @@ function getBottomNavItems(role: string) {
   if (role === "Staff") {
     return [
       { to: "/rentals", label: "Rentals", icon: FileText },
+      { to: "/customers", label: "Customers", icon: Users },
       { to: "/equipment", label: "Equipment", icon: Package },
       { to: "/payments", label: "Payments", icon: CreditCard },
-      { to: "/returns", label: "Returns", icon: RotateCcw },
     ] as const;
   }
   if (role === "Accountant") {

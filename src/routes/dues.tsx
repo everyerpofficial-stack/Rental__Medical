@@ -1629,9 +1629,10 @@ function DuesPage() {
   const rentalsList = useMemo(() => getRentals(), [refreshKey, dbVersion]);
   const paymentsList = useMemo(() => getPayments(), [refreshKey, dbVersion]);
   const returnsList = useMemo(() => getReturns(), [dbVersion]);
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") : null;
-  const isStaff = userRole === "Staff";
-  const isAccountant = userRole === "Accountant";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
+  const roleNormalized = String(userRole || "").toLowerCase().trim();
+  const isStaff = roleNormalized === "staff" || userRole === "Staff";
+  const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account" || userRole === "Accountant";
   const canExport = !isStaff && !isAccountant;
 
   const formatRupee = (val: number) => `₹${val.toLocaleString("en-IN")}`;
@@ -2782,38 +2783,40 @@ function DuesPage() {
         </div>
       }
     >
-      {/* Severity metric bar */}
-      <Card className="mb-5 overflow-hidden">
-        <CardContent className="p-0">
-          <div className="grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-2 lg:grid-cols-4 sm:divide-y-0 sm:divide-x">
-            {severityBuckets.map((s, i) => {
-              const Icon = s.icon;
-              return (
-                <div
-                  key={s.l}
-                  className={`relative flex flex-col gap-1.5 p-4 transition-colors hover:bg-muted/30 animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <Icon className={`h-4 w-4 ${s.iconColor}`} />
-                    {s.alert && (
-                      <span className="flex h-2 w-2">
-                        <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-destructive opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
-                      </span>
-                    )}
+      {/* Severity metric bar - hidden for Accountant */}
+      {!isAccountant && (
+        <Card className="mb-5 overflow-hidden">
+          <CardContent className="p-0">
+            <div className="grid grid-cols-1 divide-y divide-border/60 sm:grid-cols-2 lg:grid-cols-4 sm:divide-y-0 sm:divide-x">
+              {severityBuckets.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                  <div
+                    key={s.l}
+                    className={`relative flex flex-col gap-1.5 p-4 transition-colors hover:bg-muted/30 animate-[fade-in_0.35s_ease-out_both] stagger-${i + 1}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <Icon className={`h-4 w-4 ${s.iconColor}`} />
+                      {s.alert && (
+                        <span className="flex h-2 w-2">
+                          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-destructive opacity-60" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">{s.l}</p>
+                      <p className="font-display text-[18px] font-bold tracking-tight mt-0.5">{s.v}</p>
+                      <p className="text-[11px] text-muted-foreground">{s.n}</p>
+                    </div>
+                    {s.alert && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-destructive/40" />}
                   </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">{s.l}</p>
-                    <p className="font-display text-[18px] font-bold tracking-tight mt-0.5">{s.v}</p>
-                    <p className="text-[11px] text-muted-foreground">{s.n}</p>
-                  </div>
-                  {s.alert && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-destructive/40" />}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Table */}
       <Card className="overflow-hidden">
