@@ -5884,15 +5884,17 @@ function RentalsPage() {
                 Export
               </Button>
             )}
-            <Button size="sm" onClick={() => setActiveView("new")} className="relative font-semibold">
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              New Agreement
-              {hasSavedDraft && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
-                  Draft
-                </span>
-              )}
-            </Button>
+            {!isStaff && (
+              <Button size="sm" onClick={() => setActiveView("new")} className="relative font-semibold">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                New Agreement
+                {hasSavedDraft && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30">
+                    Draft
+                  </span>
+                )}
+              </Button>
+            )}
           </>
         ) : null
       }
@@ -5918,26 +5920,28 @@ function RentalsPage() {
       ) : (
         <>
           {/* Stats */}
-          <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {[
-          { l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
-          { l: "Active",           v: rentalsList.filter(r => r.status === "Active").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
-          { l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
-          { l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
-        ].map((s, i) => (
-          <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.4s_ease-out_both] stagger-${i + 1}`}>
-            <CardContent className="flex items-center gap-2.5 sm:gap-4 p-3.5 sm:p-5">
-              <div className={`metric-icon h-8 w-8 sm:h-10 sm:w-10 shrink-0 ${s.bg}`}>
-                <s.icon className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${s.c}`} />
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 leading-tight">{s.l}</p>
-                <p className={`mt-0.5 font-display text-[18px] sm:text-[22px] font-bold ${s.c}`}>{s.v}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+          {!isStaff && (
+            <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              {[
+                { l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
+                { l: "Active",           v: rentalsList.filter(r => r.status === "Active").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
+                { l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
+                { l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
+              ].map((s, i) => (
+                <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.4s_ease-out_both] stagger-${i + 1}`}>
+                  <CardContent className="flex items-center gap-2.5 sm:gap-4 p-3.5 sm:p-5">
+                    <div className={`metric-icon h-8 w-8 sm:h-10 sm:w-10 shrink-0 ${s.bg}`}>
+                      <s.icon className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${s.c}`} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 leading-tight">{s.l}</p>
+                      <p className={`mt-0.5 font-display text-[18px] sm:text-[22px] font-bold ${s.c}`}>{s.v}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
@@ -5986,37 +5990,39 @@ function RentalsPage() {
 
           {/* ITEM-16: quick filters across the history. Counts are live so the
               operator can see at a glance how much is still open or owing. */}
-          <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
-            {[
-              { key: "all",       label: "All",           count: rentalsList.length },
-              { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
-              { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
-              { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
-              ...(rentalsList.some((r) => r.status === "Pending Approval")
-                ? [{ key: "pending", label: "Pending Approval", count: rentalsList.filter((r) => r.status === "Pending Approval").length }]
-                : []),
-              ...(rentalsList.some((r) => r.status === "Cancelled")
-                ? [{ key: "cancelled", label: "Cancelled", count: rentalsList.filter((r) => r.status === "Cancelled").length }]
-                : []),
-            ].map((f) => (
-              <button
-                key={f.key}
-                type="button"
-                onClick={() => setQuickFilter(f.key as any)}
-                aria-pressed={quickFilter === f.key}
-                className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
-                  quickFilter === f.key
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                {f.label}
-                <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
-                  {f.count}
-                </span>
-              </button>
-            ))}
-          </div>
+          {!isStaff && (
+            <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
+              {[
+                { key: "all",       label: "All",           count: rentalsList.length },
+                { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
+                { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
+                { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
+                ...(rentalsList.some((r) => r.status === "Pending Approval")
+                  ? [{ key: "pending", label: "Pending Approval", count: rentalsList.filter((r) => r.status === "Pending Approval").length }]
+                  : []),
+                ...(rentalsList.some((r) => r.status === "Cancelled")
+                  ? [{ key: "cancelled", label: "Cancelled", count: rentalsList.filter((r) => r.status === "Cancelled").length }]
+                  : []),
+              ].map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setQuickFilter(f.key as any)}
+                  aria-pressed={quickFilter === f.key}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                    quickFilter === f.key
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                  <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
+                    {f.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Desktop Table — hidden on mobile */}
           <div className="hidden md:block overflow-x-auto">
@@ -6516,7 +6522,7 @@ function RentalsPage() {
       )}
 
       {/* Mobile FAB */}
-      {activeView === "list" && (
+      {activeView === "list" && !isStaff && (
         <button className="fab md:hidden relative" onClick={() => setActiveView("new")}>
           <Plus className="h-5 w-5" />
           New Agreement

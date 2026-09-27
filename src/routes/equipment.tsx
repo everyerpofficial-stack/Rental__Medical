@@ -1176,7 +1176,7 @@ function EquipmentPage() {
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
   const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
-  const filteredEquipment = equipment.filter((e) => {
+  const filteredEquipment = (isStaff && !search.trim()) ? [] : equipment.filter((e) => {
     const q = search.toLowerCase().trim();
     const activeRental = rentalsList.find(r => (r.equipmentId === e.id || (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.equipmentId === e.id))) && r.status === "Active");
     const activeCustomer = activeRental ? customersList.find((c: any) => c.id === activeRental.customerId) : null;
@@ -1227,7 +1227,7 @@ function EquipmentPage() {
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-            <Input placeholder="Search by name, serial, model…" className="pl-9 h-9 text-[13px]" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder={isStaff ? "Search by name, serial, model, customer…" : "Search by name, serial, model…"} className="pl-9 h-9 text-[13px]" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-full sm:w-[150px] md:w-[180px] h-9 text-[12px] sm:shrink-0"><SelectValue placeholder="All Categories" /></SelectTrigger>
@@ -1251,20 +1251,22 @@ function EquipmentPage() {
               </SelectContent>
             </Select>
           )}
-          <div className="flex gap-1 shrink-0">
-            {["all", "available", "rented", "undermaintenance", "returnedtoowner"].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusTab(tab)}
-                className={`mobile-chip shrink-0 ${statusTab === tab ? "active" : ""}`}
-              >
-                {tab === "all" ? "All" :
-                 tab === "available" ? "Available" :
-                 tab === "rented" ? "Rented" :
-                 tab === "undermaintenance" ? "Maintenance" : "To Owner"}
-              </button>
-            ))}
-          </div>
+          {!isStaff && (
+            <div className="flex gap-1 shrink-0">
+              {["all", "available", "rented", "undermaintenance", "returnedtoowner"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setStatusTab(tab)}
+                  className={`mobile-chip shrink-0 ${statusTab === tab ? "active" : ""}`}
+                >
+                  {tab === "all" ? "All" :
+                   tab === "available" ? "Available" :
+                   tab === "rented" ? "Rented" :
+                   tab === "undermaintenance" ? "Maintenance" : "To Owner"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1287,6 +1289,19 @@ function EquipmentPage() {
         const sortedOwners = allOwnerNames.sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b));
 
         if (filteredEquipment.length === 0) {
+          if (isStaff && !search.trim()) {
+            return (
+              <div className="py-16 text-center">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto mb-3">
+                  <Search className="h-6 w-6" />
+                </div>
+                <p className="text-[14px] font-semibold text-foreground">Search to view equipment</p>
+                <p className="text-[12px] text-muted-foreground mt-1 max-w-sm mx-auto">
+                  Enter equipment name, serial number, model, or customer in the search bar above.
+                </p>
+              </div>
+            );
+          }
           return (
             <div className="py-16 text-center">
               <p className="text-[14px] font-semibold text-foreground">No equipment found</p>

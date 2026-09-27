@@ -1348,13 +1348,13 @@ function CustomerPhoneDisplay({
   altPhone,
   contactNumber3,
 }: {
-  phone?: string;
-  altPhone?: string;
-  contactNumber3?: string;
+  phone?: any;
+  altPhone?: any;
+  contactNumber3?: any;
 }) {
-  const p1 = phone?.trim();
-  const p2 = altPhone?.trim();
-  const p3 = contactNumber3?.trim();
+  const p1 = phone != null ? String(phone).trim() : "";
+  const p2 = altPhone != null ? String(altPhone).trim() : "";
+  const p3 = contactNumber3 != null ? String(contactNumber3).trim() : "";
   if (!p1 && !p2 && !p3) return null;
 
   return (
@@ -1429,22 +1429,24 @@ function PaymentsPage() {
   const customersByName = useMemo(() => {
     const map = new Map<string, any>();
     for (const c of customers) {
-      if (c.name) map.set(c.name.toLowerCase().trim(), c);
+      if (c && c.name != null) map.set(String(c.name).toLowerCase().trim(), c);
     }
     return map;
   }, [customers]);
 
   const resolveReceiptCustomerContacts = useCallback((p: Payment) => {
     const matchRental = rentalsById.get(p.agreement);
+    const pCustName = p.customer != null ? String(p.customer).toLowerCase().trim() : "";
+    const mCustName = matchRental?.customer != null ? String(matchRental.customer).toLowerCase().trim() : "";
     const cust =
       (p.customerId ? customersById.get(p.customerId) : undefined) ||
       (matchRental?.customerId ? customersById.get(matchRental.customerId) : undefined) ||
-      (p.customer ? customersByName.get(p.customer.toLowerCase().trim()) : undefined) ||
-      (matchRental?.customer ? customersByName.get(matchRental.customer.toLowerCase().trim()) : undefined);
+      (pCustName ? customersByName.get(pCustName) : undefined) ||
+      (mCustName ? customersByName.get(mCustName) : undefined);
 
-    const phone = (p as any).phone || matchRental?.phone || cust?.phone || "";
-    const altPhone = (p as any).altPhone || matchRental?.altPhone || cust?.altPhone || "";
-    const contactNumber3 = (p as any).contactNumber3 || matchRental?.contactNumber3 || cust?.contactNumber3 || "";
+    const phone = (p as any).phone != null ? String((p as any).phone).trim() : (matchRental?.phone != null ? String(matchRental.phone).trim() : (cust?.phone != null ? String(cust.phone).trim() : ""));
+    const altPhone = (p as any).altPhone != null ? String((p as any).altPhone).trim() : (matchRental?.altPhone != null ? String(matchRental.altPhone).trim() : (cust?.altPhone != null ? String(cust.altPhone).trim() : ""));
+    const contactNumber3 = (p as any).contactNumber3 != null ? String((p as any).contactNumber3).trim() : (matchRental?.contactNumber3 != null ? String(matchRental.contactNumber3).trim() : (cust?.contactNumber3 != null ? String(cust.contactNumber3).trim() : ""));
 
     return { phone, altPhone, contactNumber3 };
   }, [rentalsById, customersById, customersByName]);
@@ -1467,14 +1469,18 @@ function PaymentsPage() {
 
   // 1. Initialize with all rentals
   rentalsList.forEach((r) => {
-    const cust = customersById.get(r.customerId) || (r.customer ? customersByName.get(r.customer.toLowerCase().trim()) : undefined);
+    const rCustName = r.customer != null ? String(r.customer).toLowerCase().trim() : "";
+    const cust = customersById.get(r.customerId) || (rCustName ? customersByName.get(rCustName) : undefined);
+    const phone = r.phone != null ? String(r.phone).trim() : (cust?.phone != null ? String(cust.phone).trim() : "");
+    const altPhone = r.altPhone != null ? String(r.altPhone).trim() : (cust?.altPhone != null ? String(cust.altPhone).trim() : "");
+    const contactNumber3 = r.contactNumber3 != null ? String(r.contactNumber3).trim() : (cust?.contactNumber3 != null ? String(cust.contactNumber3).trim() : "");
     agreementMap.set(r.id, {
       agreementId: r.id,
       customerName: r.customer,
       customerId: r.customerId,
-      phone: r.phone || cust?.phone || "",
-      altPhone: r.altPhone || cust?.altPhone || "",
-      contactNumber3: r.contactNumber3 || cust?.contactNumber3 || "",
+      phone,
+      altPhone,
+      contactNumber3,
       equipment: r.equipment,
       rentStatus: r.status,
       monthlyRent: r.monthlyRent || 0,
@@ -1490,17 +1496,21 @@ function PaymentsPage() {
     let group = agreementMap.get(agrId);
     if (!group) {
       const matchRental = rentalsById.get(agrId);
+      const pCustName = p.customer != null ? String(p.customer).toLowerCase().trim() : "";
       const cust =
         (p.customerId ? customersById.get(p.customerId) : undefined) ||
         (matchRental?.customerId ? customersById.get(matchRental.customerId) : undefined) ||
-        (p.customer ? customersByName.get(p.customer.toLowerCase().trim()) : undefined);
+        (pCustName ? customersByName.get(pCustName) : undefined);
+      const phone = (p as any).phone != null ? String((p as any).phone).trim() : (matchRental?.phone != null ? String(matchRental.phone).trim() : (cust?.phone != null ? String(cust.phone).trim() : ""));
+      const altPhone = (p as any).altPhone != null ? String((p as any).altPhone).trim() : (matchRental?.altPhone != null ? String(matchRental.altPhone).trim() : (cust?.altPhone != null ? String(cust.altPhone).trim() : ""));
+      const contactNumber3 = (p as any).contactNumber3 != null ? String((p as any).contactNumber3).trim() : (matchRental?.contactNumber3 != null ? String(matchRental.contactNumber3).trim() : (cust?.contactNumber3 != null ? String(cust.contactNumber3).trim() : ""));
       group = {
         agreementId: agrId,
         customerName: p.customer || "Unknown Customer",
         customerId: p.customerId || "",
-        phone: (p as any).phone || matchRental?.phone || cust?.phone || "",
-        altPhone: (p as any).altPhone || matchRental?.altPhone || cust?.altPhone || "",
-        contactNumber3: (p as any).contactNumber3 || matchRental?.contactNumber3 || cust?.contactNumber3 || "",
+        phone,
+        altPhone,
+        contactNumber3,
         equipment: "—",
         rentStatus: "Active",
         monthlyRent: 0,
@@ -1535,15 +1545,16 @@ function PaymentsPage() {
   const filteredAgreements = (isStaff && !search.trim()) ? [] : agreementList.filter((g) => {
     const q = search.toLowerCase().trim();
     const rental = rentalsById.get(g.agreementId);
-    const customer = customersById.get(g.customerId) || (rental ? customersById.get(rental.customerId) : undefined) || (g.customerName ? customersByName.get(g.customerName.toLowerCase().trim()) : undefined);
+    const gCustName = g.customerName != null ? String(g.customerName).toLowerCase().trim() : "";
+    const customer = customersById.get(g.customerId) || (rental ? customersById.get(rental.customerId) : undefined) || (gCustName ? customersByName.get(gCustName) : undefined);
     const formattedStartDate = g.startDate ? formatDateDDMMYYYY(g.startDate) : "";
 
     const matchesSearch = !q ||
-      g.agreementId.toLowerCase().includes(q) ||
-      g.customerName.toLowerCase().includes(q) ||
-      g.equipment.toLowerCase().includes(q) ||
-      g.latestMode.toLowerCase().includes(q) ||
-      (g.startDate && g.startDate.toLowerCase().includes(q)) ||
+      String(g.agreementId || "").toLowerCase().includes(q) ||
+      String(g.customerName || "").toLowerCase().includes(q) ||
+      String(g.equipment || "").toLowerCase().includes(q) ||
+      String(g.latestMode || "").toLowerCase().includes(q) ||
+      (g.startDate && String(g.startDate).toLowerCase().includes(q)) ||
       (formattedStartDate && formattedStartDate.toLowerCase().includes(q)) ||
       (rental && (
         String(rental.serial || "").toLowerCase().includes(q) ||
@@ -1555,9 +1566,9 @@ function PaymentsPage() {
         String(customer.altPhone || "").toLowerCase().includes(q) ||
         String(customer.contactNumber3 || "").toLowerCase().includes(q)
       )) ||
-      (g.phone && g.phone.toLowerCase().includes(q)) ||
-      (g.altPhone && g.altPhone.toLowerCase().includes(q)) ||
-      (g.contactNumber3 && g.contactNumber3.toLowerCase().includes(q));
+      String(g.phone || "").toLowerCase().includes(q) ||
+      String(g.altPhone || "").toLowerCase().includes(q) ||
+      String(g.contactNumber3 || "").toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
 

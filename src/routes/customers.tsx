@@ -1962,16 +1962,18 @@ function CustomersPage() {
               />
             </>
           )}
-          <CustomerFormDialog
-            title="New Customer"
-            onSave={refresh}
-            trigger={
-              <Button size="sm">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Customer
-              </Button>
-            }
-          />
+          {!isStaff && (
+            <CustomerFormDialog
+              title="New Customer"
+              onSave={refresh}
+              trigger={
+                <Button size="sm">
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add Customer
+                </Button>
+              }
+            />
+          )}
         </>
       }
     >
@@ -2207,7 +2209,7 @@ function CustomersPage() {
                     <TableCell><StatusBadge status={c.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 transition-opacity">
-                        <CustomerPayDueDialog customer={c} onSave={refresh} />
+                        {!isStaff && <CustomerPayDueDialog customer={c} onSave={refresh} />}
                         <Button
                           variant="ghost"
                           size="icon"
@@ -2327,7 +2329,7 @@ function CustomersPage() {
                               )}
                             </p>
                             <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <CustomerPayDueDialog customer={c} onSave={refresh} />
+                              {!isStaff && <CustomerPayDueDialog customer={c} onSave={refresh} />}
                               {canEdit && (
                                 <CustomerFormDialog
                                   title="Edit Customer"
