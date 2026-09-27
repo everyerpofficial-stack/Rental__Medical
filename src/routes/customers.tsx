@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
@@ -66,14 +66,6 @@ import { asText, capitalizeWords } from "@/lib/utils";
 import { AgreementPreviewDialog } from "./rentals";
 
 export const Route = createFileRoute("/customers")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined") {
-      const role = localStorage.getItem("medirent-user-role");
-      if (role === "Staff") {
-        throw redirect({ to: "/rentals" });
-      }
-    }
-  },
   head: () => ({ meta: [{ title: "Customers — Relife" }] }),
   component: CustomersPage,
 });

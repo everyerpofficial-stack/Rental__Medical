@@ -2014,9 +2014,109 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     saveRental(newRental);
 
     // Save Payment records in paymentsList for initial collected amounts (Rent & Deposit)
-    // so they appear in Payments ledger, receipts, and revenue reports.
+    // so they appear in Payments ledger, receipts, Payment History, and revenue reports.
+    const allCurrentPayments = getPayments();
+    const existingPayments = allCurrentPayments.filter(
+      (p) => p.agreement === finalAgreementId && p.status === "Paid"
+    );
+    const existingRentPaid = existingPayments
+      .filter((p) => p.type === "Rent" || p.type === "Rent Payment")
+      .reduce((s, p) => s + (cleanNum(p.amount) || 0), 0);
+    const existingDepositPaid = existingPayments
+      .filter((p) => p.type === "Deposit" || p.type === "Security Deposit")
+      .reduce((s, p) => s + (cleanNum(p.amount) || 0), 0);
+    const existingAddonPaid = existingPayments
+      .filter((p) => p.type === "Additional Charges" || p.type === "Delivery Charges" || p.type === "Installation Charges" || p.type === "Removal Charges")
+      .reduce((s, p) => s + (cleanNum(p.amount) || 0), 0);
+
+    const oldEquipmentIds = rental
+      ? (rental.equipmentId || "").split(",").map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    const addedEquipments = selectedEquipments.filter(
+      (e) => !oldEquipmentIds.includes(e.equipmentId)
+    );
+
     if (!rental) {
       if (rentToAdd > 0) {
+        if (selectedEquipments.length > 1 && rentToAdd === totalMonthlyRent) {
+          // If multiple equipments and full upfront rent paid, create itemized payment per equipment
+          selectedEquipments.forEach((item) => {
+            const itemRate = (item.rentCycle === "Monthly" ? Number(item.rentRate) : (Number(item.rentRate) || 0)) || 0;
+            if (itemRate > 0) {
+              savePayment({
+                id: getNextPaymentNumber(),
+                date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+                customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+                customerId: customerId,
+                agreement: finalAgreementId,
+                equipmentId: item.equipmentId,
+                amount: itemRate,
+                mode: paymentMode || "Cash",
+                type: "Rent Payment",
+                notes: `Advance rent payment for ${item.name} (${item.serial || ""}) on agreement ${finalAgreementId}`,
+                status: "Paid" as const,
+                collectedBy: paymentCollectedBy || "Admin",
+              });
+            }
+          });
+        } else {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+            customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+            customerId: customerId,
+            agreement: finalAgreementId,
+            equipmentId: compiledIds,
+            amount: rentToAdd,
+            mode: paymentMode || "Cash",
+            type: "Rent Payment",
+            notes: `Advance rent payment collected at agreement creation (${finalAgreementId})`,
+            status: "Paid" as const,
+            collectedBy: paymentCollectedBy || "Admin",
+          });
+        }
+      }
+
+      if (depositToAdd > 0) {
+        if (selectedEquipments.length > 1 && depositToAdd === totalDeposit) {
+          selectedEquipments.forEach((item) => {
+            const itemDeposit = Number(item.deposit) || 0;
+            if (itemDeposit > 0) {
+              savePayment({
+                id: getNextPaymentNumber(),
+                date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+                customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+                customerId: customerId,
+                agreement: finalAgreementId,
+                equipmentId: item.equipmentId,
+                amount: itemDeposit,
+                mode: paymentMode || "Cash",
+                type: "Deposit",
+                notes: `Security deposit for ${item.name} (${item.serial || ""}) on agreement ${finalAgreementId}`,
+                status: "Paid" as const,
+                collectedBy: paymentCollectedBy || "Admin",
+              });
+            }
+          });
+        } else {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+            customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+            customerId: customerId,
+            agreement: finalAgreementId,
+            equipmentId: compiledIds,
+            amount: depositToAdd,
+            mode: paymentMode || "Cash",
+            type: "Deposit",
+            notes: `Security deposit collected at agreement creation (${finalAgreementId})`,
+            status: "Paid" as const,
+            collectedBy: paymentCollectedBy || "Admin",
+          });
+        }
+      }
+
+      if (additionalItemsCollectedTotal > 0) {
         savePayment({
           id: getNextPaymentNumber(),
           date: paymentDate || agreementDate || getLocalYYYYMMDD(),
@@ -2024,16 +2124,105 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           customerId: customerId,
           agreement: finalAgreementId,
           equipmentId: compiledIds,
-          amount: rentToAdd,
+          amount: additionalItemsCollectedTotal,
           mode: paymentMode || "Cash",
-          type: "Rent Payment",
-          notes: `Advance rent payment collected at agreement creation (${finalAgreementId})`,
+          type: "Additional Charges",
+          notes: `Additional item charges collected (${selectedAdditionalItems.filter(i => i.status === "Paid").map(i => i.name).join(", ")}) on agreement ${finalAgreementId}`,
           status: "Paid" as const,
           collectedBy: paymentCollectedBy || "Admin",
         });
       }
+    } else {
+      // EDITING EXISTING AGREEMENT
+      let rentDiff = Math.max(0, rentToAdd - existingRentPaid);
+      if (rentDiff > 0) {
+        // Allocate first to added equipments if any
+        if (addedEquipments.length > 0) {
+          addedEquipments.forEach((item) => {
+            const itemRate = (item.rentCycle === "Monthly" ? Number(item.rentRate) : (Number(item.rentRate) || 0)) || 0;
+            const payAmt = Math.min(rentDiff, itemRate);
+            if (payAmt > 0) {
+              savePayment({
+                id: getNextPaymentNumber(),
+                date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+                customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+                customerId: customerId,
+                agreement: finalAgreementId,
+                equipmentId: item.equipmentId,
+                amount: payAmt,
+                mode: paymentMode || "Cash",
+                type: "Rent Payment",
+                notes: `Advance rent payment for added equipment ${item.name} (${item.serial || ""}) on agreement ${finalAgreementId}`,
+                status: "Paid" as const,
+                collectedBy: paymentCollectedBy || "Admin",
+              });
+              rentDiff -= payAmt;
+            }
+          });
+        }
+        if (rentDiff > 0) {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+            customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+            customerId: customerId,
+            agreement: finalAgreementId,
+            equipmentId: compiledIds,
+            amount: rentDiff,
+            mode: paymentMode || "Cash",
+            type: "Rent Payment",
+            notes: `Additional advance rent payment collected on agreement ${finalAgreementId}`,
+            status: "Paid" as const,
+            collectedBy: paymentCollectedBy || "Admin",
+          });
+        }
+      }
 
-      if (depositToAdd > 0) {
+      let depositDiff = Math.max(0, depositToAdd - existingDepositPaid);
+      if (depositDiff > 0) {
+        if (addedEquipments.length > 0) {
+          addedEquipments.forEach((item) => {
+            const itemDep = Number(item.deposit) || 0;
+            const payDep = Math.min(depositDiff, itemDep);
+            if (payDep > 0) {
+              savePayment({
+                id: getNextPaymentNumber(),
+                date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+                customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+                customerId: customerId,
+                agreement: finalAgreementId,
+                equipmentId: item.equipmentId,
+                amount: payDep,
+                mode: paymentMode || "Cash",
+                type: "Deposit",
+                notes: `Security deposit for added equipment ${item.name} (${item.serial || ""}) on agreement ${finalAgreementId}`,
+                status: "Paid" as const,
+                collectedBy: paymentCollectedBy || "Admin",
+              });
+              depositDiff -= payDep;
+            }
+          });
+        }
+        if (depositDiff > 0) {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate || agreementDate || getLocalYYYYMMDD(),
+            customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+            customerId: customerId,
+            agreement: finalAgreementId,
+            equipmentId: compiledIds,
+            amount: depositDiff,
+            mode: paymentMode || "Cash",
+            type: "Deposit",
+            notes: `Additional security deposit collected on agreement ${finalAgreementId}`,
+            status: "Paid" as const,
+            collectedBy: paymentCollectedBy || "Admin",
+          });
+        }
+      }
+
+      if (additionalItemsCollectedTotal > existingAddonPaid) {
+        const addonDiff = additionalItemsCollectedTotal - existingAddonPaid;
         savePayment({
           id: getNextPaymentNumber(),
           date: paymentDate || agreementDate || getLocalYYYYMMDD(),
@@ -2041,10 +2230,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           customerId: customerId,
           agreement: finalAgreementId,
           equipmentId: compiledIds,
-          amount: depositToAdd,
+          amount: addonDiff,
           mode: paymentMode || "Cash",
-          type: "Deposit",
-          notes: `Security deposit collected at agreement creation (${finalAgreementId})`,
+          type: "Additional Charges",
+          notes: `Additional item charges collected (${selectedAdditionalItems.filter(i => i.status === "Paid").map(i => i.name).join(", ")}) on agreement ${finalAgreementId}`,
           status: "Paid" as const,
           collectedBy: paymentCollectedBy || "Admin",
         });

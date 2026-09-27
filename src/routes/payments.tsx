@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
-  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2, Package,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2, Package, Phone,
 } from "lucide-react";
 import {
   getPayments,
@@ -901,6 +901,10 @@ function AgreementPaymentHistoryModal({
     .reduce((sum, p) => sum + p.amount, 0);
 
   const customerName = rental?.customer || agreementPayments[0]?.customer || "Unknown Customer";
+  const customerId = rental?.customerId || agreementPayments[0]?.customerId || "";
+  const customers = getCustomers();
+  const custObj = (customerId ? customers.find(c => c.id === customerId) : undefined) || customers.find(c => c.name && c.name.toLowerCase() === customerName.toLowerCase());
+  const custPhone = rental?.phone || custObj?.phone || "";
   const equipmentName = rental?.equipment || "—";
   const eqModelItems = rental ? getRentalEquipmentDetailedItems(rental, equipmentList, undefined, false) : [];
   const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
@@ -1039,7 +1043,14 @@ function AgreementPaymentHistoryModal({
                 <StatusBadge status={status as any} />
               </div>
               <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                <span>Customer: <strong className="text-foreground font-semibold">{customerName}</strong></span>
+                <span>
+                  Customer: <strong className="text-foreground font-semibold">{customerName}</strong>
+                  {custPhone && (
+                    <span className="text-muted-foreground font-normal ml-1">
+                      (📞 <a href={`tel:${custPhone}`} className="hover:underline hover:text-primary">{custPhone}</a>)
+                    </span>
+                  )}
+                </span>
                 <span>•</span>
                 <span>
                   Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong>
@@ -1332,6 +1343,52 @@ function getAgreementEquipmentModel(g: any, rentalsList: any[], equipmentList: a
   return extractModelOnly(g.equipment || "");
 }
 
+function CustomerPhoneDisplay({
+  phone,
+  altPhone,
+  contactNumber3,
+}: {
+  phone?: string;
+  altPhone?: string;
+  contactNumber3?: string;
+}) {
+  const p1 = phone?.trim();
+  const p2 = altPhone?.trim();
+  const p3 = contactNumber3?.trim();
+  if (!p1 && !p2 && !p3) return null;
+
+  return (
+    <div className="space-y-0.5 mt-0.5 max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center flex-wrap gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+        {p1 && (
+          <span className="flex items-center gap-0.5 text-foreground/80">
+            <Phone className="h-2.5 w-2.5 text-primary shrink-0" />
+            <a href={`tel:${p1}`} className="hover:underline hover:text-primary" onClick={(e) => e.stopPropagation()}>
+              {p1}
+            </a>
+          </span>
+        )}
+        {p2 && (
+          <span className="flex items-center gap-0.5 text-[11px] text-foreground/80">
+            {!p1 && <Phone className="h-2.5 w-2.5 text-primary shrink-0" />}
+            <a href={`tel:${p2}`} className="hover:underline hover:text-primary" onClick={(e) => e.stopPropagation()}>
+              {p2}
+            </a>
+          </span>
+        )}
+        {p3 && (
+          <span className="flex items-center gap-0.5 text-[11px] text-foreground/80">
+            {!p1 && !p2 && <Phone className="h-2.5 w-2.5 text-primary shrink-0" />}
+            <a href={`tel:${p3}`} className="hover:underline hover:text-primary" onClick={(e) => e.stopPropagation()}>
+              {p3}
+            </a>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PaymentsPage() {
   const dbVersion = useDatabaseTrigger();
   const [payments, setPayments] = useState(() => getPayments());
@@ -1360,13 +1417,46 @@ function PaymentsPage() {
     setPayments(getPayments());
   }, [dbVersion]);
 
-  // Group payments by Agreement ID
-  const rentalsList = useMemo(() => getRentals(), [dbVersion]);
+  const rentals = useMemo(() => getRentals(), [dbVersion]);
+  const customers = useMemo(() => getCustomers(), [dbVersion]);
   const equipmentList = useMemo(() => getEquipment(), [dbVersion]);
+  const rentalsList = rentals;
+
+  // PERF: index rentals and customers by id/name once, rather than scanning both
+  // arrays for every agreement or payment on every keystroke.
+  const rentalsById = useMemo(() => new Map(rentals.map((r: any) => [r.id, r])), [rentals]);
+  const customersById = useMemo(() => new Map(customers.map((c: any) => [c.id, c])), [customers]);
+  const customersByName = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const c of customers) {
+      if (c.name) map.set(c.name.toLowerCase().trim(), c);
+    }
+    return map;
+  }, [customers]);
+
+  const resolveReceiptCustomerContacts = useCallback((p: Payment) => {
+    const matchRental = rentalsById.get(p.agreement);
+    const cust =
+      (p.customerId ? customersById.get(p.customerId) : undefined) ||
+      (matchRental?.customerId ? customersById.get(matchRental.customerId) : undefined) ||
+      (p.customer ? customersByName.get(p.customer.toLowerCase().trim()) : undefined) ||
+      (matchRental?.customer ? customersByName.get(matchRental.customer.toLowerCase().trim()) : undefined);
+
+    const phone = (p as any).phone || matchRental?.phone || cust?.phone || "";
+    const altPhone = (p as any).altPhone || matchRental?.altPhone || cust?.altPhone || "";
+    const contactNumber3 = (p as any).contactNumber3 || matchRental?.contactNumber3 || cust?.contactNumber3 || "";
+
+    return { phone, altPhone, contactNumber3 };
+  }, [rentalsById, customersById, customersByName]);
+
+  // Group payments by Agreement ID
   const agreementMap = new Map<string, {
     agreementId: string;
     customerName: string;
     customerId: string;
+    phone: string;
+    altPhone: string;
+    contactNumber3: string;
     equipment: string;
     rentStatus: string;
     monthlyRent: number;
@@ -1377,10 +1467,14 @@ function PaymentsPage() {
 
   // 1. Initialize with all rentals
   rentalsList.forEach((r) => {
+    const cust = customersById.get(r.customerId) || (r.customer ? customersByName.get(r.customer.toLowerCase().trim()) : undefined);
     agreementMap.set(r.id, {
       agreementId: r.id,
       customerName: r.customer,
       customerId: r.customerId,
+      phone: r.phone || cust?.phone || "",
+      altPhone: r.altPhone || cust?.altPhone || "",
+      contactNumber3: r.contactNumber3 || cust?.contactNumber3 || "",
       equipment: r.equipment,
       rentStatus: r.status,
       monthlyRent: r.monthlyRent || 0,
@@ -1395,10 +1489,18 @@ function PaymentsPage() {
     const agrId = p.agreement || "No Agreement";
     let group = agreementMap.get(agrId);
     if (!group) {
+      const matchRental = rentalsById.get(agrId);
+      const cust =
+        (p.customerId ? customersById.get(p.customerId) : undefined) ||
+        (matchRental?.customerId ? customersById.get(matchRental.customerId) : undefined) ||
+        (p.customer ? customersByName.get(p.customer.toLowerCase().trim()) : undefined);
       group = {
         agreementId: agrId,
         customerName: p.customer || "Unknown Customer",
         customerId: p.customerId || "",
+        phone: (p as any).phone || matchRental?.phone || cust?.phone || "",
+        altPhone: (p as any).altPhone || matchRental?.altPhone || cust?.altPhone || "",
+        contactNumber3: (p as any).contactNumber3 || matchRental?.contactNumber3 || cust?.contactNumber3 || "",
         equipment: "—",
         rentStatus: "Active",
         monthlyRent: 0,
@@ -1429,14 +1531,11 @@ function PaymentsPage() {
     };
   });
 
-  const rentals = useMemo(() => getRentals(), [dbVersion]);
-  const customers = useMemo(() => getCustomers(), [dbVersion]);
-
   // Filter agreements by search & date range
   const filteredAgreements = (isStaff && !search.trim()) ? [] : agreementList.filter((g) => {
     const q = search.toLowerCase().trim();
-    const rental = rentals.find((r: any) => r.id === g.agreementId);
-    const customer = customers.find((c: any) => c.id === g.customerId || (rental && c.id === rental.customerId));
+    const rental = rentalsById.get(g.agreementId);
+    const customer = customersById.get(g.customerId) || (rental ? customersById.get(rental.customerId) : undefined) || (g.customerName ? customersByName.get(g.customerName.toLowerCase().trim()) : undefined);
     const formattedStartDate = g.startDate ? formatDateDDMMYYYY(g.startDate) : "";
 
     const matchesSearch = !q ||
@@ -1455,7 +1554,10 @@ function PaymentsPage() {
         String(customer.phone || "").toLowerCase().includes(q) ||
         String(customer.altPhone || "").toLowerCase().includes(q) ||
         String(customer.contactNumber3 || "").toLowerCase().includes(q)
-      ));
+      )) ||
+      (g.phone && g.phone.toLowerCase().includes(q)) ||
+      (g.altPhone && g.altPhone.toLowerCase().includes(q)) ||
+      (g.contactNumber3 && g.contactNumber3.toLowerCase().includes(q));
 
     if (!matchesSearch) return false;
 
@@ -1496,12 +1598,6 @@ function PaymentsPage() {
     if (numA !== numB) return numB - numA;
     return (b.latestDate || "").localeCompare(a.latestDate || "");
   });
-
-  // Flat individual receipt filtering (for "all-receipts" view)
-  // PERF: index rentals and customers by id once, rather than scanning both
-  // arrays for every payment on every keystroke.
-  const rentalsById = useMemo(() => new Map(rentals.map((r: any) => [r.id, r])), [rentals]);
-  const customersById = useMemo(() => new Map(customers.map((c: any) => [c.id, c])), [customers]);
 
   const filteredPayments = useMemo(() => {
     if (isStaff && (!search.trim() || !debouncedSearch.trim())) {
@@ -1781,6 +1877,11 @@ function PaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px] text-foreground">{g.customerName}</p>
+                          <CustomerPhoneDisplay
+                            phone={g.phone}
+                            altPhone={g.altPhone}
+                            contactNumber3={g.contactNumber3}
+                          />
                         </TableCell>
                         <TableCell>
                           {(() => {
@@ -1881,6 +1982,11 @@ function PaymentsPage() {
                             )}
                           </div>
                           <p className="font-semibold text-[13.5px] mt-0.5">{g.customerName}</p>
+                          <CustomerPhoneDisplay
+                            phone={g.phone}
+                            altPhone={g.altPhone}
+                            contactNumber3={g.contactNumber3}
+                          />
                         </div>
                         <div className="flex flex-col items-end gap-1">
                           <span className="font-display text-[15px] font-bold text-success">₹{g.totalCollected.toLocaleString("en-IN")}</span>
@@ -1964,6 +2070,16 @@ function PaymentsPage() {
                         </TableCell>
                         <TableCell>
                           <p className="font-semibold text-[13px]">{p.customer}</p>
+                          {(() => {
+                            const contacts = resolveReceiptCustomerContacts(p);
+                            return (
+                              <CustomerPhoneDisplay
+                                phone={contacts.phone}
+                                altPhone={contacts.altPhone}
+                                contactNumber3={contacts.contactNumber3}
+                              />
+                            );
+                          })()}
                           {(() => {
                             const eqInfos = getAgreementEquipmentModelInfo({ agreementId: p.agreement, equipment: (p as any).equipment }, rentals, equipmentList);
                             return (
@@ -2066,6 +2182,16 @@ function PaymentsPage() {
                             <div>
                               <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
                               <p className="font-semibold text-[13.5px] mt-0.5">{p.customer}</p>
+                              {(() => {
+                                const contacts = resolveReceiptCustomerContacts(p);
+                                return (
+                                  <CustomerPhoneDisplay
+                                    phone={contacts.phone}
+                                    altPhone={contacts.altPhone}
+                                    contactNumber3={contacts.contactNumber3}
+                                  />
+                                );
+                              })()}
                               <div className="space-y-0.5 mt-1">
                                 {eqInfos.map((info, idx) => (
                                   <div key={idx} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground/90">
