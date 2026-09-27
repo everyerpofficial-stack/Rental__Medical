@@ -2098,13 +2098,31 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
   if (typeof window === "undefined") return false;
   const rentals = getStorageItem<any[]>("medirent-rentals", []);
   if (!Array.isArray(rentals) || rentals.length === 0) return false;
+  const equipmentList = getStorageItem<any[]>("medirent-equipment", initialEquipment);
   let dirty = false;
+  let rentalsDirty = false;
 
   for (const rental of rentals) {
     if (!rental || !rental.id || rental.status === "Cancelled") continue;
-    const items: any[] = Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
+    let items: any[] = Array.isArray(rental.equipmentItems) && rental.equipmentItems.length > 0
       ? rental.equipmentItems
       : [];
+    if (items.length <= 1) {
+      const eqIds = String(rental.equipmentId || "").split(",").map((s: string) => s.trim()).filter(Boolean);
+      if (eqIds.length > 1) {
+        items = eqIds.map((id: string) => {
+          const eq = equipmentList.find((e: any) => e.id === id);
+          return {
+            equipmentId: id,
+            name: eq?.name || "Equipment",
+            model: eq?.model || "",
+            serial: eq?.serial || rental.serial || "",
+            deposit: cleanNum(eq?.deposit),
+            monthlyRent: cleanNum(eq?.monthlyRent || eq?.rentRate),
+          };
+        });
+      }
+    }
     if (items.length <= 1) continue;
 
     const cleanAgr = String(rental.id).trim().toUpperCase().replace(/^AGR-/i, "");
@@ -2117,6 +2135,7 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
       (p: any) => p && isMatchAgr(p) && (!p.status || p.status === "Paid" || p.status === "Completed")
     );
 
+    // 1. Reconcile Rent Payments
     const isRentType = (type: any) => {
       const s = String(type || "").toLowerCase();
       return s.includes("rent") || s.includes("initial");
@@ -2156,7 +2175,7 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
               if (!isNaN(num) && num > maxNum) maxNum = num;
             });
             const newId = `PAY-${String(maxNum + 1).padStart(4, "0")}`;
-            paymentsList.push({
+            const newRentPayment = {
               id: newId,
               date: rental.paymentDate || rental.start || getLocalYYYYMMDD(),
               customer: rental.customer,
@@ -2166,16 +2185,116 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
               amount: payAmt,
               mode: rental.paymentMode || "Bank",
               type: "Rent Payment",
-              notes: `Advance rent payment for added equipment: ${item.name} (${item.serial || ""}) on agreement ${rental.id}`,
+              notes: `Advance rent payment for added equipment: ${item.name || "Equipment"} (${item.serial || ""}) on agreement ${rental.id}`,
               status: "Paid",
               collectedBy: rental.paymentCollectedBy || "Admin",
-            });
+            };
+            paymentsList.push(newRentPayment);
+            rentPayments.push(newRentPayment);
+            agrPayments.push(newRentPayment);
             diff -= payAmt;
             dirty = true;
+            rental.rentPaidAmount = (cleanNum(rental.rentPaidAmount) || 0) + payAmt;
+            if (cleanNum(rental.rentPaidAmount) >= cleanNum(rental.monthlyRent)) {
+              rental.rentalPaymentStatus = "Paid";
+            }
+            rentalsDirty = true;
           }
         }
       }
     }
+
+    // 2. Reconcile Deposit Payments
+    const isDepositType = (type: any) => {
+      const s = String(type || "").toLowerCase();
+      return s.includes("deposit") || s.includes("security");
+    };
+
+    const depositPayments = agrPayments.filter((p: any) => isDepositType(p.type));
+    const totalDepositPaid = depositPayments.reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+    const totalAgreementDeposit = items.reduce((sum: number, item: any) => sum + cleanNum(item.deposit), 0) || cleanNum(rental.deposit);
+
+    const isDepositStatusPaid = String(rental.depositPaymentStatus || "").toLowerCase() === "paid";
+    const isDepositExplicitlyNotPaid = String(rental.depositPaymentStatus || "").toLowerCase() === "not paid" || String(rental.depositPaymentStatus || "").toLowerCase() === "free of cost";
+
+    const isDepositConsideredPaid = isDepositStatusPaid || (
+      rental.status === "Active" &&
+      !isDepositExplicitlyNotPaid &&
+      (cleanNum(rental.depositPaidAmount) >= totalAgreementDeposit || depositPayments.length > 0 || cleanNum(rental.depositPaidAmount) > 0)
+    );
+
+    const expectedDepositPaid = isDepositConsideredPaid
+      ? Math.max(totalAgreementDeposit, cleanNum(rental.depositPaidAmount))
+      : cleanNum(rental.depositPaidAmount);
+
+    if (expectedDepositPaid > totalDepositPaid) {
+      let depDiff = expectedDepositPaid - totalDepositPaid;
+      for (const item of items) {
+        if (depDiff <= 0) break;
+        let itemDeposit = cleanNum(item.deposit);
+        if (itemDeposit <= 0 && item.equipmentId) {
+          const eq = equipmentList.find((e: any) => e.id === item.equipmentId);
+          if (eq) itemDeposit = cleanNum(eq.deposit);
+        }
+        if (itemDeposit <= 0) {
+          itemDeposit = depDiff;
+        }
+
+        const hasPaymentForItem = depositPayments.some((p: any) => {
+          const eqIds = String(p.equipmentId || "").split(",").map((s: string) => s.trim().toLowerCase());
+          const targetId = String(item.equipmentId || "").toLowerCase();
+          const targetSerial = String(item.serial || "").toLowerCase();
+          const targetName = String(item.name || "").toLowerCase();
+          if (targetId && eqIds.includes(targetId)) return true;
+          if (p.notes) {
+            const n = String(p.notes).toLowerCase();
+            if (targetSerial && targetSerial.length >= 3 && n.includes(targetSerial)) return true;
+            if (targetName && targetName.length >= 3 && n.includes(targetName)) return true;
+          }
+          return false;
+        });
+
+        if (!hasPaymentForItem) {
+          const payAmt = Math.min(depDiff, itemDeposit);
+          if (payAmt > 0) {
+            let maxNum = 0;
+            paymentsList.forEach((p: any) => {
+              const num = parseInt(String(p.id || "").replace(/\D/g, ""), 10);
+              if (!isNaN(num) && num > maxNum) maxNum = num;
+            });
+            const newId = `PAY-${String(maxNum + 1).padStart(4, "0")}`;
+            const newDepositPayment = {
+              id: newId,
+              date: rental.paymentDate || rental.start || getLocalYYYYMMDD(),
+              customer: rental.customer,
+              customerId: rental.customerId,
+              agreement: rental.id,
+              equipmentId: item.equipmentId,
+              amount: payAmt,
+              mode: rental.paymentMode || "Bank",
+              type: "Deposit",
+              notes: `Security deposit for added equipment: ${item.name || "Equipment"} (${item.serial || ""}) on agreement ${rental.id}`,
+              status: "Paid",
+              collectedBy: rental.paymentCollectedBy || "Admin",
+            };
+            paymentsList.push(newDepositPayment);
+            depositPayments.push(newDepositPayment);
+            agrPayments.push(newDepositPayment);
+            depDiff -= payAmt;
+            dirty = true;
+            rental.depositPaidAmount = (cleanNum(rental.depositPaidAmount) || 0) + payAmt;
+            if (cleanNum(rental.depositPaidAmount) >= totalAgreementDeposit) {
+              rental.depositPaymentStatus = "Paid";
+            }
+            rentalsDirty = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (rentalsDirty) {
+    setStorageItem("medirent-rentals", rentals);
   }
 
   return dirty;

@@ -1969,8 +1969,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       thumbprintUrl,
       rentalPaymentStatus,
       depositPaymentStatus,
-      rentPaidAmount: Number(rentPaidAmount) || 0,
-      depositPaidAmount: Number(depositPaidAmount) || 0,
+      rentPaidAmount: rentalPaymentStatus === "Paid" ? (netRentVal || totalMonthlyRent) : (Number(rentPaidAmount) || 0),
+      depositPaidAmount: depositPaymentStatus === "Paid" ? totalDeposit : (Number(depositPaidAmount) || 0),
       cashPaidAmount: finalCashPaid,
       bankUpiPaidAmount: finalBankUpiPaid,
       paymentMode,
@@ -2136,11 +2136,29 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       // EDITING EXISTING AGREEMENT
       let rentDiff = Math.max(0, rentToAdd - existingRentPaid);
       if (rentDiff > 0) {
-        // Allocate first to added equipments if any
-        if (addedEquipments.length > 0) {
-          addedEquipments.forEach((item) => {
+        // Allocate first to added equipments, or any equipment in agreement lacking a rent payment
+        const targetEquipmentsForRent = addedEquipments.length > 0
+          ? addedEquipments
+          : selectedEquipments.filter(item => {
+              const targetId = String(item.equipmentId || "").toLowerCase();
+              const targetSerial = String(item.serial || "").toLowerCase();
+              const targetName = String(item.name || "").toLowerCase();
+              return !existingPayments.filter(p => p.type === "Rent" || p.type === "Rent Payment").some((p: any) => {
+                const eqIds = String(p.equipmentId || "").split(",").map((s: string) => s.trim().toLowerCase());
+                if (targetId && eqIds.includes(targetId)) return true;
+                if (p.notes) {
+                  const n = String(p.notes).toLowerCase();
+                  if (targetSerial && targetSerial.length >= 3 && n.includes(targetSerial)) return true;
+                  if (targetName && targetName.length >= 3 && n.includes(targetName)) return true;
+                }
+                return false;
+              });
+            });
+
+        if (targetEquipmentsForRent.length > 0) {
+          targetEquipmentsForRent.forEach((item) => {
             const itemRate = (item.rentCycle === "Monthly" ? Number(item.rentRate) : (Number(item.rentRate) || 0)) || 0;
-            const payAmt = Math.min(rentDiff, itemRate);
+            const payAmt = Math.min(rentDiff, itemRate > 0 ? itemRate : rentDiff);
             if (payAmt > 0) {
               savePayment({
                 id: getNextPaymentNumber(),
@@ -2180,10 +2198,29 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
       let depositDiff = Math.max(0, depositToAdd - existingDepositPaid);
       if (depositDiff > 0) {
-        if (addedEquipments.length > 0) {
-          addedEquipments.forEach((item) => {
+        // Allocate first to added equipments, or any equipment in agreement lacking a deposit payment
+        const targetEquipmentsForDeposit = addedEquipments.length > 0
+          ? addedEquipments
+          : selectedEquipments.filter(item => {
+              const targetId = String(item.equipmentId || "").toLowerCase();
+              const targetSerial = String(item.serial || "").toLowerCase();
+              const targetName = String(item.name || "").toLowerCase();
+              return !existingPayments.filter(p => p.type === "Deposit" || p.type === "Security Deposit").some((p: any) => {
+                const eqIds = String(p.equipmentId || "").split(",").map((s: string) => s.trim().toLowerCase());
+                if (targetId && eqIds.includes(targetId)) return true;
+                if (p.notes) {
+                  const n = String(p.notes).toLowerCase();
+                  if (targetSerial && targetSerial.length >= 3 && n.includes(targetSerial)) return true;
+                  if (targetName && targetName.length >= 3 && n.includes(targetName)) return true;
+                }
+                return false;
+              });
+            });
+
+        if (targetEquipmentsForDeposit.length > 0) {
+          targetEquipmentsForDeposit.forEach((item) => {
             const itemDep = Number(item.deposit) || 0;
-            const payDep = Math.min(depositDiff, itemDep);
+            const payDep = Math.min(depositDiff, itemDep > 0 ? itemDep : depositDiff);
             if (payDep > 0) {
               savePayment({
                 id: getNextPaymentNumber(),
