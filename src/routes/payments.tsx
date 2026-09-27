@@ -921,17 +921,23 @@ function AgreementPaymentHistoryModal({
     : [{ name: equipmentName, model: modelStr || undefined }];
 
   const handleExportStatement = () => {
-    const headers = ["Receipt ID", "Date", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
-    const rows = agreementPayments.map(p => [
-      p.id,
-      p.date,
-      p.type,
-      p.mode,
-      (p.collectedBy as string) || "Dr. Rao",
-      p.amount.toString(),
-      p.status
-    ]);
-    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 110, 120, 110, 120, 110, 100]);
+    const headers = ["Receipt ID", "Date", "Equipment", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
+    const rows = agreementPayments.map(p => {
+      const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
+        .map(it => it.model ? `${it.name} (${it.model})` : it.name)
+        .join(", ");
+      return [
+        p.id,
+        p.date,
+        eqStr,
+        p.type,
+        p.mode,
+        (p.collectedBy as string) || "Admin",
+        p.amount.toString(),
+        p.status
+      ];
+    });
+    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 110, 180, 120, 110, 120, 110, 100]);
     toast.success(`Payment statement for ${agreementId} exported successfully.`);
   };
 
@@ -942,10 +948,15 @@ function AgreementPaymentHistoryModal({
       return;
     }
 
-    const tableRowsHtml = agreementPayments.map(p => `
+    const tableRowsHtml = agreementPayments.map(p => {
+      const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
+        .map(it => it.model ? `${it.name} (${it.model})` : it.name)
+        .join(", ");
+      return `
       <tr>
         <td style="font-family: monospace; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.id}</td>
         <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${formatDateDDMMYYYY(p.date)}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px;">${eqStr}</td>
         <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.type}</td>
         <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.mode}</td>
         <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.collectedBy || "Admin"}</td>
@@ -956,7 +967,8 @@ function AgreementPaymentHistoryModal({
           </span>
         </td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
 
     const htmlContent = `
       <html>
@@ -997,6 +1009,7 @@ function AgreementPaymentHistoryModal({
             <tr>
               <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Receipt ID</th>
               <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Date</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Equipment</th>
               <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Payment Type</th>
               <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Mode</th>
               <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Collected By</th>
@@ -1007,7 +1020,7 @@ function AgreementPaymentHistoryModal({
           <tbody>
             ${tableRowsHtml}
             <tr class="totals-row">
-              <td colspan="5" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">Total Paid:</td>
+              <td colspan="6" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">Total Paid:</td>
               <td style="text-align: right; color: #15803d; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">₹${totalPaid.toLocaleString("en-IN")}</td>
               <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
             </tr>
@@ -1127,32 +1140,34 @@ function AgreementPaymentHistoryModal({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {agreementPayments.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="font-mono text-[12px] font-bold text-primary whitespace-nowrap px-3 py-2.5">{p.id}</TableCell>
-                        <TableCell className="text-[12px] whitespace-nowrap px-3 py-2.5">{formatDateDDMMYYYY(p.date)}</TableCell>
-                        <TableCell className="text-[12px] font-medium px-3 py-2.5">
-                          <div className="space-y-1.5 min-w-[200px]">
-                            {displayEquipments.map((it, idx) => (
-                              <div key={idx} className="leading-tight">
-                                <div className="flex items-center gap-1.5 font-semibold text-foreground text-[12px]">
-                                  <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                                  <span>{it.name}</span>
+                    {agreementPayments.map((p) => {
+                      const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-mono text-[12px] font-bold text-primary whitespace-nowrap px-3 py-2.5">{p.id}</TableCell>
+                          <TableCell className="text-[12px] whitespace-nowrap px-3 py-2.5">{formatDateDDMMYYYY(p.date)}</TableCell>
+                          <TableCell className="text-[12px] font-medium px-3 py-2.5">
+                            <div className="space-y-1.5 min-w-[200px]">
+                              {pEquipments.map((it, idx) => (
+                                <div key={idx} className="leading-tight">
+                                  <div className="flex items-center gap-1.5 font-semibold text-foreground text-[12px]">
+                                    <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                    <span>{it.name}</span>
+                                  </div>
+                                  {it.model && (
+                                    <span className="text-[11px] text-muted-foreground font-medium pl-5 block">
+                                      Model: {it.model}
+                                    </span>
+                                  )}
                                 </div>
-                                {it.model && (
-                                  <span className="text-[11px] text-muted-foreground font-medium pl-5 block">
-                                    Model: {it.model}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap px-3 py-2.5">
-                          <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
-                            {p.type}
-                          </span>
-                        </TableCell>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap px-3 py-2.5">
+                            <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground border-border/50"}`}>
+                              {p.type}
+                            </span>
+                          </TableCell>
                         <TableCell className="whitespace-nowrap px-3 py-2.5">
                           <span
                             className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground border-border/50"}`}
@@ -1177,40 +1192,43 @@ function AgreementPaymentHistoryModal({
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    );
+                  })}
                   </TableBody>
                 </Table>
               </div>
 
               {/* Mobile card list */}
               <div className="md:hidden divide-y divide-border/60">
-                {agreementPayments.map((p) => (
-                  <div key={p.id} className="px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div>
-                        <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
-                        <div className="space-y-1 mt-1">
-                          {displayEquipments.map((it, idx) => (
-                            <div key={idx} className="leading-tight">
-                              <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
-                                <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                                <span>{it.name}</span>
+                {agreementPayments.map((p) => {
+                  const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
+                  return (
+                    <div key={p.id} className="px-4 py-3.5">
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div>
+                          <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
+                          <div className="space-y-1 mt-1">
+                            {pEquipments.map((it, idx) => (
+                              <div key={idx} className="leading-tight">
+                                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
+                                  <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+                                  <span>{it.name}</span>
+                                </div>
+                                {it.model && (
+                                  <span className="text-[10.5px] text-muted-foreground font-medium pl-5 block">
+                                    Model: {it.model}
+                                  </span>
+                                )}
                               </div>
-                              {it.model && (
-                                <span className="text-[10.5px] text-muted-foreground font-medium pl-5 block">
-                                  Model: {it.model}
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
+                          <StatusBadge status={p.status} />
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
-                        <StatusBadge status={p.status} />
-                      </div>
-                    </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                       <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground"}`}>{p.type}</span>
                       <span>·</span>
@@ -1239,7 +1257,8 @@ function AgreementPaymentHistoryModal({
                       )}
                     </div>
                   </div>
-                ))}
+                );
+              })}
               </div>
             </div>
           )}
@@ -1331,6 +1350,148 @@ function getAgreementEquipmentModelInfo(g: any, rentalsList: any[], equipmentLis
     name: rental.equipment || g.equipment || "—",
     model: model,
   }];
+}
+
+/**
+ * Resolves the specific equipment item(s) that a payment was made for.
+ * Handles single-item agreements, explicit payment.equipmentId, payment.notes mentions,
+ * and exact amount matching against individual equipment rent/deposit rates.
+ */
+export function getPaymentEquipmentDisplay(
+  payment: any,
+  rentalsList: any[],
+  equipmentList: any[]
+): AgreementEquipmentDisplay[] {
+  if (!payment) return [];
+
+  const agreementId = payment.agreement || payment.agreementId || payment.rentalId;
+  const rental = rentalsList.find((r) => r.id === agreementId);
+
+  if (!rental) {
+    const name = payment.equipment || "—";
+    let model = payment.model ? String(payment.model).trim() : "";
+    if (model.toLowerCase() === "standard" || model.toLowerCase() === String(name).toLowerCase()) {
+      model = "";
+    }
+    return [{ name, model }];
+  }
+
+  const detailedItems = getRentalEquipmentDetailedItems(rental, equipmentList, undefined, false);
+  if (detailedItems.length <= 1) {
+    if (detailedItems.length === 1) {
+      let model = detailedItems[0].model ? String(detailedItems[0].model).trim() : "";
+      if (model.toLowerCase() === "standard" || model.toLowerCase() === detailedItems[0].name.toLowerCase()) {
+        model = "";
+      }
+      return [{
+        name: detailedItems[0].name || rental.equipment || "Equipment",
+        model,
+      }];
+    }
+    return [{ name: rental.equipment || payment.equipment || "—", model: "" }];
+  }
+
+  // Multi-item agreement: resolve which equipment this specific payment belongs to
+  const cleanId = (s: any) => String(s || "").trim().toLowerCase();
+  const cleanStr = (s: any) => String(s || "").toLowerCase();
+
+  const pEqIds = payment.equipmentId
+    ? String(payment.equipmentId).split(",").map(cleanId).filter(Boolean)
+    : [];
+  const notes = cleanStr(payment.notes);
+  const pType = cleanStr(payment.type);
+  const pAmt = cleanNum(payment.amount);
+
+  // 1. Explicit equipmentId on payment that matches a specific item (or subset of items)
+  if (pEqIds.length > 0 && pEqIds.length < detailedItems.length) {
+    const matched = detailedItems.filter((it) => pEqIds.includes(cleanId(it.equipmentId)));
+    if (matched.length > 0) {
+      return matched.map((it) => {
+        let model = it.model ? String(it.model).trim() : "";
+        if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+          model = "";
+        }
+        return { name: it.name, model };
+      });
+    }
+  }
+
+  // 2. Check notes for equipment serial, model, ID, or specific name keyword
+  const notesMatched = detailedItems.filter((it) => {
+    const s = cleanId(it.serial);
+    if (s && s.length >= 3 && notes.includes(s)) return true;
+    const m = cleanId(it.model);
+    if (m && m.length >= 3 && m !== "standard" && notes.includes(m)) return true;
+    const id = cleanId(it.equipmentId);
+    if (id && id.length >= 3 && notes.includes(id)) return true;
+
+    const n = cleanStr(it.name);
+    if (n.includes("cot") && (notes.includes("cot") || notes.includes("mattress") || notes.includes("bed") || notes.includes("surgical cot"))) return true;
+    if (n.includes("concentrator") && (notes.includes("concentrator") || notes.includes("oxygen") || notes.includes("5lp") || notes.includes("10lp") || notes.includes("5 l") || notes.includes("10 l"))) return true;
+    if (n.includes("bipap") && notes.includes("bipap")) return true;
+    if (n.includes("cpap") && notes.includes("cpap")) return true;
+    if ((n.includes("wheelchair") || n.includes("wheel chair")) && (notes.includes("wheelchair") || notes.includes("wheel chair"))) return true;
+    if (n.includes("suction") && notes.includes("suction")) return true;
+    if (n.includes("monitor") && notes.includes("monitor")) return true;
+    if (n.includes("pump") && notes.includes("pump")) return true;
+
+    return false;
+  });
+
+  if (notesMatched.length > 0 && notesMatched.length < detailedItems.length) {
+    return notesMatched.map((it) => {
+      let model = it.model ? String(it.model).trim() : "";
+      if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+        model = "";
+      }
+      return { name: it.name, model };
+    });
+  }
+
+  // 3. Match by payment amount & type against equipment item rates
+  const rawItems: any[] = Array.isArray(rental.equipmentItems) ? rental.equipmentItems : [];
+
+  if (pType.includes("deposit") || pType.includes("security")) {
+    const matchedByDeposit = detailedItems.filter((it) => {
+      const raw = rawItems.find((r: any) => cleanId(r.equipmentId) === cleanId(it.equipmentId));
+      const dep = cleanNum(raw?.deposit ?? (it as any).deposit);
+      return dep > 0 && dep === pAmt;
+    });
+    if (matchedByDeposit.length === 1) {
+      const it = matchedByDeposit[0];
+      let model = it.model ? String(it.model).trim() : "";
+      if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+        model = "";
+      }
+      return [{ name: it.name, model }];
+    }
+  } else if (pType.includes("rent")) {
+    const matchedByRent = detailedItems.filter((it) => {
+      const raw = rawItems.find((r: any) => cleanId(r.equipmentId) === cleanId(it.equipmentId));
+      const rRent = cleanNum(raw?.monthlyRent || raw?.rentRate || raw?.dailyRent || (it as any).monthlyRent);
+      return rRent > 0 && rRent === pAmt;
+    });
+    if (matchedByRent.length === 1) {
+      const it = matchedByRent[0];
+      let model = it.model ? String(it.model).trim() : "";
+      if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+        model = "";
+      }
+      return [{ name: it.name, model }];
+    }
+  }
+
+  // 4. Default: Return all items for this agreement
+  return detailedItems.map((it) => {
+    let model = it.model ? String(it.model).trim() : "";
+    if (model.toLowerCase() === "standard" || model.toLowerCase() === it.name.toLowerCase()) {
+      model = "";
+    }
+    return {
+      name: it.name || rental.equipment || "Equipment",
+      model,
+    };
+  });
 }
 
 /** Get the equipment model(s) for an agreement row */
@@ -2092,7 +2253,7 @@ function PaymentsPage() {
                             );
                           })()}
                           {(() => {
-                            const eqInfos = getAgreementEquipmentModelInfo({ agreementId: p.agreement, equipment: (p as any).equipment }, rentals, equipmentList);
+                            const eqInfos = getPaymentEquipmentDisplay(p, rentals, equipmentList);
                             return (
                               <div className="space-y-0.5 mt-0.5">
                                 {eqInfos.map((info, idx) => (
@@ -2186,7 +2347,7 @@ function PaymentsPage() {
                   <div className="divide-y divide-border/60">
                     {filteredPayments.map((p) => {
                       const matchRental = rentals.find((r: any) => r.id === p.agreement);
-                      const eqInfos = getAgreementEquipmentModelInfo({ agreementId: p.agreement, equipment: (p as any).equipment }, rentals, equipmentList);
+                      const eqInfos = getPaymentEquipmentDisplay(p, rentals, equipmentList);
                       return (
                         <div key={p.id} className="px-4 py-3.5">
                           <div className="flex items-start justify-between gap-2 mb-1.5">

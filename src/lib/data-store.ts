@@ -5204,6 +5204,7 @@ export const PRICING_TABLE: Record<number, [number, number, number, number]> = {
   1500: [500, 1000, 1500, 1500],
   2000: [1000, 1500, 2000, 2000],
   2500: [1000, 1500, 2000, 2500],
+  2750: [1000, 1500, 2000, 2750],
   2800: [1000, 1500, 2000, 2800],
   3000: [1000, 1500, 2000, 3000],
   3500: [1000, 1500, 2000, 3500],
@@ -5237,6 +5238,13 @@ export const cleanNum = (val: any): number => {
 export function getPricingTableRate(monthlyRent: number, days: number): number {
   const cleanMonthlyRent = cleanNum(monthlyRent);
   const cleanDays = cleanNum(days);
+  if (cleanDays <= 0 || cleanMonthlyRent <= 0) return 0;
+
+  // Beyond 15 days in the first month (day 16 to 30), full month's rent applies
+  if (cleanDays > 15) {
+    return cleanMonthlyRent;
+  }
+
   let rates = PRICING_TABLE[cleanMonthlyRent];
   if (!rates) {
     const keys = Object.keys(PRICING_TABLE).map(Number).sort((a, b) => a - b);
@@ -5249,13 +5257,19 @@ export function getPricingTableRate(monthlyRent: number, days: number): number {
         bestKey = key;
       }
     }
-    rates = PRICING_TABLE[bestKey];
+    const baseRates = PRICING_TABLE[bestKey];
+    rates = [
+      Math.min(baseRates[0], cleanMonthlyRent),
+      Math.min(baseRates[1], cleanMonthlyRent),
+      Math.min(baseRates[2], cleanMonthlyRent),
+      cleanMonthlyRent,
+    ];
   }
   
   if (cleanDays <= 5) return rates[0];
   if (cleanDays <= 10) return rates[1];
   if (cleanDays <= 15) return rates[2];
-  return rates[3];
+  return cleanMonthlyRent;
 }
 
 export function getReturnCalculatedRentPerItem(
