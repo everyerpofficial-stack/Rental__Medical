@@ -7,11 +7,29 @@ import {
   payments as initialPayments,
   returns as initialReturns,
 } from "./mock-data";
-import { syncRowToSheet, deleteRowFromSheet, isGSheetsEnabled, SHEETS, readSheetData, getPendingSyncs, cleanStalePendingSyncs, sheetsRequest, getDeletedRecords } from "./google-sheets";
+import { syncRowToSheet, deleteRowFromSheet, isGSheetsEnabled, SHEETS, readSheetData, getPendingSyncs, cleanStalePendingSyncs, sheetsRequest, getDeletedRecords, recordDeletedId, removePendingSync, isRecordDeleted } from "./google-sheets";
 import { createBackupSnapshot } from "./backup";
 
 // Helper to check for SSR
 const isBrowser = typeof window !== "undefined";
+
+// Purge known duplicate/erroneous payments (e.g. PAY-0276 duplicate ₹114,000 single-equipment payment on AGR-2026-0033)
+if (isBrowser) {
+  try {
+    recordDeletedId(SHEETS.PAYMENTS, "PAY-0276");
+    removePendingSync(SHEETS.PAYMENTS, "PAY-0276");
+    const raw = localStorage.getItem("medirent-payments");
+    if (raw && raw.includes("PAY-0276")) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const filtered = parsed.filter((p: any) => p && p.id !== "PAY-0276");
+        if (filtered.length !== parsed.length) {
+          localStorage.setItem("medirent-payments", JSON.stringify(filtered));
+        }
+      }
+    }
+  } catch {}
+}
 
 // Clear local storage one-time if it hasn't been reset to empty mock-data yet
 if (isBrowser && localStorage.getItem("medirent-db-cleared-v9") !== "true") {
@@ -2087,6 +2105,7 @@ export function consolidatePayments(payments: any[]): any[] {
         discount: totalDiscount,
         notes: combinedNotes || p.notes,
         equipmentId: combinedEqIds || p.equipmentId,
+        constituentIds: group.map((item) => String(item.id)),
       });
     }
   }
@@ -2431,6 +2450,31 @@ export function getPayments() {
     }
   });
 
+  // One-time purge for known duplicate/erroneous payments (e.g. PAY-0276 duplicate ₹114,000 single-equipment payment on AGR-2026-0033)
+  const pay0276Idx = mergedList.findIndex((p) => p && p.id === "PAY-0276");
+  if (pay0276Idx !== -1) {
+    mergedList.splice(pay0276Idx, 1);
+    if (isBrowser) {
+      recordDeletedId(SHEETS.PAYMENTS, "PAY-0276");
+      removePendingSync(SHEETS.PAYMENTS, "PAY-0276");
+    }
+    dirty = true;
+  }
+
+  // Filter out any tombstoned deleted records
+  if (isBrowser) {
+    const deletedRecords = getDeletedRecords().filter((r) => r.sheet === SHEETS.PAYMENTS);
+    if (deletedRecords.length > 0) {
+      const deletedIds = new Set(deletedRecords.map((r) => String(r.id)));
+      const filtered = mergedList.filter((p) => !p || !deletedIds.has(String(p.id)));
+      if (filtered.length !== mergedList.length) {
+        mergedList.length = 0;
+        mergedList.push(...filtered);
+        dirty = true;
+      }
+    }
+  }
+
   // Ensure any refund adjustments previously recorded with mode "Cash" are updated to "Equipment Refund"
   mergedList.forEach((p) => {
     if (p && p.mode === "Cash" && p.notes && /refund.*adjusted/i.test(p.notes)) {
@@ -2505,13 +2549,20 @@ export function savePayment(payment: typeof initialPayments[number]) {
 export function deletePayment(id: string) {
   const allPayments = getPayments();
   const deletedPayment = allPayments.find(p => p.id === id);
-  const list = allPayments.filter((p) => p.id !== id);
+  const idsToDelete = new Set<string>([id]);
+  if (deletedPayment && (deletedPayment as any).constituentIds && Array.isArray((deletedPayment as any).constituentIds)) {
+    (deletedPayment as any).constituentIds.forEach((cid: string) => idsToDelete.add(cid));
+  }
+  const rawList = getStorageItem<any[]>("medirent-payments", initialPayments);
+  const list = rawList.filter((p) => !idsToDelete.has(p.id));
   setStorageItem("medirent-payments", list);
   // LINK-5 FIX: Keep customer rental count in sync after payment deletion
   if (deletedPayment?.customerId) {
     updateCustomerRentalsCount(deletedPayment.customerId);
   }
-  if (isGSheetsEnabled()) deleteRowFromSheet(SHEETS.PAYMENTS, id);
+  if (isGSheetsEnabled()) {
+    idsToDelete.forEach((delId) => deleteRowFromSheet(SHEETS.PAYMENTS, delId));
+  }
   return list;
 }
 

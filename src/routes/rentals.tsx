@@ -5967,7 +5967,10 @@ function RentalsPage() {
                 { key: "active",  l: "Active",           v: rentalsList.filter(r => r.status === "Active" || r.status === "Overdue").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
                 { key: "pending", l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
                 { key: "overdue", l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
-              ].map((s, i) => {
+              ]
+                // Accountant sees only the Pending Approval card.
+                .filter((s) => !isAccountant || s.key === "pending")
+                .map((s, i) => {
                 const isSelected = quickFilter === s.key;
                 return (
                   <Card 

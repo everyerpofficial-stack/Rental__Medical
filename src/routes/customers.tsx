@@ -1977,16 +1977,18 @@ function CustomersPage() {
         </>
       }
     >
-      {/* Stat cards - hidden for Staff */}
+      {/* Stat cards - hidden for Staff; Accountant doesn't get Total Customers or Active */}
       {!isStaff && (
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className={`mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 ${isAccountant ? "" : "lg:grid-cols-5"}`}>
           {[
             { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
             { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
             { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
             { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
             { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
-          ].map((s, i) => {
+          ]
+            .filter((s) => !isAccountant || (s.key !== "all-status" && s.key !== "Active"))
+            .map((s, i) => {
             const isSelected = statusFilter === s.key;
             return (
               <Card 

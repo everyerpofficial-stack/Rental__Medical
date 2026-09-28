@@ -1152,6 +1152,8 @@ function EquipmentPage() {
   const canViewOwnerDetails = !isStaff && !isAccountant;
   const canEdit = isAdmin || isAccountant;
   const canDelete = isAdmin;
+  // Staff and Accountant see no inventory until they search for a device.
+  const requiresSearch = isStaff || isAccountant;
 
   const refresh = () => setEquipment(getEquipment());
 
@@ -1176,7 +1178,7 @@ function EquipmentPage() {
   const customersList = useMemo(() => getCustomers(), [dbVersion]);
   const ownersList = useMemo(() => getOwners(), [dbVersion]);
 
-  const filteredEquipment = (isStaff && !search.trim()) ? [] : equipment.filter((e) => {
+  const filteredEquipment = (requiresSearch && !search.trim()) ? [] : equipment.filter((e) => {
     const q = search.toLowerCase().trim();
     const activeRental = rentalsList.find(r => (r.equipmentId === e.id || (r.equipmentItems && r.equipmentItems.some((ei: any) => ei.equipmentId === e.id))) && r.status === "Active");
     const activeCustomer = activeRental ? customersList.find((c: any) => c.id === activeRental.customerId) : null;
@@ -1227,7 +1229,7 @@ function EquipmentPage() {
         <div className="flex flex-col sm:flex-row gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-            <Input placeholder={isStaff ? "Search by name, serial, model, customer…" : "Search by name, serial, model…"} className="pl-9 h-9 text-[13px]" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder={requiresSearch ? "Search by name, serial, model, customer…" : "Search by name, serial, model…"} className="pl-9 h-9 text-[13px]" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className="w-full sm:w-[150px] md:w-[180px] h-9 text-[12px] sm:shrink-0"><SelectValue placeholder="All Categories" /></SelectTrigger>
@@ -1289,7 +1291,7 @@ function EquipmentPage() {
         const sortedOwners = allOwnerNames.sort((a, b) => a === "Unassigned" ? 1 : b === "Unassigned" ? -1 : a.localeCompare(b));
 
         if (filteredEquipment.length === 0) {
-          if (isStaff && !search.trim()) {
+          if (requiresSearch && !search.trim()) {
             return (
               <div className="py-16 text-center">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mx-auto mb-3">
@@ -1395,7 +1397,9 @@ function EquipmentPage() {
                       Mark Available
                     </Button>
                   )}
-                  {canEdit && canViewOwnerDetails && !isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
+                  {/* Owner transfers are open to Admin and Accountant (canEdit); the
+                      dialog shows no more than the Edit form already does. */}
+                  {canEdit && !isOwnOwner(item.owner) && item.status === "Returned to Owner" && (
                     <OwnerActionDialog
                       eq={item}
                       actionType="receive"
@@ -1411,7 +1415,7 @@ function EquipmentPage() {
                       }
                     />
                   )}
-                  {canEdit && canViewOwnerDetails && !isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
+                  {canEdit && !isOwnOwner(item.owner) && (item.status === "Available" || item.status === "UnderMaintenance") && (
                     <OwnerActionDialog
                       eq={item}
                       actionType="return"
