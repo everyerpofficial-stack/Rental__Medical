@@ -5644,7 +5644,7 @@ function RentalsPage() {
   // Pending Dues". These cut across the raw status label (Pending Dues spans
   // Active and Overdue agreements that carry a real unpaid balance), so they
   // are a separate control from the status dropdown rather than more options in it.
-  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "completed" | "dues" | "cancelled" | "pending">("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "active" | "overdue" | "completed" | "dues" | "cancelled" | "pending">("all");
   const [activeView, setActiveView] = useState<"list" | "new" | "edit">("list");
   const [editingRental, setEditingRental] = useState<Rental | null>(null);
 
@@ -5842,6 +5842,9 @@ function RentalsPage() {
       if (quickFilter === "active") {
         return r.status === "Active" || r.status === "Overdue";
       }
+      if (quickFilter === "overdue") {
+        return r.status === "Overdue";
+      }
       if (quickFilter === "completed") {
         return r.status === "Completed" || r.status === "Returned";
       }
@@ -5960,23 +5963,35 @@ function RentalsPage() {
           {!isStaff && (
             <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               {[
-                { l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
-                { l: "Active",           v: rentalsList.filter(r => r.status === "Active").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
-                { l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
-                { l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
-              ].map((s, i) => (
-                <Card key={s.l} className={`hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.4s_ease-out_both] stagger-${i + 1}`}>
-                  <CardContent className="flex items-center gap-2.5 sm:gap-4 p-3.5 sm:p-5">
-                    <div className={`metric-icon h-8 w-8 sm:h-10 sm:w-10 shrink-0 ${s.bg}`}>
-                      <s.icon className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${s.c}`} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 leading-tight">{s.l}</p>
-                      <p className={`mt-0.5 font-display text-[18px] sm:text-[22px] font-bold ${s.c}`}>{s.v}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                { key: "all",     l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
+                { key: "active",  l: "Active",           v: rentalsList.filter(r => r.status === "Active" || r.status === "Overdue").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
+                { key: "pending", l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
+                { key: "overdue", l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
+              ].map((s, i) => {
+                const isSelected = quickFilter === s.key;
+                return (
+                  <Card 
+                    key={s.l} 
+                    onClick={() => {
+                      setStatusFilter("all");
+                      setQuickFilter(quickFilter === s.key ? "all" : (s.key as any));
+                    }}
+                    className={`cursor-pointer hover:shadow-[var(--shadow-elevated)] hover:-translate-y-0.5 transition-all animate-[fade-in_0.4s_ease-out_both] stagger-${i + 1} ${
+                      isSelected ? "ring-2 ring-primary/60 border-primary bg-primary/5" : "border-border/60"
+                    }`}
+                  >
+                    <CardContent className="flex items-center gap-2.5 sm:gap-4 p-3.5 sm:p-5">
+                      <div className={`metric-icon h-8 w-8 sm:h-10 sm:w-10 shrink-0 ${s.bg}`}>
+                        <s.icon className={`h-3.5 w-3.5 sm:h-4.5 sm:w-4.5 ${s.c}`} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 leading-tight">{s.l}</p>
+                        <p className={`mt-0.5 font-display text-[18px] sm:text-[22px] font-bold ${s.c}`}>{s.v}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
 
@@ -6012,7 +6027,13 @@ function RentalsPage() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select 
+              value={statusFilter} 
+              onValueChange={(val) => {
+                setStatusFilter(val);
+                if (val !== "all") setQuickFilter("all");
+              }}
+            >
               <SelectTrigger className="w-full sm:w-[150px] h-9 text-[12px] bg-card shrink-0"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
@@ -6032,6 +6053,7 @@ function RentalsPage() {
               {[
                 { key: "all",       label: "All",           count: rentalsList.length },
                 { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
+                { key: "overdue",   label: "Overdue",       count: rentalsList.filter((r) => r.status === "Overdue").length },
                 { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
                 { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
                 ...(rentalsList.some((r) => r.status === "Pending Approval")
@@ -6044,7 +6066,10 @@ function RentalsPage() {
                 <button
                   key={f.key}
                   type="button"
-                  onClick={() => setQuickFilter(f.key as any)}
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setQuickFilter(f.key as any);
+                  }}
                   aria-pressed={quickFilter === f.key}
                   className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
                     quickFilter === f.key

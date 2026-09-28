@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Plus, Search, Download, Printer, IndianRupee, CreditCard, Wallet,
   Building2, Banknote, MoreHorizontal, Edit, Trash2, Receipt, History, ChevronRight,
-  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2, Package, Phone,
+  Smartphone, FileCheck2, AlertCircle, CheckCircle2, MessageCircle, Calendar, Loader2, Package, Phone, User,
 } from "lucide-react";
 import {
   getPayments,
@@ -792,7 +792,7 @@ function DeletePaymentDialog({ payment, trigger, onDelete }: { payment: Payment;
             Deleting a payment will affect the customer's outstanding balance.
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <DialogClose asChild>
             <Button variant="outline" type="button">Cancel</Button>
           </DialogClose>
@@ -832,9 +832,9 @@ function PrintReceiptDialog({ payment, triggerClassName = "h-7 w-7" }: { payment
             { l: "Tx Ref",    v: (payment.txRef as string) || "—" },
             { l: "Collected By", v: (payment.collectedBy as string) || "Dr. Rao" },
           ].map(({ l, v }) => (
-            <div key={l} className="flex justify-between text-[12px]">
-              <span className="text-muted-foreground">{l}</span>
-              <span className="font-semibold">{v as string}</span>
+            <div key={l} className="flex justify-between gap-3 text-[12px]">
+              <span className="text-muted-foreground shrink-0">{l}</span>
+              <span className="font-semibold text-right min-w-0 wrap-break-word">{v as string}</span>
             </div>
           ))}
           <div className="border-t border-border/50 pt-3 flex justify-between">
@@ -842,7 +842,7 @@ function PrintReceiptDialog({ payment, triggerClassName = "h-7 w-7" }: { payment
             <span className="font-display text-[18px] font-bold text-success">₹{payment.amount.toLocaleString("en-IN")}</span>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           <DialogClose asChild>
             <Button
               variant="outline"
@@ -1044,87 +1044,106 @@ function AgreementPaymentHistoryModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl lg:max-w-6xl w-[96vw] max-h-[90vh] overflow-y-auto p-0 gap-0">
-        <DialogHeader className="p-5 border-b border-border/60 bg-muted/20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <DialogTitle className="text-[18px] font-bold">Payment History</DialogTitle>
-                <span className="font-mono text-[13px] font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-md border border-primary/20">
-                  {agreementId}
-                </span>
-                <StatusBadge status={status as any} />
-              </div>
-              <p className="text-[12px] text-muted-foreground mt-1 flex items-center gap-2 flex-wrap">
-                <span>
+      {/* Full-screen sheet on phones; centred modal with side margins from sm up.
+          Flex column (not the base grid) so wide content can never stretch the
+          dialog past the viewport, and only the body scrolls so the title bar
+          and close button stay in view. */}
+      <DialogContent
+        className="flex flex-col gap-0 p-0 sm:p-0 overflow-hidden w-full max-w-none h-[100dvh] max-h-[100dvh] rounded-none border-0 sm:w-[calc(100%-2rem)] sm:max-w-3xl sm:h-auto sm:max-h-[90dvh] sm:rounded-xl sm:border lg:max-w-5xl xl:max-w-6xl focus:outline-none"
+        // Focus the dialog itself rather than the first export button, which
+        // otherwise opens with a focus ring after a tap on a card.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement | null)?.focus();
+        }}
+      >
+        <DialogHeader className="shrink-0 space-y-0 text-left border-b border-border/60 bg-muted/20 px-4 py-3.5 pr-12 sm:px-5 sm:py-4 sm:pr-14">
+          <div className="flex items-center gap-x-2 gap-y-1.5 flex-wrap">
+            <DialogTitle className="text-[17px] sm:text-[18px] font-bold">Payment History</DialogTitle>
+            <span className="font-mono text-[12px] sm:text-[13px] font-bold bg-primary/10 text-primary px-2 sm:px-2.5 py-0.5 rounded-md border border-primary/20 wrap-anywhere">
+              {agreementId}
+            </span>
+            <StatusBadge status={status as any} />
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          {/* Agreement details & statement exports */}
+          <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-border/50 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0 space-y-1.5 text-[12px] text-muted-foreground md:flex md:flex-wrap md:items-center md:gap-x-4 md:gap-y-1.5 md:space-y-0">
+              <div className="flex items-start gap-1.5 min-w-0">
+                <User className="h-3.5 w-3.5 mt-px text-primary/70 shrink-0" />
+                <span className="min-w-0 wrap-break-word">
                   Customer: <strong className="text-foreground font-semibold">{customerName}</strong>
-                  {custPhone && (
-                    <span className="text-muted-foreground font-normal ml-1">
-                      (📞 <a href={`tel:${custPhone}`} className="hover:underline hover:text-primary">{custPhone}</a>)
-                    </span>
-                  )}
                 </span>
-                <span>•</span>
-                <span>
+              </div>
+              {custPhone && (
+                <div className="flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                  <a href={`tel:${custPhone}`} className="font-medium text-foreground/80 hover:underline hover:text-primary">{custPhone}</a>
+                </div>
+              )}
+              <div className="flex items-start gap-1.5 min-w-0">
+                <Package className="h-3.5 w-3.5 mt-px text-primary/70 shrink-0" />
+                <span className="min-w-0 wrap-break-word">
                   Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong>
                   {modelStr && <span className="text-muted-foreground font-semibold ml-1">({modelStr})</span>}
                 </span>
-                {rentalDate && (
-                  <>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      Rental Date: <strong className="text-foreground font-semibold">{formatDateDDMMYYYY(rentalDate)}</strong>
-                    </span>
-                  </>
-                )}
-              </p>
+              </div>
+              {rentalDate && (
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                  <span>
+                    Rental Date: <strong className="text-foreground font-semibold">{formatDateDDMMYYYY(rentalDate)}</strong>
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
               {canExport && (
-                <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatement}>
+                <Button size="sm" variant="outline" className="h-9 md:h-8 flex-1 md:flex-none text-[12px] gap-1.5" onClick={handleExportStatement}>
                   <Download className="h-3.5 w-3.5" /> Excel Statement
                 </Button>
               )}
-              <Button size="sm" variant="outline" className="h-8 text-[12px] gap-1.5" onClick={handleExportStatementPDF}>
+              <Button size="sm" variant="outline" className="h-9 md:h-8 flex-1 md:flex-none text-[12px] gap-1.5" onClick={handleExportStatementPDF}>
                 <Printer className="h-3.5 w-3.5" /> PDF Statement
               </Button>
             </div>
           </div>
-        </DialogHeader>
 
-        {/* Financial Summary Cards */}
-        <div className="p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-card p-3 rounded-lg border border-border/50">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Collected</p>
-            <p className="text-[18px] font-bold text-success mt-0.5">₹{totalPaid.toLocaleString("en-IN")}</p>
+          {/* Financial Summary Cards */}
+          <div className="px-4 py-3.5 sm:p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Collected</p>
+              <p className="text-[16px] sm:text-[18px] font-bold text-success mt-1 wrap-anywhere">₹{totalPaid.toLocaleString("en-IN")}</p>
+            </div>
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Receipts</p>
+              <p className="text-[16px] sm:text-[18px] font-bold text-primary mt-1">{agreementPayments.length}</p>
+            </div>
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Monthly Rent</p>
+              <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
+            </div>
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</p>
+              <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{deposit.toLocaleString("en-IN")}</p>
+            </div>
           </div>
-          <div className="bg-card p-3 rounded-lg border border-border/50">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Receipts</p>
-            <p className="text-[18px] font-bold text-primary mt-0.5">{agreementPayments.length}</p>
-          </div>
-          <div className="bg-card p-3 rounded-lg border border-border/50">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Monthly Rent</p>
-            <p className="text-[16px] font-semibold text-foreground mt-0.5">₹{monthlyRent.toLocaleString("en-IN")}</p>
-          </div>
-          <div className="bg-card p-3 rounded-lg border border-border/50">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security Deposit</p>
-            <p className="text-[16px] font-semibold text-foreground mt-0.5">₹{deposit.toLocaleString("en-IN")}</p>
-          </div>
-        </div>
 
-        {/* History Table */}
-        <div className="p-5">
+          {/* History Table */}
+          <div className="px-4 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-5">
           <h4 className="text-[13px] font-bold mb-3 flex items-center gap-2">
             <Receipt className="h-4 w-4 text-primary" />
             Payment Transactions ({agreementPayments.length})
           </h4>
           {agreementPayments.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-[13px] border border-dashed border-border rounded-xl">
+            <div className="py-12 px-4 text-center text-muted-foreground text-[13px] border border-dashed border-border rounded-xl wrap-break-word">
               No payments recorded for agreement {agreementId} yet.
             </div>
           ) : (
             <div className="rounded-xl border border-border/60 overflow-hidden">
-              <div className="hidden md:block">
+              <div className="hidden xl:block">
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
@@ -1198,70 +1217,72 @@ function AgreementPaymentHistoryModal({
                 </Table>
               </div>
 
-              {/* Mobile card list */}
-              <div className="md:hidden divide-y divide-border/60">
+              {/* Mobile / tablet card list */}
+              <div className="xl:hidden divide-y divide-border/60">
                 {agreementPayments.map((p) => {
                   const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
                   return (
-                    <div key={p.id} className="px-4 py-3.5">
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div>
-                          <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateDDMMYYYY(p.date)}</p>
-                          <div className="space-y-1 mt-1">
-                            {pEquipments.map((it, idx) => (
-                              <div key={idx} className="leading-tight">
-                                <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
-                                  <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                                  <span>{it.name}</span>
-                                </div>
-                                {it.model && (
-                                  <span className="text-[10.5px] text-muted-foreground font-medium pl-5 block">
-                                    Model: {it.model}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                    <div key={p.id} className="px-3.5 py-3 sm:px-4 sm:py-3.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono text-[11.5px] font-bold text-primary wrap-anywhere">{p.id}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-muted-foreground/70 shrink-0" />
+                            {formatDateDDMMYYYY(p.date)}
+                          </p>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="font-display text-[15px] font-bold whitespace-nowrap">₹{p.amount.toLocaleString("en-IN")}</span>
                           <StatusBadge status={p.status} />
                         </div>
                       </div>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground"}`}>{p.type}</span>
-                      <span>·</span>
-                      <span
-                        className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}
-                        title={p.notes || undefined}
-                      >
-                        {p.mode}
-                      </span>
-                      <span>·</span>
-                      <span>{(p.collectedBy as string) || "Dr. Rao"}</span>
-                    </div>
-                    {p.notes && (
-                      <p className="mt-1.5 text-[10.5px] text-muted-foreground italic truncate" title={p.notes}>
-                        {p.notes}
-                      </p>
-                    )}
-                    <div className="mt-2 flex justify-end gap-1">
-                      <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
-                      {isAdmin && (
-                        <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
-                          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        } />
+                      <div className="space-y-1 mt-2">
+                        {pEquipments.map((it, idx) => (
+                          <div key={idx} className="flex items-start gap-1.5 text-[12px] leading-snug">
+                            <Package className="h-3.5 w-3.5 mt-px text-primary shrink-0" />
+                            <span className="min-w-0 wrap-break-word">
+                              <span className="font-semibold text-foreground">{it.name}</span>
+                              {it.model && (
+                                <span className="text-[11px] text-muted-foreground font-medium"> · Model: {it.model}</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-muted-foreground">
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${typeColors[p.type] ?? "bg-muted text-muted-foreground"}`}>{p.type}</span>
+                          <span
+                            className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}
+                            title={p.notes || undefined}
+                          >
+                            {p.mode}
+                          </span>
+                          <span className="min-w-0 wrap-break-word">by {(p.collectedBy as string) || "Dr. Rao"}</span>
+                        </div>
+                        <div className="flex shrink-0 items-center -mr-1.5">
+                          <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                          {isAdmin && (
+                            <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
+                              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            } />
+                          )}
+                        </div>
+                      </div>
+                      {p.notes && (
+                        <p className="mt-1 text-[11px] text-muted-foreground italic wrap-break-word">
+                          {p.notes}
+                        </p>
                       )}
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
             </div>
           )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -1924,21 +1945,21 @@ function PaymentsPage() {
         {/* Recent Payments table */}
         <Card className="overflow-hidden">
           <CardHeader className="border-b border-border/60 bg-muted/20 px-3 sm:px-5 py-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex items-center justify-between sm:justify-start gap-3">
                 <CardTitle>Payments</CardTitle>
                 {/* View Mode Toggle */}
-                <div className="flex bg-muted/60 p-0.5 rounded-lg border border-border/50 text-[11px]">
+                <div className="flex shrink-0 bg-muted/60 p-0.5 rounded-lg border border-border/50 text-[11px]">
                   <button
                     type="button"
-                    className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${viewMode === "by-agreement" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`px-2.5 py-1.5 sm:py-1 rounded-md font-semibold whitespace-nowrap transition-colors ${viewMode === "by-agreement" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                     onClick={() => setViewMode("by-agreement")}
                   >
                     By Agreement
                   </button>
                   <button
                     type="button"
-                    className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${viewMode === "all-receipts" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`px-2.5 py-1.5 sm:py-1 rounded-md font-semibold whitespace-nowrap transition-colors ${viewMode === "all-receipts" ? "bg-background text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                     onClick={() => setViewMode("all-receipts")}
                   >
                     All Receipts
@@ -1948,7 +1969,7 @@ function PaymentsPage() {
 
               <div className="flex items-center gap-2 flex-wrap">
                 <Select value={dateFilter} onValueChange={setDateFilter}>
-                  <SelectTrigger className="h-8 w-[120px] text-[12px] bg-card border-border/50 rounded-lg">
+                  <SelectTrigger className="h-9 sm:h-8 w-[136px] shrink-0 text-[12px] bg-card border-border/50 rounded-lg">
                     <SelectValue placeholder="All Payments" />
                   </SelectTrigger>
                   <SelectContent className="border border-border/60 bg-popover shadow-elevated rounded-lg">
@@ -1959,27 +1980,29 @@ function PaymentsPage() {
                   </SelectContent>
                 </Select>
                 {dateFilter === "custom" && (
-                  <div className="flex items-center gap-1.5 animate-[fade-in_0.2s_ease-out] shrink-0">
+                  // Own full-width row below the search on phones so the two
+                  // date pickers never spill past the card edge.
+                  <div className="order-last flex w-full items-center gap-1.5 animate-[fade-in_0.2s_ease-out] sm:order-none sm:w-auto sm:shrink-0">
                     <Input
                       type="date"
-                      className="h-8 text-[11px] w-[130px] bg-card border-border/50 cursor-pointer"
+                      className="h-9 sm:h-8 px-2 sm:px-3 text-[11px] min-w-0 flex-1 sm:flex-none sm:w-[130px] bg-card border-border/50 cursor-pointer"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
                     />
-                    <span className="text-[10px] text-muted-foreground">to</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">to</span>
                     <Input
                       type="date"
-                      className="h-8 text-[11px] w-[130px] bg-card border-border/50 cursor-pointer"
+                      className="h-9 sm:h-8 px-2 sm:px-3 text-[11px] min-w-0 flex-1 sm:flex-none sm:w-[130px] bg-card border-border/50 cursor-pointer"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
                     />
                   </div>
                 )}
-                <div className="relative w-40 sm:w-56">
+                <div className="relative min-w-[120px] flex-1 sm:flex-none sm:w-56">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
                   <Input
                     placeholder={isStaff ? "Search by customer name..." : "Search…"}
-                    className="pl-9 h-8 text-[12px] bg-card border-border/50"
+                    className="pl-9 h-9 sm:h-8 text-[12px] bg-card border-border/50"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
@@ -1992,7 +2015,7 @@ function PaymentsPage() {
           {viewMode === "by-agreement" && (
             <>
               {/* Desktop Agreement Table */}
-              <div className="hidden sm:block">
+              <div className="hidden xl:block [&_th]:px-3 [&_td]:px-3">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2117,8 +2140,8 @@ function PaymentsPage() {
                 </Table>
               </div>
 
-              {/* Mobile Agreement List */}
-              <div className="sm:hidden divide-y divide-border/60">
+              {/* Mobile / tablet Agreement List */}
+              <div className="xl:hidden divide-y divide-border/60">
                 {filteredAgreements.length === 0 ? (
                   <div className="py-12 px-4 text-center text-[13px] text-muted-foreground">
                     {isStaff && !search.trim() ? (
@@ -2142,10 +2165,10 @@ function PaymentsPage() {
                         if (canViewPaymentHistory) setSelectedHistoryAgreementId(g.agreementId);
                       }}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-[11.5px] font-bold text-primary">{g.agreementId}</span>
+                      <div className="flex items-start justify-between gap-3 mb-1">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+                            <span className="font-mono text-[11.5px] font-bold text-primary wrap-anywhere">{g.agreementId}</span>
                             {g.startDate && (
                               <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-0.5">
                                 <Calendar className="h-3 w-3 text-muted-foreground/70 shrink-0" />
@@ -2153,41 +2176,41 @@ function PaymentsPage() {
                               </span>
                             )}
                           </div>
-                          <p className="font-semibold text-[13.5px] mt-0.5">{g.customerName}</p>
+                          <p className="font-semibold text-[13.5px] mt-0.5 wrap-break-word">{g.customerName}</p>
                           <CustomerPhoneDisplay
                             phone={g.phone}
                             altPhone={g.altPhone}
                             contactNumber3={g.contactNumber3}
                           />
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="font-display text-[15px] font-bold text-success">₹{g.totalCollected.toLocaleString("en-IN")}</span>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="font-display text-[15px] font-bold text-success whitespace-nowrap">₹{g.totalCollected.toLocaleString("en-IN")}</span>
                           <StatusBadge status={g.rentStatus as any} />
                         </div>
                       </div>
                       {(() => {
                         const eqInfos = getAgreementEquipmentModelInfo(g, rentalsList, equipmentList);
                         return (
-                          <div className="mt-1 space-y-0.5">
+                          <div className="mt-1.5 space-y-1">
                             {eqInfos.map((info, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground/90">
-                                <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                                <span className="truncate font-semibold">{info.name}</span>
-                                {info.model && (
-                                  <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">
-                                    · {info.model}
-                                  </span>
-                                )}
+                              <div key={idx} className="flex items-start gap-1.5 text-[12px] leading-snug text-foreground/90">
+                                <Package className="h-3.5 w-3.5 mt-px text-primary shrink-0" />
+                                <span className="min-w-0 wrap-break-word">
+                                  <span className="font-semibold">{info.name}</span>
+                                  {info.model && (
+                                    <span className="text-[11px] text-muted-foreground font-medium"> · {info.model}</span>
+                                  )}
+                                </span>
                               </div>
                             ))}
                           </div>
                         );
                       })()}
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-[11px]">
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/40 text-[11px]">
                         <span className="text-muted-foreground">{g.totalCount} Payment{g.totalCount === 1 ? "" : "s"}</span>
                         {canViewPaymentHistory && (
-                          <Button size="sm" variant="ghost" className="h-6 text-[11px] text-primary p-0">
-                            View Payment History <ChevronRight className="ml-1 h-3 w-3" />
+                          <Button size="sm" variant="ghost" className="h-8 -mr-1.5 px-1.5 text-[11.5px] font-semibold text-primary hover:bg-primary/10">
+                            View Payment History <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
                           </Button>
                         )}
                       </div>
@@ -2202,7 +2225,7 @@ function PaymentsPage() {
           {viewMode === "all-receipts" && (
             <>
               {/* Desktop Receipts Table */}
-              <div className="hidden sm:block">
+              <div className="hidden xl:block [&_th]:px-3 [&_td]:px-3">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -2327,8 +2350,8 @@ function PaymentsPage() {
                 </Table>
               </div>
 
-              {/* Mobile card list */}
-              <div className="sm:hidden">
+              {/* Mobile / tablet card list */}
+              <div className="xl:hidden">
                 {filteredPayments.length === 0 ? (
                   <div className="py-12 px-4 text-center text-[13px] text-muted-foreground">
                     {isStaff && !search.trim() ? (
@@ -2350,10 +2373,10 @@ function PaymentsPage() {
                       const eqInfos = getPaymentEquipmentDisplay(p, rentals, equipmentList);
                       return (
                         <div key={p.id} className="px-4 py-3.5">
-                          <div className="flex items-start justify-between gap-2 mb-1.5">
-                            <div>
-                              <p className="font-mono text-[11px] font-bold text-primary">{p.id}</p>
-                              <p className="font-semibold text-[13.5px] mt-0.5">{p.customer}</p>
+                          <div className="flex items-start justify-between gap-3 mb-1.5">
+                            <div className="min-w-0">
+                              <p className="font-mono text-[11px] font-bold text-primary wrap-anywhere">{p.id}</p>
+                              <p className="font-semibold text-[13.5px] mt-0.5 wrap-break-word">{p.customer}</p>
                               {(() => {
                                 const contacts = resolveReceiptCustomerContacts(p);
                                 return (
@@ -2364,12 +2387,14 @@ function PaymentsPage() {
                                   />
                                 );
                               })()}
-                              <div className="space-y-0.5 mt-1">
+                              <div className="space-y-1 mt-1.5">
                                 {eqInfos.map((info, idx) => (
-                                  <div key={idx} className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground/90">
-                                    <Package className="h-3.5 w-3.5 text-primary shrink-0" />
-                                    <span className="truncate">{info.name}</span>
-                                    {info.model && <span className="text-[10.5px] text-muted-foreground font-medium shrink-0">· {info.model}</span>}
+                                  <div key={idx} className="flex items-start gap-1.5 text-[12px] leading-snug text-foreground/90">
+                                    <Package className="h-3.5 w-3.5 mt-px text-primary shrink-0" />
+                                    <span className="min-w-0 wrap-break-word">
+                                      <span className="font-semibold">{info.name}</span>
+                                      {info.model && <span className="text-[11px] text-muted-foreground font-medium"> · {info.model}</span>}
+                                    </span>
                                   </div>
                                 ))}
                               </div>
@@ -2377,7 +2402,7 @@ function PaymentsPage() {
                                 {canViewPaymentHistory ? (
                                   <button
                                     type="button"
-                                    className="font-mono text-[10px] text-primary hover:underline font-bold"
+                                    className="font-mono text-[10.5px] text-primary hover:underline font-bold py-0.5"
                                     onClick={() => setSelectedHistoryAgreementId(p.agreement)}
                                   >
                                     {p.agreement}
@@ -2398,20 +2423,29 @@ function PaymentsPage() {
                                 })()}
                               </div>
                             </div>
-                            <div className="flex flex-col items-end gap-1">
-                              <span className="font-display text-[15px] font-bold">₹{p.amount.toLocaleString("en-IN")}</span>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                              <span className="font-display text-[15px] font-bold whitespace-nowrap">₹{p.amount.toLocaleString("en-IN")}</span>
                               <StatusBadge status={p.status} />
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <span>{formatDateDDMMYYYY(p.date)}</span>
-                            <span>·</span>
-                            <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
-                            <span>·</span>
-                            <span>{p.type}</span>
-                          </div>
-                          <div className="mt-2 flex justify-end">
-                            <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                          <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                              <span className="whitespace-nowrap">{formatDateDDMMYYYY(p.date)}</span>
+                              <span>·</span>
+                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 font-semibold ${modeColors[p.mode] ?? "bg-muted text-muted-foreground"}`}>{p.mode}</span>
+                              <span>·</span>
+                              <span>{p.type}</span>
+                            </div>
+                            <div className="flex shrink-0 items-center -mr-1.5">
+                              <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                              {isAdmin && (
+                                <DeletePaymentDialog payment={p} onDelete={refresh} trigger={
+                                  <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                } />
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

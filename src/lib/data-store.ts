@@ -2125,6 +2125,21 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
     }
     if (items.length <= 1) continue;
 
+    // ONE-TIME REPAIR: cap already-inflated rentPaidAmount / depositPaidAmount.
+    // The old code kept adding to these fields on every reconciliation run,
+    // so existing data may carry values far above the actual advance.  The
+    // advance at creation can never exceed one cycle's total rent / deposit.
+    const totalItemsRent = items.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate), 0);
+    const totalItemsDeposit = items.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
+    if (totalItemsRent > 0 && cleanNum(rental.rentPaidAmount) > totalItemsRent) {
+      rental.rentPaidAmount = totalItemsRent;
+      rentalsDirty = true;
+    }
+    if (totalItemsDeposit > 0 && cleanNum(rental.depositPaidAmount) > totalItemsDeposit) {
+      rental.depositPaidAmount = totalItemsDeposit;
+      rentalsDirty = true;
+    }
+
     const cleanAgr = String(rental.id).trim().toUpperCase().replace(/^AGR-/i, "");
     const isMatchAgr = (p: any) => {
       const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
@@ -2135,6 +2150,55 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
       (p: any) => p && isMatchAgr(p) && (!p.status || p.status === "Paid" || p.status === "Completed")
     );
 
+    // CLEANUP: remove excess synthetic "Advance rent payment for added
+    // equipment" records produced by the old runaway reconciliation.
+    // If the total of *non-synthetic* rent payments already covers the
+    // expected advance, all synthetic rent records are redundant.
+    const isSyntheticRent = (p: any) =>
+      p && String(p.notes || "").toLowerCase().includes("advance rent payment for added equipment");
+    const isRentTypeCheck = (type: any) => {
+      const s = String(type || "").toLowerCase();
+      return s.includes("rent") || s.includes("initial");
+    };
+    const naturalRentTotal = agrPayments
+      .filter((p: any) => isRentTypeCheck(p.type) && !isSyntheticRent(p))
+      .reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+    const cappedExpected = cleanNum(rental.rentPaidAmount) || (rental.rentalPaymentStatus === "Paid" ? cleanNum(rental.monthlyRent) : 0);
+    if (naturalRentTotal >= cappedExpected) {
+      // Natural (user-created) payments already cover the advance — remove
+      // all synthetic rent records for this agreement.
+      const toRemove = agrPayments.filter((p: any) => isRentTypeCheck(p.type) && isSyntheticRent(p));
+      for (const rem of toRemove) {
+        const idx = paymentsList.indexOf(rem);
+        if (idx !== -1) {
+          paymentsList.splice(idx, 1);
+          dirty = true;
+        }
+      }
+    }
+
+    // Similarly clean up excess synthetic deposit records.
+    const isSyntheticDeposit = (p: any) =>
+      p && String(p.notes || "").toLowerCase().includes("security deposit for added equipment");
+    const isDepTypeCheck = (type: any) => {
+      const s = String(type || "").toLowerCase();
+      return s.includes("deposit") || s.includes("security");
+    };
+    const naturalDepTotal = agrPayments
+      .filter((p: any) => isDepTypeCheck(p.type) && !isSyntheticDeposit(p))
+      .reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+    const cappedExpectedDep = cleanNum(rental.depositPaidAmount) || (rental.depositPaymentStatus === "Paid" ? items.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0) : 0);
+    if (naturalDepTotal >= cappedExpectedDep) {
+      const toRemove = agrPayments.filter((p: any) => isDepTypeCheck(p.type) && isSyntheticDeposit(p));
+      for (const rem of toRemove) {
+        const idx = paymentsList.indexOf(rem);
+        if (idx !== -1) {
+          paymentsList.splice(idx, 1);
+          dirty = true;
+        }
+      }
+    }
+
     // 1. Reconcile Rent Payments
     const isRentType = (type: any) => {
       const s = String(type || "").toLowerCase();
@@ -2143,10 +2207,39 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
 
     const rentPayments = agrPayments.filter((p: any) => isRentType(p.type));
     const totalRentPaid = rentPayments.reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
-    const expectedRentPaid = cleanNum(rental.rentPaidAmount) || (rental.rentalPaymentStatus === "Paid" ? cleanNum(rental.monthlyRent) : 0);
+    // FIX: use the *original* rentPaidAmount (the advance recorded at agreement
+    // creation) as the ceiling.  Previously this read the mutated value back,
+    // which grew on every reconciliation run, inflating "Total Rent Paid".
+    const originalRentPaid = cleanNum(rental.rentPaidAmount) || (rental.rentalPaymentStatus === "Paid" ? cleanNum(rental.monthlyRent) : 0);
+    const expectedRentPaid = originalRentPaid;
 
     if (expectedRentPaid > totalRentPaid) {
       let diff = expectedRentPaid - totalRentPaid;
+
+      // FIX: count payments that don't match any specific item (general
+      // agreement-level payments covering all items collectively).  These
+      // already cover the rent for all items, so creating per-item synthetic
+      // duplicates would be double-counting (the Darshan ₹228k → ₹114k bug).
+      const matchesAnyItem = (p: any) => {
+        for (const it of items) {
+          const eqIds = String(p.equipmentId || "").split(",").map((s: string) => s.trim().toLowerCase());
+          const targetId = String(it.equipmentId || "").toLowerCase();
+          const targetSerial = String(it.serial || "").toLowerCase();
+          const targetName = String(it.name || "").toLowerCase();
+          if (targetId && eqIds.includes(targetId)) return true;
+          if (p.notes) {
+            const n = String(p.notes).toLowerCase();
+            if (targetSerial && targetSerial.length >= 3 && n.includes(targetSerial)) return true;
+            if (targetName && targetName.length >= 3 && n.includes(targetName)) return true;
+          }
+        }
+        return false;
+      };
+      const unmatchedRentTotal = rentPayments
+        .filter((p: any) => !matchesAnyItem(p))
+        .reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+      diff = Math.max(0, diff - unmatchedRentTotal);
+
       for (const item of items) {
         if (diff <= 0) break;
         const itemRent = cleanNum(item.monthlyRent || item.dailyRent || item.rentRate);
@@ -2194,11 +2287,10 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
             agrPayments.push(newRentPayment);
             diff -= payAmt;
             dirty = true;
-            rental.rentPaidAmount = (cleanNum(rental.rentPaidAmount) || 0) + payAmt;
-            if (cleanNum(rental.rentPaidAmount) >= cleanNum(rental.monthlyRent)) {
-              rental.rentalPaymentStatus = "Paid";
-            }
-            rentalsDirty = true;
+            // FIX: do NOT inflate rental.rentPaidAmount here.
+            // The synthetic payment record already represents the advance;
+            // bumping rentPaidAmount caused a runaway feedback loop where each
+            // reconciliation run doubled the "expected" amount.
           }
         }
       }
@@ -2229,6 +2321,29 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
 
     if (expectedDepositPaid > totalDepositPaid) {
       let depDiff = expectedDepositPaid - totalDepositPaid;
+
+      // FIX: same as rent — count general (unmatched) deposit payments so we
+      // don't create per-item duplicates of a lump-sum deposit.
+      const matchesAnyItemDep = (p: any) => {
+        for (const it of items) {
+          const eqIds = String(p.equipmentId || "").split(",").map((s: string) => s.trim().toLowerCase());
+          const targetId = String(it.equipmentId || "").toLowerCase();
+          const targetSerial = String(it.serial || "").toLowerCase();
+          const targetName = String(it.name || "").toLowerCase();
+          if (targetId && eqIds.includes(targetId)) return true;
+          if (p.notes) {
+            const n = String(p.notes).toLowerCase();
+            if (targetSerial && targetSerial.length >= 3 && n.includes(targetSerial)) return true;
+            if (targetName && targetName.length >= 3 && n.includes(targetName)) return true;
+          }
+        }
+        return false;
+      };
+      const unmatchedDepTotal = depositPayments
+        .filter((p: any) => !matchesAnyItemDep(p))
+        .reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+      depDiff = Math.max(0, depDiff - unmatchedDepTotal);
+
       for (const item of items) {
         if (depDiff <= 0) break;
         let itemDeposit = cleanNum(item.deposit);
@@ -2282,11 +2397,8 @@ function reconcileRentalEquipmentPayments(paymentsList: any[]): boolean {
             agrPayments.push(newDepositPayment);
             depDiff -= payAmt;
             dirty = true;
-            rental.depositPaidAmount = (cleanNum(rental.depositPaidAmount) || 0) + payAmt;
-            if (cleanNum(rental.depositPaidAmount) >= totalAgreementDeposit) {
-              rental.depositPaymentStatus = "Paid";
-            }
-            rentalsDirty = true;
+            // FIX: do NOT inflate rental.depositPaidAmount here.
+            // Same rationale as for rentPaidAmount above.
           }
         }
       }
