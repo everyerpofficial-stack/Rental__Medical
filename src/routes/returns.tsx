@@ -928,7 +928,7 @@ function ReturnsPage() {
   const isStaff = roleNormalized === "staff";
   const isAdmin = roleNormalized === "admin";
   const isAccountant = roleNormalized === "accountant" || roleNormalized === "accounts" || roleNormalized === "account";
-  const canFilterByOwner = !isStaff;
+  const canFilterByOwner = !isStaff && !isAccountant;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -3455,9 +3455,11 @@ function ReturnsPage() {
             {/* PERF: incremental rendering - only a page of history rows mounts */}
             {hasMoreReturns && (
               <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
-                <span className="text-[12px] text-muted-foreground">
-                  Showing {visibleReturns.length} of {filteredReturns.length}
-                </span>
+                {!isStaff && !isAccountant && (
+                  <span className="text-[12px] text-muted-foreground">
+                    Showing {visibleReturns.length} of {filteredReturns.length}
+                  </span>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

@@ -5662,6 +5662,7 @@ function RentalsPage() {
   const [rentalsList, setRentalsList] = useState(() => getRentals());
 
   const [ownerFilter, setOwnerFilter] = useState("all-owners");
+  const [categoryFilter, setCategoryFilter] = useState("all-categories");
 
   const userRole = typeof window !== "undefined" ? localStorage.getItem("medirent-user-role") || "" : "";
   const roleNormalized = userRole.toLowerCase().trim();
@@ -5671,7 +5672,7 @@ function RentalsPage() {
   const canEdit = isAdmin || isAccountant;
   const canCancel = isAdmin;
   const canApprove = isAdmin;
-  const canFilterByOwner = !isStaff;
+  const canFilterByOwner = !isStaff && !isAccountant;
   const canViewOwnerDetails = !isStaff && !isAccountant;
 
   const refresh = () => setRentalsList(getRentals());
@@ -5755,6 +5756,44 @@ function RentalsPage() {
     return Array.from(owners);
   }, [equipmentById, equipmentBySerial]);
 
+  const activeCategories = useMemo(
+    () => Array.from(new Set<string>(equipmentMasterList.map((e: any) => e.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [equipmentMasterList]
+  );
+
+  /** Every equipment category on an agreement (lower-cased), so a multi-item
+   *  rental matches any of its categories. An item's name is its category name
+   *  when it can't be resolved through the equipment master. */
+  const getRentalCategories = useCallback((r: any): Set<string> => {
+    const cats = new Set<string>();
+    const add = (v: unknown) => {
+      if (v) cats.add(String(v).trim().toLowerCase());
+    };
+    if (Array.isArray(r.equipmentItems)) {
+      for (const item of r.equipmentItems) {
+        const eq =
+          (item.equipmentId && equipmentById.get(item.equipmentId)) ||
+          (item.serial && equipmentBySerial.get(String(item.serial).trim().toLowerCase()));
+        add(eq?.category || item.category || item.name);
+      }
+    }
+    if (r.equipmentId) {
+      for (const id of String(r.equipmentId).split(",").map((s: string) => s.trim()).filter(Boolean)) {
+        add(equipmentById.get(id)?.category);
+      }
+    }
+    if (r.serial) add(equipmentBySerial.get(String(r.serial).trim().toLowerCase())?.category);
+    return cats;
+  }, [equipmentById, equipmentBySerial]);
+
+  const rentalMatchesCategory = useCallback((r: any) => {
+    if (categoryFilter === "all-categories") return true;
+    const target = categoryFilter.toLowerCase();
+    const cats = getRentalCategories(r);
+    // Legacy rows with no resolvable equipment: fall back to the equipment label.
+    return cats.size > 0 ? cats.has(target) : String(r.equipment || "").toLowerCase().includes(target);
+  }, [categoryFilter, getRentalCategories]);
+
   /** ITEM-16: real unpaid balance, used by the "Pending Dues" quick filter and
    *  by the Overdue badge - the stored status label alone can be stale. */
   const outstandingByRental = useMemo(() => {
@@ -5765,11 +5804,14 @@ function RentalsPage() {
     return map;
   }, [rentalsList, paymentsForDues]);
 
-  const filteredRentals = useMemo(() => {
+  const isSearching = !!debouncedSearch.trim();
+
+  // All agreements matching the search query (ignoring status/quick filters)
+  const searchMatchingRentals = useMemo(() => {
+    if (!isSearching) return rentalsList;
     const q = debouncedSearch.toLowerCase().trim();
     const tokens = q.split(/\s+/).filter(Boolean);
 
-    /** True when any whole word in `text` starts with `token`. */
     const wordStartsWith = (text: unknown, token: string) => {
       if (!text) return false;
       return String(text)
@@ -5779,16 +5821,14 @@ function RentalsPage() {
         .some((w) => w.startsWith(token));
     };
 
-    const rows = rentalsList.filter((r) => {
+    return rentalsList.filter((r) => {
       const customer = customersById.get(r.customerId);
 
-      // Same precision fix as the Rent Dues search (ITEM-8): names and places
-      // match on word prefix so a name query stops hitting unrelated addresses,
-      // while serials and phone digits keep their exact/substring matching.
-      const matchesSearch = !q || tokens.every((token) => {
+      return tokens.every((token) => {
         const tokenDigits = token.replace(/\D/g, "");
 
         if (wordStartsWith(r.customer, token)) return true;
+        if (customer?.name && wordStartsWith(customer.name, token)) return true;
 
         const idLower = String(r.id || "").toLowerCase();
         if (idLower.startsWith(token) || (tokenDigits.length >= 2 && idLower.includes(tokenDigits))) return true;
@@ -5808,61 +5848,100 @@ function RentalsPage() {
         }
         return false;
       });
-      if (!matchesSearch) return false;
-
-      const statusLower = String(r.status || "").toLowerCase().trim();
-      const targetFilter = statusFilter.toLowerCase().trim();
-      const matchesStatus =
-        statusFilter === "all" ||
-        (targetFilter === "returned" || targetFilter === "completed"
-          ? statusLower === "completed" || statusLower === "returned"
-          : statusLower === targetFilter);
-      if (!matchesStatus) return false;
-
-      if (canFilterByOwner && ownerFilter !== "all-owners") {
-        const selectedOwnerRecord = ownersList.find(
-          (ow) =>
-            ow.name.toLowerCase() === ownerFilter.toLowerCase() ||
-            (ow.ownerName && ow.ownerName.toLowerCase() === ownerFilter.toLowerCase())
-        );
-        const filterTargetValues = new Set<string>([ownerFilter.toLowerCase()]);
-        if (selectedOwnerRecord) {
-          if (selectedOwnerRecord.name) filterTargetValues.add(selectedOwnerRecord.name.toLowerCase());
-          if (selectedOwnerRecord.ownerName) filterTargetValues.add(selectedOwnerRecord.ownerName.toLowerCase());
-          if (selectedOwnerRecord.id) filterTargetValues.add(selectedOwnerRecord.id.toLowerCase());
-        }
-        const rOwners = getRentalOwners(r);
-        const matchesOwner = rOwners.some(
-          (o) => filterTargetValues.has(o.toLowerCase())
-        );
-        if (!matchesOwner) return false;
-      }
-
-      // ITEM-16 quick filters
-      if (quickFilter === "active") {
-        return r.status === "Active" || r.status === "Overdue";
-      }
-      if (quickFilter === "overdue") {
-        return r.status === "Overdue";
-      }
-      if (quickFilter === "completed") {
-        return r.status === "Completed" || r.status === "Returned";
-      }
-      if (quickFilter === "cancelled") {
-        return r.status === "Cancelled";
-      }
-      if (quickFilter === "pending") {
-        return r.status === "Pending Approval";
-      }
-      if (quickFilter === "dues") {
-        return (outstandingByRental.get(r.id) || 0) > 0;
-      }
-      return true;
     });
+  }, [rentalsList, debouncedSearch, isSearching, customersById]);
 
-    // ITEM-16: newest start date first by default. sortLatestFirst() leads on
-    // the numeric agreement id and only tie-breaks on the date, which put a
-    // back-dated agreement created today above one that actually started later.
+  // Base list used for computing counts in KPI cards and quick filter buttons.
+  // When searching, this reflects the searched customer's agreements!
+  const countBaseRentals = useMemo(() => {
+    let list = isSearching ? searchMatchingRentals : rentalsList;
+    if (canFilterByOwner && ownerFilter !== "all-owners") {
+      const selectedOwnerRecord = ownersList.find(
+        (ow) =>
+          ow.name.toLowerCase() === ownerFilter.toLowerCase() ||
+          (ow.ownerName && ow.ownerName.toLowerCase() === ownerFilter.toLowerCase())
+      );
+      const filterTargetValues = new Set<string>([ownerFilter.toLowerCase()]);
+      if (selectedOwnerRecord) {
+        if (selectedOwnerRecord.name) filterTargetValues.add(selectedOwnerRecord.name.toLowerCase());
+        if (selectedOwnerRecord.ownerName) filterTargetValues.add(selectedOwnerRecord.ownerName.toLowerCase());
+        if (selectedOwnerRecord.id) filterTargetValues.add(selectedOwnerRecord.id.toLowerCase());
+      }
+      list = list.filter((r) => {
+        const rOwners = getRentalOwners(r);
+        return rOwners.some((o) => filterTargetValues.has(o.toLowerCase()));
+      });
+    }
+    if (categoryFilter !== "all-categories") {
+      list = list.filter(rentalMatchesCategory);
+    }
+    return list;
+  }, [isSearching, searchMatchingRentals, rentalsList, canFilterByOwner, ownerFilter, ownersList, getRentalOwners, categoryFilter, rentalMatchesCategory]);
+
+  // Dynamically computed counts: when searching, these reflect that searched customer's active/overdue/all counts!
+  const rentalCounts = useMemo(() => {
+    return {
+      all: countBaseRentals.length,
+      active: countBaseRentals.filter((r) => r.status === "Active" || r.status === "Overdue").length,
+      overdue: countBaseRentals.filter((r) => r.status === "Overdue").length,
+      pending: countBaseRentals.filter((r) => r.status === "Pending Approval").length,
+      completed: countBaseRentals.filter((r) => r.status === "Completed" || r.status === "Returned").length,
+      dues: countBaseRentals.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length,
+      cancelled: countBaseRentals.filter((r) => r.status === "Cancelled").length,
+    };
+  }, [countBaseRentals, outstandingByRental]);
+
+  const filteredRentals = useMemo(() => {
+    let rows = searchMatchingRentals;
+
+    if (canFilterByOwner && ownerFilter !== "all-owners") {
+      const selectedOwnerRecord = ownersList.find(
+        (ow) =>
+          ow.name.toLowerCase() === ownerFilter.toLowerCase() ||
+          (ow.ownerName && ow.ownerName.toLowerCase() === ownerFilter.toLowerCase())
+      );
+      const filterTargetValues = new Set<string>([ownerFilter.toLowerCase()]);
+      if (selectedOwnerRecord) {
+        if (selectedOwnerRecord.name) filterTargetValues.add(selectedOwnerRecord.name.toLowerCase());
+        if (selectedOwnerRecord.ownerName) filterTargetValues.add(selectedOwnerRecord.ownerName.toLowerCase());
+        if (selectedOwnerRecord.id) filterTargetValues.add(selectedOwnerRecord.id.toLowerCase());
+      }
+      rows = rows.filter((r) => {
+        const rOwners = getRentalOwners(r);
+        return rOwners.some((o) => filterTargetValues.has(o.toLowerCase()));
+      });
+    }
+
+    if (categoryFilter !== "all-categories") {
+      rows = rows.filter(rentalMatchesCategory);
+    }
+
+    const statusLower = statusFilter.toLowerCase().trim();
+    if (statusFilter !== "all") {
+      rows = rows.filter((r) => {
+        const rStatus = String(r.status || "").toLowerCase().trim();
+        return statusLower === "returned" || statusLower === "completed"
+          ? rStatus === "completed" || rStatus === "returned"
+          : rStatus === statusLower;
+      });
+    }
+
+    // ITEM-16 quick filters
+    if (quickFilter === "active") {
+      rows = rows.filter((r) => r.status === "Active" || r.status === "Overdue");
+    } else if (quickFilter === "overdue") {
+      rows = rows.filter((r) => r.status === "Overdue");
+    } else if (quickFilter === "completed") {
+      rows = rows.filter((r) => r.status === "Completed" || r.status === "Returned");
+    } else if (quickFilter === "cancelled") {
+      rows = rows.filter((r) => r.status === "Cancelled");
+    } else if (quickFilter === "pending") {
+      rows = rows.filter((r) => r.status === "Pending Approval");
+    } else if (quickFilter === "dues") {
+      rows = rows.filter((r) => (outstandingByRental.get(r.id) || 0) > 0);
+    }
+
+    // ITEM-16: newest start date first by default.
     return [...rows].sort((a, b) => {
       const aTime = parseLocalDate(a.start).getTime();
       const bTime = parseLocalDate(b.start).getTime();
@@ -5872,11 +5951,11 @@ function RentalsPage() {
       if (aValid !== bValid) return aValid ? -1 : 1;
       return extractIdNumber(b.id) - extractIdNumber(a.id);
     });
-  }, [rentalsList, debouncedSearch, statusFilter, quickFilter, ownerFilter, customersById, outstandingByRental, getRentalOwners]);
+  }, [searchMatchingRentals, canFilterByOwner, ownerFilter, ownersList, getRentalOwners, categoryFilter, rentalMatchesCategory, statusFilter, quickFilter, outstandingByRental]);
 
   useEffect(() => {
     setVisibleCount(RENTALS_PAGE_SIZE);
-  }, [debouncedSearch, statusFilter, quickFilter, ownerFilter]);
+  }, [debouncedSearch, statusFilter, quickFilter, ownerFilter, categoryFilter]);
 
   const visibleRentals = useMemo(
     () => filteredRentals.slice(0, visibleCount),
@@ -5963,13 +6042,21 @@ function RentalsPage() {
           {!isStaff && (
             <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               {[
-                { key: "all",     l: "Total Agreements", v: rentalsList.length.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
-                { key: "active",  l: "Active",           v: rentalsList.filter(r => r.status === "Active" || r.status === "Overdue").length.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
-                { key: "pending", l: "Pending Approval", v: rentalsList.filter(r => r.status === "Pending Approval").length.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
-                { key: "overdue", l: "Overdue",          v: rentalsList.filter(r => r.status === "Overdue").length.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
+                { key: "all",     l: isSearching ? "Customer Agreements" : "Total Agreements", v: rentalCounts.all.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
+                { key: "active",  l: "Active",           v: rentalCounts.active.toString(), icon: FileCheck2,   c: "text-success",            bg: "bg-success/10 border-success/20" },
+                { key: "pending", l: "Pending Approval", v: rentalCounts.pending.toString(), icon: Clock,      c: "text-warning",            bg: "bg-warning/10 border-warning/20" },
+                { key: "overdue", l: "Overdue",          v: rentalCounts.overdue.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
               ]
-                // Accountant sees only the Pending Approval card.
-                .filter((s) => !isAccountant || s.key === "pending")
+                // Accountant sees only Pending Approval card when not searching.
+                // When searching, Accountant sees the searched customer's counts (agreements, active, overdue)!
+                .filter((s) => {
+                  if (isAdmin) return true;
+                  if (isAccountant) {
+                    if (isSearching) return true;
+                    return s.key === "pending";
+                  }
+                  return true;
+                })
                 .map((s, i) => {
                 const isSelected = quickFilter === s.key;
                 return (
@@ -6030,8 +6117,22 @@ function RentalsPage() {
                 </SelectContent>
               </Select>
             )}
-            <Select 
-              value={statusFilter} 
+            {/* Equipment category - available to every role, as on Returns */}
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-full sm:w-[170px] md:w-[190px] h-9 text-[12px] bg-card shrink-0">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-categories">All Categories</SelectItem>
+                {activeCategories.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
               onValueChange={(val) => {
                 setStatusFilter(val);
                 if (val !== "all") setQuickFilter("all");
@@ -6054,38 +6155,47 @@ function RentalsPage() {
           {!isStaff && (
             <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
               {[
-                { key: "all",       label: "All",           count: rentalsList.length },
-                { key: "active",    label: "Active",        count: rentalsList.filter((r) => r.status === "Active" || r.status === "Overdue").length },
-                { key: "overdue",   label: "Overdue",       count: rentalsList.filter((r) => r.status === "Overdue").length },
-                { key: "completed", label: "Completed",     count: rentalsList.filter((r) => r.status === "Completed" || r.status === "Returned").length },
-                { key: "dues",      label: "Pending Dues",  count: rentalsList.filter((r) => (outstandingByRental.get(r.id) || 0) > 0).length },
-                ...(rentalsList.some((r) => r.status === "Pending Approval")
-                  ? [{ key: "pending", label: "Pending Approval", count: rentalsList.filter((r) => r.status === "Pending Approval").length }]
+                { key: "all",       label: "All",           count: rentalCounts.all },
+                { key: "active",    label: "Active",        count: rentalCounts.active },
+                { key: "overdue",   label: "Overdue",       count: rentalCounts.overdue },
+                { key: "completed", label: "Completed",     count: rentalCounts.completed },
+                { key: "dues",      label: "Pending Dues",  count: rentalCounts.dues },
+                ...(rentalCounts.pending > 0 || (!isSearching && rentalsList.some((r) => r.status === "Pending Approval"))
+                  ? [{ key: "pending", label: "Pending Approval", count: rentalCounts.pending }]
                   : []),
-                ...(rentalsList.some((r) => r.status === "Cancelled")
-                  ? [{ key: "cancelled", label: "Cancelled", count: rentalsList.filter((r) => r.status === "Cancelled").length }]
+                ...(rentalCounts.cancelled > 0 || (!isSearching && rentalsList.some((r) => r.status === "Cancelled"))
+                  ? [{ key: "cancelled", label: "Cancelled", count: rentalCounts.cancelled }]
                   : []),
-              ].map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter("all");
-                    setQuickFilter(f.key as any);
-                  }}
-                  aria-pressed={quickFilter === f.key}
-                  className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
-                    quickFilter === f.key
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  }`}
-                >
-                  {f.label}
-                  <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
-                    {f.count}
-                  </span>
-                </button>
-              ))}
+              ].map((f) => {
+                // In account user hide that showing count of active and all only keep the filters
+                // In account user also while searching only it have to show the count of that searched customer
+                // In admin user always show counts (global when not searching, customer counts when searching)
+                const showCount = isAdmin || (isAccountant && isSearching);
+
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter("all");
+                      setQuickFilter(f.key as any);
+                    }}
+                    aria-pressed={quickFilter === f.key}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                      quickFilter === f.key
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    {f.label}
+                    {showCount && (
+                      <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
+                        {f.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -6568,9 +6678,11 @@ function RentalsPage() {
           {/* PERF: incremental rendering - only a page of rows mounts at a time */}
           {hasMoreRentals && (
             <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
-              <span className="text-[12px] text-muted-foreground">
-                Showing {visibleRentals.length} of {filteredRentals.length}
-              </span>
+              {!isStaff && !isAccountant && (
+                <span className="text-[12px] text-muted-foreground">
+                  Showing {visibleRentals.length} of {filteredRentals.length}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"

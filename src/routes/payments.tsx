@@ -1196,7 +1196,14 @@ function AgreementPaymentHistoryModal({
                           </span>
                         </TableCell>
                         <TableCell className="text-[12px] font-medium whitespace-nowrap px-3 py-2.5">{(p.collectedBy as string) || "Dr. Rao"}</TableCell>
-                        <TableCell className="text-right font-bold text-[13px] whitespace-nowrap px-3 py-2.5">₹{p.amount.toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap px-3 py-2.5">
+                          <span className="font-bold text-[13px]">₹{p.amount.toLocaleString("en-IN")}</span>
+                          {cleanNum(p.discount) > 0 && (
+                            <span className="block text-[10.5px] font-semibold text-success mt-0.5">
+                              Discount ₹{cleanNum(p.discount).toLocaleString("en-IN")}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-center whitespace-nowrap px-3 py-2.5"><StatusBadge status={p.status} /></TableCell>
                         <TableCell className="text-right whitespace-nowrap px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
@@ -1233,6 +1240,11 @@ function AgreementPaymentHistoryModal({
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className="font-display text-[15px] font-bold whitespace-nowrap">₹{p.amount.toLocaleString("en-IN")}</span>
+                          {cleanNum(p.discount) > 0 && (
+                            <span className="-mt-1 text-[10.5px] font-semibold text-success whitespace-nowrap">
+                              Discount ₹{cleanNum(p.discount).toLocaleString("en-IN")}
+                            </span>
+                          )}
                           <StatusBadge status={p.status} />
                         </div>
                       </div>

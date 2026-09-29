@@ -1826,7 +1826,7 @@ function CustomersPage() {
   }, [returnDueMap]);
 
   const filteredCustomers = useMemo(() => {
-    if (isStaff && !debouncedSearch.trim()) {
+    if ((isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status") {
       return [];
     }
     return sortLatestFirst(
@@ -1892,7 +1892,7 @@ function CustomersPage() {
         return matchesSearch && matchesCity && matchesStatus;
       })
     );
-  }, [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer, isStaff]);
+  }, [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer, isStaff, isAccountant]);
 
   // PERF: render the first page only; the rest load on demand. Large customer
   // books used to mount every row at once, which froze the tab on each filter change.
@@ -1977,18 +1977,16 @@ function CustomersPage() {
         </>
       }
     >
-      {/* Stat cards - hidden for Staff; Accountant doesn't get Total Customers or Active */}
-      {!isStaff && (
-        <div className={`mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 ${isAccountant ? "" : "lg:grid-cols-5"}`}>
+      {/* Stat cards - hidden for Staff & Accountant; protect total company customer counts */}
+      {!isStaff && !isAccountant && (
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
           {[
             { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
             { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
             { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
             { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
             { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
-          ]
-            .filter((s) => !isAccountant || (s.key !== "all-status" && s.key !== "Active"))
-            .map((s, i) => {
+          ].map((s, i) => {
             const isSelected = statusFilter === s.key;
             return (
               <Card 
@@ -2026,7 +2024,7 @@ function CustomersPage() {
             <div className="relative flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
-                placeholder={isStaff ? "Search customer by name, phone, ID, serial…" : "Search by name, phone, ID…"}
+                placeholder={isStaff || isAccountant ? "Search customer by name, phone, ID, serial…" : "Search by name, phone, ID…"}
                 className="pl-9 h-9 text-[13px] bg-card border-border/50 w-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2036,7 +2034,7 @@ function CustomersPage() {
               <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground shrink-0">
                 <Users className="h-3.5 w-3.5" />
                 <span>
-                  {isStaff && !debouncedSearch.trim() ? (
+                  {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                     "Type to search customer"
                   ) : (
                     <>
@@ -2110,7 +2108,7 @@ function CustomersPage() {
                 {filteredCustomers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
-                      {isStaff && !debouncedSearch.trim() ? (
+                      {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
                             <Search className="h-6 w-6" />
@@ -2256,7 +2254,7 @@ function CustomersPage() {
           <div className="md:hidden divide-y divide-border/60">
             {filteredCustomers.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
-                {isStaff && !debouncedSearch.trim() ? (
+                {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
                       <Search className="h-6 w-6" />
@@ -2364,9 +2362,11 @@ function CustomersPage() {
           {/* PERF: incremental rendering - only PAGE_SIZE rows mount at a time */}
           {hasMore && (
             <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
-              <span className="text-[12px] text-muted-foreground">
-                Showing {visibleCustomers.length} of {filteredCustomers.length}
-              </span>
+              {!isStaff && !isAccountant && (
+                <span className="text-[12px] text-muted-foreground">
+                  Showing {visibleCustomers.length} of {filteredCustomers.length}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"

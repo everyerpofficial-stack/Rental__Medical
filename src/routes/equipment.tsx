@@ -280,15 +280,18 @@ function OwnerActionDialog({
     return { days: rentedDays, totalCost };
   }, [startDate, date, eq, actionType]);
 
-  // Reset dialog state when opened
+  const prevOpenRef = useRef(false);
+
+  // Reset dialog state only when initially opened (preserves user-selected date while open)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setDate(getLocalYYYYMMDD());
       setDailyRate(eq.ownerDailyRate?.toString() || "");
       setAgreementNumber(eq.agreementNumber || "");
       setNotes("");
     }
-  }, [open, eq]);
+    prevOpenRef.current = open;
+  }, [open, eq.ownerDailyRate, eq.agreementNumber]);
 
   const handleSave = () => {
     if (!date) {
