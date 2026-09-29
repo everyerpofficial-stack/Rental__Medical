@@ -1826,7 +1826,7 @@ function CustomersPage() {
   }, [returnDueMap]);
 
   const filteredCustomers = useMemo(() => {
-    if ((isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status") {
+    if (isStaff && !debouncedSearch.trim() && statusFilter === "all-status") {
       return [];
     }
     return sortLatestFirst(
@@ -1892,7 +1892,7 @@ function CustomersPage() {
         return matchesSearch && matchesCity && matchesStatus;
       })
     );
-  }, [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer, isStaff, isAccountant]);
+  }, [customers, debouncedSearch, cityFilter, statusFilter, kycPendingSet, returnDueSet, rentalsByCustomer, isStaff]);
 
   // PERF: render the first page only; the rest load on demand. Large customer
   // books used to mount every row at once, which froze the tab on each filter change.
@@ -2024,7 +2024,7 @@ function CustomersPage() {
             <div className="relative flex-1 min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
-                placeholder={isStaff || isAccountant ? "Search customer by name, phone, ID, serial…" : "Search by name, phone, ID…"}
+                placeholder={isStaff ? "Search customer by name, phone, ID, serial…" : "Search by name, phone, ID…"}
                 className="pl-9 h-9 text-[13px] bg-card border-border/50 w-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2034,8 +2034,10 @@ function CustomersPage() {
               <div className="flex items-center gap-1.5 text-[12px] text-muted-foreground shrink-0">
                 <Users className="h-3.5 w-3.5" />
                 <span>
-                  {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
+                  {isStaff && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                     "Type to search customer"
+                  ) : isAccountant && !debouncedSearch.trim() ? (
+                    "Customers"
                   ) : (
                     <>
                       <strong className="text-foreground">{filteredCustomers.length}</strong> {filteredCustomers.length === 1 ? "customer" : "customers"}
@@ -2108,7 +2110,7 @@ function CustomersPage() {
                 {filteredCustomers.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="py-12 text-center text-[13px] text-muted-foreground">
-                      {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
+                      {isStaff && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                           <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
                             <Search className="h-6 w-6" />
@@ -2254,7 +2256,7 @@ function CustomersPage() {
           <div className="md:hidden divide-y divide-border/60">
             {filteredCustomers.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
-                {(isStaff || isAccountant) && !debouncedSearch.trim() && statusFilter === "all-status" ? (
+                {isStaff && !debouncedSearch.trim() && statusFilter === "all-status" ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center px-4">
                     <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
                       <Search className="h-6 w-6" />
