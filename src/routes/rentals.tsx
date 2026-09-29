@@ -6152,52 +6152,49 @@ function RentalsPage() {
 
           {/* ITEM-16: quick filters across the history. Counts are live so the
               operator can see at a glance how much is still open or owing. */}
-          {!isStaff && (
-            <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
-              {[
-                { key: "all",       label: "All",           count: rentalCounts.all },
-                { key: "active",    label: "Active",        count: rentalCounts.active },
-                { key: "overdue",   label: "Overdue",       count: rentalCounts.overdue },
-                { key: "completed", label: "Completed",     count: rentalCounts.completed },
-                { key: "dues",      label: "Pending Dues",  count: rentalCounts.dues },
-                ...(rentalCounts.pending > 0 || (!isSearching && rentalsList.some((r) => r.status === "Pending Approval"))
-                  ? [{ key: "pending", label: "Pending Approval", count: rentalCounts.pending }]
-                  : []),
-                ...(rentalCounts.cancelled > 0 || (!isSearching && rentalsList.some((r) => r.status === "Cancelled"))
-                  ? [{ key: "cancelled", label: "Cancelled", count: rentalCounts.cancelled }]
-                  : []),
-              ].map((f) => {
-                // In account user hide that showing count of active and all only keep the filters
-                // In account user also while searching only it have to show the count of that searched customer
-                // In admin user always show counts (global when not searching, customer counts when searching)
-                const showCount = isAdmin || (isAccountant && isSearching);
+          <div className="flex gap-1.5 overflow-x-auto border-b border-border/60 bg-muted/10 px-4 py-2">
+            {[
+              { key: "all",       label: "All",           count: rentalCounts.all },
+              { key: "active",    label: "Active",        count: rentalCounts.active },
+              { key: "overdue",   label: "Overdue",       count: rentalCounts.overdue },
+              { key: "completed", label: "Completed",     count: rentalCounts.completed },
+              { key: "dues",      label: "Pending Dues",  count: rentalCounts.dues },
+              ...(rentalCounts.pending > 0 || (!isSearching && rentalsList.some((r) => r.status === "Pending Approval"))
+                ? [{ key: "pending", label: "Pending Approval", count: rentalCounts.pending }]
+                : []),
+              ...(rentalCounts.cancelled > 0 || (!isSearching && rentalsList.some((r) => r.status === "Cancelled"))
+                ? [{ key: "cancelled", label: "Cancelled", count: rentalCounts.cancelled }]
+                : []),
+            ].map((f) => {
+              // In account and staff user hide showing count when not searching; show counts of searched customer when searching
+              // In admin user always show counts
+              const showCount = isAdmin || ((isAccountant || isStaff) && isSearching);
 
-                return (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("all");
-                      setQuickFilter(f.key as any);
-                    }}
-                    aria-pressed={quickFilter === f.key}
-                    className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
-                      quickFilter === f.key
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                    }`}
-                  >
-                    {f.label}
-                    {showCount && (
-                      <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
-                        {f.count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setQuickFilter(f.key as any);
+                  }}
+                  aria-pressed={quickFilter === f.key}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-[11.5px] font-semibold transition-colors ${
+                    quickFilter === f.key
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {f.label}
+                  {showCount && (
+                    <span className={`ml-1.5 tabular-nums ${quickFilter === f.key ? "opacity-80" : "opacity-60"}`}>
+                      {f.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Desktop Table — hidden on mobile */}
           <div className="hidden md:block overflow-x-auto">

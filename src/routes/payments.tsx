@@ -91,9 +91,12 @@ const modeColors: Record<string, string> = {
 
 const typeColors: Record<string, string> = {
   Rent:               "bg-primary/8 text-primary border-primary/18",
+  "Rent Payment":     "bg-primary/8 text-primary border-primary/18",
   Deposit:            "bg-accent/8 text-accent border-accent/18",
+  "Security Deposit": "bg-accent/8 text-accent border-accent/18",
   Refund:             "bg-success/8 text-success border-success/18",
   "Additional Charges":"bg-warning/10 text-warning-foreground border-warning/22",
+  "Delivery Charges": "bg-warning/10 text-warning-foreground border-warning/22",
 };
 
 const tooltipStyle = {
@@ -872,6 +875,142 @@ function PrintReceiptDialog({ payment, triggerClassName = "h-7 w-7" }: { payment
   );
 }
 
+/**
+ * Generates initial payment transactions (Security Deposit, Advance Rent, Additional Charges)
+ * for agreements where they were collected at creation but not saved as separate payment records.
+ */
+export function getAgreementInitialPayments(rental: any, existingPayments: any[] = []): Payment[] {
+  if (!rental || !rental.id) return [];
+
+  const initialPayments: Payment[] = [];
+  const agreementId = rental.id;
+  const cleanIdStr = extractIdNumber(agreementId) || String(agreementId).replace(/\D/g, "");
+  const baseDate = rental.paymentDate || rental.start || (rental as any).startDate || getLocalYYYYMMDD();
+  const customerName = rental.customer || "Unknown Customer";
+  const customerId = rental.customerId || "";
+  const paymentMode = rental.paymentMode || "Bank";
+  const collectedBy = (rental.paymentCollectedBy as string) || (rental as any).collectedBy || "Dr. Rao";
+
+  const isType = (p: any, regex: RegExp) => regex.test(String(p?.type || ""));
+
+  // 1. SECURITY DEPOSIT
+  const hasDepositInPayments = existingPayments.some((p) => isType(p, /deposit|security/i));
+  if (!hasDepositInPayments) {
+    const depositPaidAmt = cleanNum(rental.depositPaidAmount);
+    const depositTotal = cleanNum(rental.deposit);
+    const isPaidStatus = String(rental.depositPaymentStatus || "").toLowerCase() === "paid";
+    const isPartialStatus = String(rental.depositPaymentStatus || "").toLowerCase() === "partial";
+    const isExplicitlyNotPaid = String(rental.depositPaymentStatus || "").toLowerCase() === "not paid" || String(rental.depositPaymentStatus || "").toLowerCase() === "free of cost";
+
+    let depAmount = 0;
+    if (depositPaidAmt > 0) {
+      depAmount = depositPaidAmt;
+    } else if (isPaidStatus) {
+      depAmount = depositTotal;
+    } else if (depositTotal > 0 && !isExplicitlyNotPaid) {
+      depAmount = depositTotal;
+    }
+
+    if (depAmount <= 0 && isPaidStatus && Array.isArray(rental.equipmentItems)) {
+      depAmount = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
+    }
+
+    if (depAmount > 0) {
+      initialPayments.push({
+        id: (rental as any).depositReceiptId || `PAY-DEP-${cleanIdStr}`,
+        date: baseDate,
+        customer: customerName,
+        customerId,
+        agreement: agreementId,
+        equipmentId: rental.equipmentId,
+        amount: depAmount,
+        mode: paymentMode,
+        type: "Deposit" as any,
+        notes: `Security deposit collected at agreement creation (${agreementId})`,
+        status: "Paid" as const,
+        collectedBy,
+      });
+    }
+  }
+
+  // 2. ADVANCE RENT PAYMENT
+  const hasAdvanceRentInPayments = existingPayments.some((p) => {
+    if (!isType(p, /rent/i)) return false;
+    if (p.notes && /advance rent|agreement creation|upfront/i.test(p.notes)) return true;
+    const agrStart = rental.paymentDate || rental.start;
+    return !!(agrStart && p.date && p.date === agrStart);
+  });
+
+  if (!hasAdvanceRentInPayments) {
+    const rentPaidAmt = cleanNum(rental.rentPaidAmount);
+    const monthlyRent = cleanNum(rental.monthlyRent || rental.dailyRent || rental.rentRate);
+    const isPaidStatus = String(rental.rentalPaymentStatus || "").toLowerCase() === "paid";
+    const isPartialStatus = String(rental.rentalPaymentStatus || "").toLowerCase() === "partial";
+
+    let advanceRentAmt = 0;
+    if (isPaidStatus) {
+      advanceRentAmt = rentPaidAmt || monthlyRent;
+    } else if (isPartialStatus) {
+      advanceRentAmt = rentPaidAmt;
+    } else if (rentPaidAmt > 0) {
+      advanceRentAmt = rentPaidAmt;
+    }
+
+    if (advanceRentAmt <= 0 && isPaidStatus && Array.isArray(rental.equipmentItems)) {
+      advanceRentAmt = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.rentRate || it.dailyRent), 0);
+    }
+
+    if (advanceRentAmt > 0) {
+      initialPayments.push({
+        id: (rental as any).rentReceiptId || `PAY-RENT-${cleanIdStr}`,
+        date: baseDate,
+        customer: customerName,
+        customerId,
+        agreement: agreementId,
+        equipmentId: rental.equipmentId,
+        amount: advanceRentAmt,
+        mode: paymentMode,
+        type: "Rent Payment" as any,
+        notes: `Advance rent payment collected at agreement creation (${agreementId})`,
+        status: "Paid" as const,
+        collectedBy,
+      });
+    }
+  }
+
+  // 3. ADDITIONAL CHARGES
+  const hasAddonInPayments = existingPayments.some((p) => isType(p, /additional|delivery|setup|installation|removal/i));
+  if (!hasAddonInPayments) {
+    const selectedAddons = Array.isArray(rental.additionalItems)
+      ? rental.additionalItems.filter((i: any) => i && i.selected && String(i.status || "").toLowerCase() === "paid")
+      : [];
+    const addonAmount = selectedAddons.reduce((sum: number, i: any) => sum + cleanNum(i.amount), 0) ||
+      cleanNum(rental.additionalCharges) ||
+      cleanNum(rental.deliveryCharges) ||
+      cleanNum(rental.installationCharges);
+
+    if (addonAmount > 0) {
+      const addonLabel = selectedAddons.map((i: any) => i.name).filter(Boolean).join(", ") || "Delivery/Setup";
+      initialPayments.push({
+        id: (rental as any).addonReceiptId || `PAY-ADD-${cleanIdStr}`,
+        date: baseDate,
+        customer: customerName,
+        customerId,
+        agreement: agreementId,
+        equipmentId: rental.equipmentId,
+        amount: addonAmount,
+        mode: paymentMode,
+        type: "Additional Charges" as any,
+        notes: `Additional item charges collected (${addonLabel}) on agreement ${agreementId}`,
+        status: "Paid" as const,
+        collectedBy,
+      });
+    }
+  }
+
+  return initialPayments;
+}
+
 function AgreementPaymentHistoryModal({
   agreementId,
   open,
@@ -893,9 +1032,24 @@ function AgreementPaymentHistoryModal({
   const rentals = getRentals();
   const equipmentList = getEquipment();
   const payments = getPayments();
-  const rental = rentals.find((r) => r.id === agreementId);
+  const rental = rentals.find((r) => {
+    if (!r) return false;
+    if (r.id === agreementId) return true;
+    const cleanR = String(r.id || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    const cleanTarget = String(agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    return cleanR && cleanR === cleanTarget;
+  });
 
-  const agreementPayments = sortLatestFirst(payments.filter((p) => p.agreement === agreementId), "date");
+  const rawAgreementPayments = payments.filter((p) => {
+    if (!p) return false;
+    if (p.agreement === agreementId) return true;
+    const cleanP = String(p.agreement || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    const cleanTarget = String(agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    return cleanP && cleanP === cleanTarget;
+  });
+
+  const initialPayments = rental ? getAgreementInitialPayments(rental, rawAgreementPayments) : [];
+  const agreementPayments = sortLatestFirst([...rawAgreementPayments, ...initialPayments], "date");
   const totalPaid = agreementPayments
     .filter((p) => p.status === "Paid")
     .reduce((sum, p) => sum + p.amount, 0);
@@ -910,7 +1064,9 @@ function AgreementPaymentHistoryModal({
   const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
   const status = rental?.status || "Active";
   const monthlyRent = rental?.monthlyRent || 0;
-  const deposit = rental?.deposit || 0;
+  const deposit = cleanNum(rental?.deposit) ||
+    cleanNum(rental?.depositPaidAmount) ||
+    (agreementPayments.find((p) => /deposit|security/i.test(p.type))?.amount ?? 0);
   const rentalDate = rental?.start || (rental as any)?.startDate || "";
 
   const displayEquipments: { name: string; model?: string }[] = eqModelItems.length > 0
@@ -1208,7 +1364,7 @@ function AgreementPaymentHistoryModal({
                         <TableCell className="text-right whitespace-nowrap px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
-                            {isAdmin && (
+                            {isAdmin && !String(p.id).startsWith("PAY-DEP-") && !String(p.id).startsWith("PAY-RENT-") && !String(p.id).startsWith("PAY-ADD-") && (
                               <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -1274,7 +1430,7 @@ function AgreementPaymentHistoryModal({
                         </div>
                         <div className="flex shrink-0 items-center -mr-1.5">
                           <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
-                          {isAdmin && (
+                          {isAdmin && !String(p.id).startsWith("PAY-DEP-") && !String(p.id).startsWith("PAY-RENT-") && !String(p.id).startsWith("PAY-ADD-") && (
                             <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
                               <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -1715,6 +1871,17 @@ function PaymentsPage() {
       agreementMap.set(agrId, group);
     }
     group.payments.push(p);
+  });
+
+  // 3. Ensure initial payments (deposit, advance rent, additional charges) are represented in each agreement group
+  rentalsList.forEach((r) => {
+    const group = agreementMap.get(r.id);
+    if (group) {
+      const initPayments = getAgreementInitialPayments(r, group.payments);
+      if (initPayments.length > 0) {
+        group.payments.push(...initPayments);
+      }
+    }
   });
 
   // Calculate totals and latest date for each agreement group
