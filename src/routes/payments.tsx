@@ -41,6 +41,8 @@ import {
   formatEquipmentLabel,
   getRentalEquipmentDetailedItems,
   cleanNum,
+  getAgreementInitialPayments,
+  getAgreementPayments,
 } from "@/lib/data-store";
 import {
   normalizeWhatsAppPhone,
@@ -875,160 +877,7 @@ function PrintReceiptDialog({ payment, triggerClassName = "h-7 w-7" }: { payment
   );
 }
 
-/**
- * Generates initial payment transactions (Security Deposit, Advance Rent, Additional Charges)
- * for agreements where they were collected at creation but not saved as separate payment records.
- */
-export function getAgreementInitialPayments(rental: any, existingPayments: any[] = []): Payment[] {
-  if (!rental || !rental.id) return [];
-
-  const initialPayments: Payment[] = [];
-  const agreementId = rental.id;
-  const cleanIdStr = extractIdNumber(agreementId) || String(agreementId).replace(/\D/g, "");
-  const baseDate = rental.paymentDate || rental.start || (rental as any).startDate || getLocalYYYYMMDD();
-  const customerName = rental.customer || "Unknown Customer";
-  const customerId = rental.customerId || "";
-  const paymentMode = rental.paymentMode || "Bank";
-  const collectedBy = (rental.paymentCollectedBy as string) || (rental as any).collectedBy || "Dr. Rao";
-
-  const isType = (p: any, regex: RegExp) => regex.test(String(p?.type || ""));
-
-  // 1. SECURITY DEPOSIT
-  const hasDepositInPayments = existingPayments.some((p) => isType(p, /deposit|security/i));
-  if (!hasDepositInPayments) {
-    const depositPaidAmt = cleanNum(rental.depositPaidAmount);
-    const depositTotal = cleanNum(rental.deposit);
-    const isPaidStatus = String(rental.depositPaymentStatus || "").toLowerCase() === "paid";
-    const isPartialStatus = String(rental.depositPaymentStatus || "").toLowerCase() === "partial";
-    const isExplicitlyNotPaid = String(rental.depositPaymentStatus || "").toLowerCase() === "not paid" || String(rental.depositPaymentStatus || "").toLowerCase() === "free of cost";
-
-    let depAmount = 0;
-    if (depositPaidAmt > 0) {
-      depAmount = depositPaidAmt;
-    } else if (isPaidStatus) {
-      depAmount = depositTotal;
-    } else if (depositTotal > 0 && !isExplicitlyNotPaid) {
-      depAmount = depositTotal;
-    }
-
-    if (depAmount <= 0 && isPaidStatus && Array.isArray(rental.equipmentItems)) {
-      depAmount = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
-    }
-
-    // FIX: For old agreements from Google Sheets that lack depositPaymentStatus
-    // but have deposit amounts in equipmentItems — try to recover the deposit
-    // total when the top-level `deposit` field is missing/zero.
-    if (depAmount <= 0 && !isExplicitlyNotPaid && !rental.depositPaymentStatus && Array.isArray(rental.equipmentItems)) {
-      const itemsDepTotal = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
-      if (itemsDepTotal > 0) depAmount = itemsDepTotal;
-    }
-
-    if (depAmount > 0) {
-      initialPayments.push({
-        id: (rental as any).depositReceiptId || `PAY-DEP-${cleanIdStr}`,
-        date: baseDate,
-        customer: customerName,
-        customerId,
-        agreement: agreementId,
-        equipmentId: rental.equipmentId,
-        amount: depAmount,
-        mode: paymentMode,
-        type: "Deposit" as any,
-        notes: `Security deposit collected at agreement creation (${agreementId})`,
-        status: "Paid" as const,
-        collectedBy,
-      });
-    }
-  }
-
-  // 2. ADVANCE RENT PAYMENT
-  const hasAdvanceRentInPayments = existingPayments.some((p) => {
-    if (!isType(p, /rent/i)) return false;
-    if (p.notes && /advance rent|agreement creation|upfront/i.test(p.notes)) return true;
-    const agrStart = rental.paymentDate || rental.start;
-    return !!(agrStart && p.date && p.date === agrStart);
-  });
-
-  if (!hasAdvanceRentInPayments) {
-    const rentPaidAmt = cleanNum(rental.rentPaidAmount);
-    const monthlyRent = cleanNum(rental.monthlyRent || rental.dailyRent || rental.rentRate);
-    const isPaidStatus = String(rental.rentalPaymentStatus || "").toLowerCase() === "paid";
-    const isPartialStatus = String(rental.rentalPaymentStatus || "").toLowerCase() === "partial";
-
-    let advanceRentAmt = 0;
-    if (isPaidStatus) {
-      advanceRentAmt = rentPaidAmt || monthlyRent;
-    } else if (isPartialStatus) {
-      advanceRentAmt = rentPaidAmt;
-    } else if (rentPaidAmt > 0) {
-      advanceRentAmt = rentPaidAmt;
-    }
-
-    if (advanceRentAmt <= 0 && isPaidStatus && Array.isArray(rental.equipmentItems)) {
-      advanceRentAmt = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.rentRate || it.dailyRent), 0);
-    }
-
-    // FIX: For old agreements imported from Google Sheets that lack the
-    // rentalPaymentStatus / rentPaidAmount fields, infer that the first
-    // month's rent was collected at creation if the agreement is Active or
-    // Overdue (it wouldn't have been activated without payment).
-    const rentalStatusLower = String(rental.status || "").toLowerCase();
-    const isActiveOrOverdue = rentalStatusLower === "active" || rentalStatusLower === "overdue" || rentalStatusLower === "completed";
-    const hasNoExplicitRentStatus = !rental.rentalPaymentStatus && !rentPaidAmt;
-    if (advanceRentAmt <= 0 && isActiveOrOverdue && hasNoExplicitRentStatus && monthlyRent > 0) {
-      advanceRentAmt = monthlyRent;
-    }
-
-    if (advanceRentAmt > 0) {
-      initialPayments.push({
-        id: (rental as any).rentReceiptId || `PAY-RENT-${cleanIdStr}`,
-        date: baseDate,
-        customer: customerName,
-        customerId,
-        agreement: agreementId,
-        equipmentId: rental.equipmentId,
-        amount: advanceRentAmt,
-        mode: paymentMode,
-        type: "Rent Payment" as any,
-        notes: `Advance rent payment collected at agreement creation (${agreementId})`,
-        status: "Paid" as const,
-        collectedBy,
-      });
-    }
-  }
-
-  // 3. ADDITIONAL CHARGES
-  const hasAddonInPayments = existingPayments.some((p) => isType(p, /additional|delivery|setup|installation|removal/i));
-  if (!hasAddonInPayments) {
-    const selectedAddons = Array.isArray(rental.additionalItems)
-      ? rental.additionalItems.filter((i: any) => i && i.selected && String(i.status || "").toLowerCase() === "paid")
-      : [];
-    const addonAmount = selectedAddons.reduce((sum: number, i: any) => sum + cleanNum(i.amount), 0) ||
-      cleanNum(rental.additionalCharges) ||
-      cleanNum(rental.deliveryCharges) ||
-      cleanNum(rental.installationCharges);
-
-    if (addonAmount > 0) {
-      const addonLabel = selectedAddons.map((i: any) => i.name).filter(Boolean).join(", ") || "Delivery/Setup";
-      initialPayments.push({
-        id: (rental as any).addonReceiptId || `PAY-ADD-${cleanIdStr}`,
-        date: baseDate,
-        customer: customerName,
-        customerId,
-        agreement: agreementId,
-        equipmentId: rental.equipmentId,
-        amount: addonAmount,
-        mode: paymentMode,
-        type: "Additional Charges" as any,
-        notes: `Additional item charges collected (${addonLabel}) on agreement ${agreementId}`,
-        status: "Paid" as const,
-        collectedBy,
-      });
-    }
-  }
-
-  return initialPayments;
-}
+export { getAgreementInitialPayments, getAgreementPayments };
 
 function AgreementPaymentHistoryModal({
   agreementId,
@@ -1059,16 +908,7 @@ function AgreementPaymentHistoryModal({
     return cleanR && cleanR === cleanTarget;
   });
 
-  const rawAgreementPayments = payments.filter((p) => {
-    if (!p) return false;
-    if (p.agreement === agreementId) return true;
-    const cleanP = String(p.agreement || "").trim().toUpperCase().replace(/^AGR-/i, "");
-    const cleanTarget = String(agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
-    return cleanP && cleanP === cleanTarget;
-  });
-
-  const initialPayments = rental ? getAgreementInitialPayments(rental, rawAgreementPayments) : [];
-  const agreementPayments = sortLatestFirst([...rawAgreementPayments, ...initialPayments], "date");
+  const agreementPayments = getAgreementPayments(rental || agreementId, payments);
   const totalPaid = agreementPayments
     .filter((p) => p.status === "Paid")
     .reduce((sum, p) => sum + p.amount, 0);

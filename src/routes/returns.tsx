@@ -57,6 +57,7 @@ import {
   getPaidForEquipment,
   getDiscountForEquipment,
   getPayments,
+  getAgreementPayments,
   getPricingTableRate,
   useDatabaseTrigger,
   getNextReturnNumber,
@@ -1371,7 +1372,7 @@ function ReturnsPage() {
 
   const agreementPayments = useMemo(() => {
     if (!selectedRental) return [];
-    return getPayments().filter(p => p.agreement === selectedRental.id && p.status === "Paid");
+    return getAgreementPayments(selectedRental);
   }, [selectedRental, dbVersion]);
 
   useEffect(() => {
@@ -2895,12 +2896,17 @@ function ReturnsPage() {
                     })()}
                   </div>
 
-                  {/* Payment Ledger card (compact scrollable) */}
-                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
+                  {/* Payment Ledger card (full height, no up-down scrolling) */}
+                  <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden">
                     <div className="p-3 border-b border-border/40 pb-2 flex items-center justify-between bg-muted/10 shrink-0">
                       <div className="flex items-center gap-1.5">
                         <Receipt className="h-3.5 w-3.5 text-primary" />
                         <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
+                        {agreementPayments.length > 0 && (
+                          <span className="text-[9.5px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.2 rounded-full">
+                            {agreementPayments.length}
+                          </span>
+                        )}
                       </div>
                       {totalReturningDiscount > 0 && (
                         <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
@@ -2908,23 +2914,29 @@ function ReturnsPage() {
                         </span>
                       )}
                     </div>
-                    <div className="overflow-y-auto flex-1 bg-background text-[11px]">
+                    <div className="flex-1 bg-background text-[11px]">
                       {agreementPayments.length === 0 ? (
                         <div className="py-6 text-center text-muted-foreground px-4">
                           <p className="font-bold text-foreground/75">No payments found</p>
                         </div>
                       ) : (
                         <div className="divide-y divide-border/40">
-                          {agreementPayments.map((p) => {
-                            const isDeposit = p.type?.toLowerCase().includes("deposit");
+                          {agreementPayments.map((p, idx) => {
+                            const isDeposit = /deposit|security/i.test(p.type || "");
+                            const isAdditional = /additional|charge|delivery|setup|installation|removal/i.test(p.type || "");
+                            const isRefund = /refund/i.test(p.type || "");
                             const pDiscount = cleanNum(p.discount);
                             return (
-                              <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
+                              <div key={`${p.id || idx}-${p.date}`} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
                                 <div className="space-y-0.5 min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
                                       isDeposit 
                                         ? "bg-blue-50 text-blue-700 border border-blue-200" 
+                                        : isAdditional
+                                        ? "bg-amber-50 text-amber-800 border border-amber-200"
+                                        : isRefund
+                                        ? "bg-purple-50 text-purple-700 border border-purple-200"
                                         : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                     }`}>
                                       {p.type || "Rent"}
