@@ -3301,45 +3301,27 @@ export function getDynamicKPIs() {
         if (today.getDate() < start.getDate()) monthDiff--;
         const cyclesCommenced = Math.max(1, monthDiff + 1);
 
-        // Split pre/post discount for completed cycles
-        let completedDue: number;
-        if (eqItem.discountStartDate && eqItem.originalMonthlyRent != null) {
-          const origRate = Number(eqItem.originalMonthlyRent) || 0;
-          const discDate = parseLocalDate(eqItem.discountStartDate);
-          if (!isNaN(discDate.getTime()) && discDate > start) {
-            let discMonthDiff = (discDate.getFullYear() - start.getFullYear()) * 12 + (discDate.getMonth() - start.getMonth());
-            if (discDate.getDate() < start.getDate()) discMonthDiff--;
-            const preDiscountCycles = Math.max(0, discMonthDiff);
-            const completedCycles = Math.max(0, cyclesCommenced - 1);
-            const preCompleted = Math.min(preDiscountCycles, completedCycles);
-            const postCompleted = Math.max(0, completedCycles - preCompleted);
-            completedDue = (preCompleted * origRate) + (postCompleted * monthlyRent);
-          } else {
-            completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
+        // Completed cycles, each at the rate in force when it began
+        const completedDue = rentForPeriods(
+          Math.max(0, cyclesCommenced - 1),
+          getRentRateSchedule(eqItem, true, monthlyRent),
+          (d) => {
+            let m = (d.getFullYear() - start.getFullYear()) * 12 + (d.getMonth() - start.getMonth());
+            if (d.getDate() < start.getDate()) m--;
+            return Math.max(0, m);
           }
-        } else {
-          completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
-        }
+        );
         totalAsOfToday += Math.max(0, (completedDue + dueTillToday) - grandTotalPaid);
       } else {
         const diffMs = Math.max(0, today.getTime() - start.getTime());
         const daysTillToday = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-        // Split pre/post discount for daily billing
-        let totalDue: number;
-        if (eqItem.discountStartDate && eqItem.originalDailyRent != null) {
-          const origRate = Number(eqItem.originalDailyRent) || 0;
-          const discDate = parseLocalDate(eqItem.discountStartDate);
-          if (!isNaN(discDate.getTime()) && discDate > start) {
-            const preDiscountDays = Math.ceil(Math.max(0, discDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-            const postDiscountDays = Math.max(0, daysTillToday - preDiscountDays);
-            totalDue = (preDiscountDays * origRate) + (postDiscountDays * dailyRate);
-          } else {
-            totalDue = daysTillToday * dailyRate;
-          }
-        } else {
-          totalDue = daysTillToday * dailyRate;
-        }
+        // Each day at the rate in force that day
+        const totalDue = rentForPeriods(
+          daysTillToday,
+          getRentRateSchedule(eqItem, false, dailyRate),
+          (d) => Math.ceil(Math.max(0, d.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+        );
         totalAsOfToday += Math.max(0, totalDue - grandTotalPaid);
       }
     });
@@ -5708,6 +5690,54 @@ export function getRentPaidForAgreement(agreementId: string, monthlyRent: any, r
   return totalRentPayments + initialPaid;
 }
 
+export interface RentRateSchedule {
+  /** Rate before the first permanent discount. */
+  base: number;
+  /** Each rate change, oldest first; a change applies from its date onward. */
+  changes: { date: Date; rate: number }[];
+}
+
+/**
+ * An item's rent over time. A permanent discount lowers the item's current
+ * rate, so billing has to charge earlier periods at the rate in force then.
+ * Items record every change in `rateChanges`; items discounted before that
+ * field existed carry only discountStartDate + the original rate, which reads
+ * as a single change. The latest change always takes today's rate, so a later
+ * hand edit of the rate still applies from the last discount onward.
+ */
+export function getRentRateSchedule(item: any, isMonthly: boolean, currentRate: number): RentRateSchedule {
+  const original = isMonthly ? item?.originalMonthlyRent : item?.originalDailyRent;
+  if (!item?.discountStartDate || original == null) return { base: currentRate, changes: [] };
+  const recorded: any[] = Array.isArray(item.rateChanges) && item.rateChanges.length > 0
+    ? item.rateChanges
+    : [{ date: item.discountStartDate, rate: currentRate }];
+  const changes = recorded
+    .map((c) => ({ date: parseLocalDate(c.date), rate: cleanNum(c.rate) }))
+    .filter((c) => !isNaN(c.date.getTime()))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  if (changes.length > 0) changes[changes.length - 1].rate = currentRate;
+  return { base: cleanNum(original), changes };
+}
+
+/**
+ * Rent charged for `periods` billing periods (cycles or days) under a rate
+ * schedule. `periodsBefore(date)` says how many of those periods come before
+ * the one `date` falls in, using the caller's own period arithmetic.
+ */
+export function rentForPeriods(periods: number, schedule: RentRateSchedule, periodsBefore: (date: Date) => number): number {
+  let total = 0;
+  let counted = 0;
+  let rate = schedule.base;
+  for (const change of schedule.changes) {
+    const before = periodsBefore(change.date);
+    const upTo = Math.min(periods, Math.max(counted, Number.isFinite(before) ? before : 0));
+    total += Math.max(0, upTo - counted) * rate;
+    counted = Math.max(counted, upTo);
+    rate = change.rate;
+  }
+  return total + Math.max(0, periods - counted) * rate;
+}
+
 export function getPaidForEquipment(rental: any, equipmentId: string, paymentsList: any[], excludeInitial = false, includeDiscount = true): number {
   if (!rental || !equipmentId) return 0;
   
@@ -6385,39 +6415,17 @@ export function getAgreementBalance(rental: any, paymentsList?: any[]): Agreemen
     const cycle = item.rentCycle || rental.rentCycle;
     const isMonthly = cycle ? cycle === "Monthly" : (monthlyRent > 0 && dailyRate === 0);
 
-    // If a permanent discount was applied, split billing into pre-discount
-    // (at the original rate) and post-discount (at the current rate) so past
-    // periods are not retroactively repriced.
+    // Permanent discounts lower the current rate; charge each earlier period at
+    // the rate in force then so past periods are not retroactively repriced.
+    const daysBefore = (d: Date) => Math.ceil(Math.max(0, d.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     if (isMonthly) {
-      const totalCycles = Math.floor(daysElapsed / 30);
-      if (item.discountStartDate && item.originalMonthlyRent != null) {
-        const origRate = cleanNum(item.originalMonthlyRent);
-        const discDate = parseLocalDate(item.discountStartDate);
-        if (!isNaN(discDate.getTime()) && !isNaN(start.getTime()) && discDate > start) {
-          const preDiscountDays = Math.ceil(Math.max(0, discDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-          const preDiscountCycles = Math.floor(preDiscountDays / 30);
-          const postDiscountCycles = Math.max(0, totalCycles - preDiscountCycles);
-          rentCharged += (preDiscountCycles * origRate) + (postDiscountCycles * monthlyRent);
-        } else {
-          rentCharged += totalCycles * monthlyRent;
-        }
-      } else {
-        rentCharged += totalCycles * monthlyRent;
-      }
+      rentCharged += rentForPeriods(
+        Math.floor(daysElapsed / 30),
+        getRentRateSchedule(item, true, monthlyRent),
+        (d) => Math.floor(daysBefore(d) / 30)
+      );
     } else {
-      if (item.discountStartDate && item.originalDailyRent != null) {
-        const origRate = cleanNum(item.originalDailyRent);
-        const discDate = parseLocalDate(item.discountStartDate);
-        if (!isNaN(discDate.getTime()) && !isNaN(start.getTime()) && discDate > start) {
-          const preDiscountDays = Math.ceil(Math.max(0, discDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-          const postDiscountDays = Math.max(0, daysElapsed - preDiscountDays);
-          rentCharged += (preDiscountDays * origRate) + (postDiscountDays * dailyRate);
-        } else {
-          rentCharged += daysElapsed * dailyRate;
-        }
-      } else {
-        rentCharged += daysElapsed * dailyRate;
-      }
+      rentCharged += rentForPeriods(daysElapsed, getRentRateSchedule(item, false, dailyRate), daysBefore);
     }
     rentPaid += getPaidForEquipment(rental, item.equipmentId, payments, true);
     depositCharged += cleanNum(item.deposit);

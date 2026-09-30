@@ -20,7 +20,7 @@ import {
   MessageCircle, Mail, Phone, Bell, Loader2,
   IndianRupee, TrendingDown, Calendar, CreditCard, CheckCircle2, Search, FileSpreadsheet, Download, Clock, AlertCircle,
 } from "lucide-react";
-import { getRentals, getCustomers, getPayments, savePayment, saveRental, saveReturn, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum } from "@/lib/data-store";
+import { getRentals, getCustomers, getPayments, savePayment, saveRental, saveReturn, formatDateDDMMYYYY, formatDateDDMMYY, useDatabaseTrigger, getPaidForEquipment, getEquipment, getNextPaymentNumber, getLocalYYYYMMDD, parseLocalDate, getReturns, extractIdNumber, sortLatestFirst, downloadExcel, formatEquipmentLabel, cleanNum, getRentRateSchedule, rentForPeriods } from "@/lib/data-store";
 import {
   buildDueReminderMessage,
   normalizeWhatsAppPhone,
@@ -48,6 +48,52 @@ function countCommencedCycles(startDateStr: string, endDate: Date): number {
   } else {
     return monthDiff;
   }
+}
+
+/**
+ * Lowers an equipment line's rent by a permanent discount from `fromDate`
+ * onward. Every change is appended to `rateChanges` so billing charges earlier
+ * periods at the rate in force then — with only the first discount's date and
+ * rate kept, a second discount re-priced every month since the first.
+ * Returns the new rate.
+ */
+function applyPermanentDiscount(item: any, discount: number, fromDate: string, rentalCycle?: string): number {
+  const cycle = item.rentCycle || rentalCycle;
+  const isMonthlyItem = cycle ? cycle === "Monthly" : (Number(item.monthlyRent) || 0) > 0 && !(Number(item.dailyRent) > 0);
+  const current = Number(isMonthlyItem ? item.monthlyRent : item.dailyRent) || 0;
+  const next = Math.max(0, current - discount);
+
+  const hadDiscount = !!item.discountStartDate;
+  if (!hadDiscount) {
+    if (isMonthlyItem) item.originalMonthlyRent = current;
+    else item.originalDailyRent = current;
+    item.discountStartDate = fromDate;
+  }
+  // Lines discounted before rateChanges existed hold their one change implicitly.
+  const history = Array.isArray(item.rateChanges) && item.rateChanges.length > 0
+    ? item.rateChanges
+    : hadDiscount ? [{ date: item.discountStartDate, rate: current }] : [];
+  item.rateChanges = [...history, { date: fromDate, rate: next }];
+  item.discountAmount = (Number(item.discountAmount) || 0) + discount;
+  if (isMonthlyItem) item.monthlyRent = next;
+  else item.dailyRent = next;
+  return next;
+}
+
+/** With no amount recorded, the advance taken at signing is read as the
+ *  agreement's monthly rent. Pin it before a discount lowers that rent, or the
+ *  first month would be re-priced too. */
+function freezeInitialRentPaid(rental: any) {
+  if (rental.rentalPaymentStatus === "Paid" && !(Number(rental.rentPaidAmount) > 0) && Number(rental.monthlyRent) > 0) {
+    rental.rentPaidAmount = Number(rental.monthlyRent);
+  }
+}
+
+/** Biggest discount allowed on one line: a one-time discount covers a single
+ *  month (or the days due, for daily rent); a permanent one can't exceed the rate. */
+function maxDiscountFor(details: { rate: number; outstanding: number; isMonthly: boolean }, type: "one-time" | "permanent"): number {
+  if (type === "permanent" || details.isMonthly) return details.rate;
+  return Math.max(details.rate, details.outstanding);
 }
 
 function isInitialRentPaidHelper(r: any, paymentsList: any[]): boolean {
@@ -430,6 +476,18 @@ function PayDialog({
   //    never saved.
   const [isPaying, setIsPaying] = useState(false);
 
+  const validateDiscount = (eqId: string, disc: number, type: "one-time" | "permanent"): string | null => {
+    if (disc < 0) return `Discount for ${getEquipmentName(eqId)} cannot be negative.`;
+    if (disc === 0) return null;
+    const details = calcUnpaidDetailsForEquipment(rental, eqId);
+    const cap = maxDiscountFor(details, type);
+    if (disc > cap) {
+      const why = type === "one-time" && details.isMonthly ? " — a one-time discount covers one month's rent" : "";
+      return `Discount for ${getEquipmentName(eqId)} can't be more than ₹${cap.toLocaleString("en-IN")}${why}.`;
+    }
+    return null;
+  };
+
   const validatePayment = (): string | null => {
     if (isMultiItem) {
       for (const eqId of selectedEqIds) {
@@ -437,6 +495,8 @@ function PayDialog({
         if (!item) continue;
         const amt = Number(item.amount) || 0;
         if (amt < 0) return `Payment amount for ${getEquipmentName(eqId)} cannot be negative.`;
+        const discError = validateDiscount(eqId, Number(item.discount) || 0, item.discountType || "one-time");
+        if (discError) return discError;
         if (item.mode === "Cash+Bank" && amt > 0) {
           const split = (Number(item.cashAmount) || 0) + (Number(item.bankAmount) || 0);
           if (split !== amt) {
@@ -448,6 +508,10 @@ function PayDialog({
     }
 
     if (payAmount < 0) return "Payment amount cannot be negative.";
+    if (applyDiscount && selectedEqIds.length === 1) {
+      const discError = validateDiscount(selectedEqIds[0], Number(discountVal) || 0, discountType);
+      if (discError) return discError;
+    }
     if (paymentMode === "Cash+Bank" && payAmount > 0) {
       const split = (Number(cashAmount) || 0) + (Number(bankAmount) || 0);
       if (split !== payAmount) {
@@ -489,7 +553,9 @@ function PayDialog({
     }
 
     if (isMultiItem) {
-      if (multiItemTotal <= 0) {
+      // A discount can cover a line's whole amount, so ₹0 paid is fine when one is given.
+      const anyDiscount = selectedEqIds.some((id) => (Number(itemPayments[id]?.discount) || 0) > 0);
+      if (multiItemTotal <= 0 && !anyDiscount) {
         toast.error("Please enter a valid payment amount for at least one item.");
         return;
       }
@@ -508,28 +574,11 @@ function PayDialog({
         const rIdx = rentalsList.findIndex((r) => r.id === rental.id);
         if (rIdx > -1) {
           const uRental = { ...rentalsList[rIdx] };
+          freezeInitialRentPaid(uRental);
           uRental.equipmentItems = (uRental.equipmentItems || []).map((item: any) => {
             const match = permDiscountItems.find((p) => p.eqId === item.equipmentId);
             if (match) {
-              const dVal = Number(match.state.discount) || 0;
-              const isMonthlyItem = item.rentCycle === "Monthly";
-              // Store the original rate and discount start date so billing can
-              // split cycles before vs after the discount (prevents retroactive
-              // re-pricing of past months).
-              if (!item.discountStartDate) {
-                if (isMonthlyItem) {
-                  item.originalMonthlyRent = Number(item.monthlyRent) || 0;
-                } else {
-                  item.originalDailyRent = Number(item.dailyRent) || 0;
-                }
-                item.discountStartDate = paymentDate;
-              }
-              item.discountAmount = (Number(item.discountAmount) || 0) + dVal;
-              if (isMonthlyItem) {
-                item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - dVal);
-              } else {
-                item.dailyRent = Math.max(0, (Number(item.dailyRent) || 0) - dVal);
-              }
+              applyPermanentDiscount(item, Number(match.state.discount) || 0, paymentDate, (uRental as any).rentCycle);
             }
             return item;
           });
@@ -541,10 +590,14 @@ function PayDialog({
 
       const standardItems = itemsToPay.filter((it) => it.state.mode !== "Cash+Bank");
       const splitItems = itemsToPay.filter((it) => it.state.mode === "Cash+Bank");
+      // A permanent discount already lowered the rate above; only a one-time
+      // discount is credited on the payment itself.
+      const oneTimeDiscount = (it: (typeof itemsToPay)[number]) =>
+        it.state.discountType === "permanent" ? 0 : Number(it.state.discount) || 0;
 
       standardItems.forEach((it) => {
         const amt = Number(it.state.amount) || 0;
-        const itemDisc = Number(it.state.discount) || 0;
+        const itemDisc = oneTimeDiscount(it);
         const eqName = getEquipmentName(it.eqId);
 
         if (amt > 0 || itemDisc > 0) {
@@ -568,10 +621,30 @@ function PayDialog({
 
       splitItems.forEach((it) => {
         const amt = Number(it.state.amount) || 0;
-        const itemDisc = Number(it.state.discount) || 0;
+        const itemDisc = oneTimeDiscount(it);
         const cAmt = Number(it.state.cashAmount) || 0;
         const bAmt = Number(it.state.bankAmount) || 0;
         const eqName = getEquipmentName(it.eqId);
+
+        // Discount covering the whole line: nothing changed hands, but the
+        // discount still has to be recorded against this month.
+        if (cAmt <= 0 && bAmt <= 0 && itemDisc > 0) {
+          savePayment({
+            id: getNextPaymentNumber(),
+            date: paymentDate,
+            customer: rental.customer,
+            customerId: rental.customerId,
+            agreement: rental.id,
+            equipmentId: it.eqId,
+            amount: 0,
+            mode: "Cash",
+            type: "Rent" as const,
+            notes: `${eqName}: Rent Payment [Discount of ₹${itemDisc} applied]`,
+            status: "Paid" as const,
+            discount: itemDisc,
+          });
+          return;
+        }
 
         if (cAmt > 0) {
           savePayment({
@@ -608,21 +681,26 @@ function PayDialog({
         }
       });
 
+      const itemNames = selectedEqIds.map((id) => getEquipmentName(id)).join(", ");
       toast.success(
-        `₹${multiItemTotal.toLocaleString("en-IN")} payment recorded for ${selectedEqIds.map((id) => getEquipmentName(id)).join(", ")} (${rental.id})`
+        multiItemTotal > 0
+          ? `₹${multiItemTotal.toLocaleString("en-IN")} payment recorded for ${itemNames} (${rental.id})`
+          : `Discount recorded for ${itemNames} (${rental.id})`
       );
       setOpen(false);
       onPaid();
       return;
     }
 
-    if (payAmount <= 0) {
+    const isSingleEqSelected = selectedEqIds.length === 1;
+    const finalDiscount = (applyDiscount && isSingleEqSelected) ? (Number(discountVal) || 0) : 0;
+
+    // A discount can cover the whole amount due (e.g. a month given free), so
+    // ₹0 paid is valid as long as a discount is being applied.
+    if (payAmount <= 0 && finalDiscount <= 0) {
       toast.error("Please enter a valid payment amount.");
       return;
     }
-
-    const isSingleEqSelected = selectedEqIds.length === 1;
-    const finalDiscount = (applyDiscount && isSingleEqSelected) ? (Number(discountVal) || 0) : 0;
 
     // Apply permanent/continuous discount: update rent rate in the database
     if (finalDiscount > 0 && discountType === "permanent" && isSingleEqSelected) {
@@ -631,41 +709,21 @@ function PayDialog({
       const rIdx = rentalsList.findIndex((r) => r.id === rental.id);
       if (rIdx > -1) {
         const uRental = { ...rentalsList[rIdx] };
-        uRental.equipmentItems = (uRental.equipmentItems || []).map((item: any) => {
-          if (item.equipmentId === eqId) {
-            const isMonthlyItem = item.rentCycle === "Monthly";
-            // Store the original rate and discount start date so billing can
-            // split cycles before vs after the discount (prevents retroactive
-            // re-pricing of past months).
-            if (!item.discountStartDate) {
-              if (isMonthlyItem) {
-                item.originalMonthlyRent = Number(item.monthlyRent) || 0;
-              } else {
-                item.originalDailyRent = Number(item.dailyRent) || 0;
-              }
-              item.discountStartDate = paymentDate;
+        freezeInitialRentPaid(uRental);
+        const hasItems = Array.isArray(uRental.equipmentItems) && uRental.equipmentItems.length > 0;
+        if (hasItems) {
+          uRental.equipmentItems = uRental.equipmentItems.map((item: any) => {
+            if (item.equipmentId === eqId) {
+              applyPermanentDiscount(item, finalDiscount, paymentDate, (uRental as any).rentCycle);
             }
-            item.discountAmount = (Number(item.discountAmount) || 0) + finalDiscount;
-            if (isMonthlyItem) {
-              item.monthlyRent = Math.max(0, (Number(item.monthlyRent) || 0) - finalDiscount);
-            } else {
-              item.dailyRent = Math.max(0, (Number(item.dailyRent) || 0) - finalDiscount);
-            }
-          }
-          return item;
-        });
-
-        if (uRental.equipmentId === eqId) {
-          const isMonthlyRental = (uRental as any).rentCycle === "Monthly" || (Number(uRental.monthlyRent) > 0 && Number(uRental.dailyRent) === 0);
-          if (isMonthlyRental) {
-            uRental.monthlyRent = Math.max(0, (Number(uRental.monthlyRent) || 0) - finalDiscount);
-          } else {
-            uRental.dailyRent = Math.max(0, (Number(uRental.dailyRent) || 0) - finalDiscount);
-          }
+            return item;
+          });
+          uRental.monthlyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.monthlyRent) || 0), 0);
+          uRental.dailyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.dailyRent) || 0), 0);
+        } else if (uRental.equipmentId === eqId) {
+          // Single-equipment agreement with no line items: the rate lives on the rental.
+          applyPermanentDiscount(uRental, finalDiscount, paymentDate, (uRental as any).rentCycle);
         }
-
-        uRental.monthlyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.monthlyRent) || 0), 0);
-        uRental.dailyRent = uRental.equipmentItems.reduce((sum: number, it: any) => sum + (Number(it.dailyRent) || 0), 0);
 
         saveRental(uRental);
       }
@@ -778,8 +836,36 @@ function PayDialog({
       }
     });
 
+    // Nothing changed hands (the discount covered it all): record the one-time
+    // discount on its own so this month still counts as settled.
+    const isOneTimeDiscount = applyDiscount && discountType === "one-time";
+    if (isOneTimeDiscount && finalDiscount > 0 && !discountRecorded) {
+      const eqId = selectedEqIds[0];
+      savePayment({
+        id: getNextPaymentNumber(),
+        date: paymentDate,
+        customer: rental.customer,
+        customerId: rental.customerId,
+        agreement: rental.id,
+        equipmentId: eqId,
+        amount: 0,
+        mode: paymentMode === "Cash+Bank" ? "Cash" : (paymentMode as any),
+        type: "Rent" as const,
+        txRef,
+        notes: `${getEquipmentName(eqId)}: Rent Payment [Discount of ₹${finalDiscount} applied]`,
+        status: "Paid" as const,
+        discount: finalDiscount,
+      });
+    }
+
+    const itemNames = selectedEqIds.map((id) => getEquipmentName(id)).join(", ");
+    const discountNote = finalDiscount > 0
+      ? `${discountType === "permanent" ? "permanent" : "one-time"} discount of ₹${finalDiscount.toLocaleString("en-IN")}`
+      : "";
     toast.success(
-      `₹${payAmount.toLocaleString("en-IN")} payment recorded for ${selectedEqIds.map(id => getEquipmentName(id)).join(", ")} (${rental.id})`
+      payAmount > 0
+        ? `₹${payAmount.toLocaleString("en-IN")} payment recorded for ${itemNames} (${rental.id})${discountNote ? ` with ${discountNote}` : ""}`
+        : `${discountNote.charAt(0).toUpperCase()}${discountNote.slice(1)} recorded for ${itemNames} (${rental.id})`
     );
     setOpen(false);
     onPaid();
@@ -1708,6 +1794,8 @@ function DuesPage() {
 
     const dailyRent = monthlyRent / 30;
     const start = parseLocalDate(rental.start);
+    // Monthly cycles that begin before the cycle `d` falls in.
+    const cyclesBefore = (d: Date) => Math.max(0, countCommencedCycles(rental.start, d) - 1);
 
     // Count paid amount from payment records using getPaidForEquipment helper, including initial advance payment
     const grandTotalPaid = getPaidForEquipment(rental, eqId, paymentsList, false);
@@ -1752,22 +1840,10 @@ function DuesPage() {
     if (isMonthly) {
       const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
 
-      // If a permanent discount was applied, split billing into pre-discount
-      // (at the original rate) and post-discount (at the current rate) so past
-      // months are not retroactively repriced.
-      if (item?.discountStartDate && item?.originalMonthlyRent != null) {
-        const origRate = Number(item.originalMonthlyRent) || 0;
-        const discDate = parseLocalDate(item.discountStartDate);
-        if (!isNaN(discDate.getTime()) && discDate > start) {
-          const preDiscountCycles = countCommencedCycles(rental.start, discDate) - 1; // completed cycles before discount
-          const postDiscountCycles = Math.max(0, cyclesCommenced - Math.max(0, preDiscountCycles));
-          totalDue = (Math.max(0, preDiscountCycles) * origRate) + (postDiscountCycles * monthlyRent);
-        } else {
-          totalDue = cyclesCommenced * monthlyRent;
-        }
-      } else {
-        totalDue = cyclesCommenced * monthlyRent;
-      }
+      // Permanent discounts lower the current rate; each cycle is charged at
+      // the rate in force when it began, so past months are not repriced. The
+      // cycle a discount is added in already gets the new rate.
+      totalDue = rentForPeriods(cyclesCommenced, getRentRateSchedule(item, true, monthlyRent), cyclesBefore);
       
       outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidMonths = monthlyRent > 0 ? Math.round(outstanding / monthlyRent) : 0;
@@ -1778,21 +1854,12 @@ function DuesPage() {
       const diffTime = Math.max(0, billingEndDate.getTime() - start.getTime());
       const daysElapsed = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-      // If a permanent discount was applied, split billing into pre-discount
-      // and post-discount days.
-      if (item?.discountStartDate && item?.originalDailyRent != null) {
-        const origRate = Number(item.originalDailyRent) || 0;
-        const discDate = parseLocalDate(item.discountStartDate);
-        if (!isNaN(discDate.getTime()) && discDate > start) {
-          const preDiscountDays = Math.ceil(Math.max(0, discDate.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-          const postDiscountDays = Math.max(0, daysElapsed - preDiscountDays);
-          totalDue = (preDiscountDays * origRate) + (postDiscountDays * dailyRate);
-        } else {
-          totalDue = daysElapsed * dailyRate;
-        }
-      } else {
-        totalDue = daysElapsed * dailyRate;
-      }
+      // Each day at the rate in force that day (see permanent discounts above).
+      totalDue = rentForPeriods(
+        daysElapsed,
+        getRentRateSchedule(item, false, dailyRate),
+        (d) => Math.ceil(Math.max(0, d.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+      );
       
       outstanding = item?.returned ? returnDueOutstanding : Math.max(0, totalDue - grandTotalPaid);
       unpaidDays = dailyRate > 0 ? Math.round(outstanding / dailyRate) : 0;
@@ -1838,23 +1905,12 @@ function DuesPage() {
     if (!item?.returned && isMonthly) {
       const cyclesCommenced = countCommencedCycles(rental.start, billingEndDate);
 
-      // For the "today" balance, also split pre/post discount
-      let completedDue: number;
-      if (item?.discountStartDate && item?.originalMonthlyRent != null) {
-        const origRate = Number(item.originalMonthlyRent) || 0;
-        const discDate = parseLocalDate(item.discountStartDate);
-        if (!isNaN(discDate.getTime()) && discDate > start) {
-          const preDiscountCycles = countCommencedCycles(rental.start, discDate) - 1;
-          const completedCycles = Math.max(0, cyclesCommenced - 1);
-          const preCompleted = Math.min(Math.max(0, preDiscountCycles), completedCycles);
-          const postCompleted = Math.max(0, completedCycles - preCompleted);
-          completedDue = (preCompleted * origRate) + (postCompleted * monthlyRent);
-        } else {
-          completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
-        }
-      } else {
-        completedDue = Math.max(0, cyclesCommenced - 1) * monthlyRent;
-      }
+      // For the "today" balance, completed cycles at the rate in force for each
+      const completedDue = rentForPeriods(
+        Math.max(0, cyclesCommenced - 1),
+        getRentRateSchedule(item, true, monthlyRent),
+        cyclesBefore
+      );
       const totalDueAsOfToday = completedDue + dueTillToday;
       balanceAsOfToday = Math.max(0, totalDueAsOfToday - grandTotalPaid);
     }

@@ -5804,7 +5804,7 @@ function RentalsPage() {
     return map;
   }, [rentalsList, paymentsForDues]);
 
-  const isSearching = !!debouncedSearch.trim();
+  const isSearching = !!search.trim() && !!debouncedSearch.trim();
 
   // All agreements matching the search query (ignoring status/quick filters)
   const searchMatchingRentals = useMemo(() => {
@@ -5836,6 +5836,12 @@ function RentalsPage() {
         if (String(r.serial || "").toLowerCase().includes(token)) return true;
         if (Array.isArray(r.equipmentItems) && r.equipmentItems.some((ei: any) => String(ei.serial || "").toLowerCase().includes(token))) return true;
         if (wordStartsWith(r.equipment, token)) return true;
+
+        // Check phone numbers on agreement directly
+        if (tokenDigits.length >= 3) {
+          const rentalPhones = [(r as any).phone, (r as any).altPhone, (r as any).contactNumber3];
+          if (rentalPhones.some((ph: any) => String(ph || "").replace(/\D/g, "").includes(tokenDigits))) return true;
+        }
 
         if (customer) {
           if (tokenDigits.length >= 3) {
@@ -5892,6 +5898,10 @@ function RentalsPage() {
   }, [countBaseRentals, outstandingByRental]);
 
   const filteredRentals = useMemo(() => {
+    // In staff role, hide rental agreements unless searching
+    if (isStaff && !isSearching) {
+      return [];
+    }
     let rows = searchMatchingRentals;
 
     if (canFilterByOwner && ownerFilter !== "all-owners") {
@@ -5951,7 +5961,7 @@ function RentalsPage() {
       if (aValid !== bValid) return aValid ? -1 : 1;
       return extractIdNumber(b.id) - extractIdNumber(a.id);
     });
-  }, [searchMatchingRentals, canFilterByOwner, ownerFilter, ownersList, getRentalOwners, categoryFilter, rentalMatchesCategory, statusFilter, quickFilter, outstandingByRental]);
+  }, [isStaff, isSearching, searchMatchingRentals, canFilterByOwner, ownerFilter, ownersList, getRentalOwners, categoryFilter, rentalMatchesCategory, statusFilter, quickFilter, outstandingByRental]);
 
   useEffect(() => {
     setVisibleCount(RENTALS_PAGE_SIZE);
@@ -6096,7 +6106,7 @@ function RentalsPage() {
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
               <Input
-                placeholder="Search agreement, customer, equipment…"
+                placeholder={isStaff ? "Search agreement by customer, ID, phone, equipment…" : "Search agreement, customer, equipment…"}
                 className="pl-9 h-9 text-[13px] bg-card border-border/50 w-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -6163,10 +6173,10 @@ function RentalsPage() {
               { key: "overdue",   label: "Overdue",       count: rentalCounts.overdue },
               { key: "completed", label: "Completed",     count: rentalCounts.completed },
               { key: "dues",      label: "Pending Dues",  count: rentalCounts.dues },
-              ...(rentalCounts.pending > 0 || (!isSearching && rentalsList.some((r) => r.status === "Pending Approval"))
+              ...(rentalCounts.pending > 0 || (!isSearching && !isStaff && rentalsList.some((r) => r.status === "Pending Approval"))
                 ? [{ key: "pending", label: "Pending Approval", count: rentalCounts.pending }]
                 : []),
-              ...(rentalCounts.cancelled > 0 || (!isSearching && rentalsList.some((r) => r.status === "Cancelled"))
+              ...(rentalCounts.cancelled > 0 || (!isSearching && !isStaff && rentalsList.some((r) => r.status === "Cancelled"))
                 ? [{ key: "cancelled", label: "Cancelled", count: rentalCounts.cancelled }]
                 : []),
             ].map((f) => {
@@ -6220,7 +6230,19 @@ function RentalsPage() {
                 {filteredRentals.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="py-12 text-center text-[13px] text-muted-foreground">
-                      No agreements match your search or filter.
+                      {isStaff && !isSearching ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+                            <Search className="h-6 w-6" />
+                          </div>
+                          <p className="text-[14px] font-semibold text-foreground">Search Rental Agreements</p>
+                          <p className="text-[12px] text-muted-foreground mt-1 max-w-sm">
+                            Enter an agreement ID, customer name, phone number, or equipment in the search box above to view rental agreements.
+                          </p>
+                        </div>
+                      ) : (
+                        "No agreements match your search or filter."
+                      )}
                     </TableCell>
                   </TableRow>
                 )}
@@ -6550,7 +6572,19 @@ function RentalsPage() {
           <div className="md:hidden">
             {filteredRentals.length === 0 ? (
               <div className="py-12 text-center text-[13px] text-muted-foreground">
-                No agreements match your search or filter.
+                {isStaff && !isSearching ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-3">
+                      <Search className="h-6 w-6" />
+                    </div>
+                    <p className="text-[14px] font-semibold text-foreground">Search Rental Agreements</p>
+                    <p className="text-[12px] text-muted-foreground mt-1 max-w-sm">
+                      Enter an agreement ID, customer name, phone number, or equipment in the search box above to view rental agreements.
+                    </p>
+                  </div>
+                ) : (
+                  "No agreements match your search or filter."
+                )}
               </div>
             ) : (
               <div className="divide-y divide-border/60">
