@@ -5745,6 +5745,50 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     return false;
   };
 
+  // Helper to determine which items a payment targets.
+  // On multi-item rentals, general payments and agreement creation advance payments
+  // cover the whole agreement (distributed proportionally across active equipment),
+  // UNLESS the payment explicitly specifies a specific item's serial number in notes.
+  const getPaymentTargetItems = (p: any): any[] => {
+    // 1. If payment explicitly mentions an item's unique serial in notes, it targets that specific item
+    const serialMatched = items.filter((it: any) => {
+      const s = String(it.serial || "").trim().toLowerCase();
+      return s.length >= 3 && String(p.notes || "").toLowerCase().includes(s);
+    });
+    if (serialMatched.length > 0) {
+      return serialMatched;
+    }
+
+    // 2. Advance rent collected at agreement creation is for the whole agreement
+    if (isAdvancePayment(p)) {
+      return []; // empty -> distributed across active items on agreement
+    }
+
+    // 3. Check regular match by equipmentId/name
+    const matched = items.filter((it: any) => matchesItem(p, it));
+    if (matched.length === 0 || matched.length === items.length) {
+      return matched;
+    }
+
+    // 4. If it matched only a subset of items, verify whether it's truly an item-specific payment
+    // or just inherited rental.equipmentId (the header ID) or has an amount that covers multiple items.
+    const pEqId = String(p.equipmentId || "").trim().toLowerCase();
+    const rEqId = String(rental.equipmentId || "").trim().toLowerCase();
+    const coveredRentSum = matched.reduce(
+      (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+      0
+    );
+    const amt = cleanNum(p.amount) + cleanNum(p.discount);
+
+    // If p.equipmentId matches the agreement header's equipmentId without specific serial in notes,
+    // or if the amount paid exceeds the rent of the matched items, it is an agreement-wide payment!
+    if (pEqId === rEqId || (coveredRentSum > 0 && amt > coveredRentSum)) {
+      return []; // empty -> distributed across active items on agreement
+    }
+
+    return matched;
+  };
+
   // For multi-item rentals, calculate rent paid for currentItem across all payments
   let currentItemPaid = 0;
 
@@ -5753,7 +5797,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     if (amt <= 0) continue;
 
     // Find which equipment items are matched by this payment
-    const matchedItems = items.filter((it: any) => matchesItem(p, it));
+    const matchedItems = getPaymentTargetItems(p);
 
     if (matchedItems.length > 0) {
       // Payment specifically mentions item(s)
@@ -5803,7 +5847,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     for (const p of agreementPayments.filter(isAdvancePayment)) {
       const amt = cleanNum(p.amount) + cleanNum(p.discount);
       if (amt <= 0) continue;
-      const matchedItems = items.filter((it: any) => matchesItem(p, it));
+      const matchedItems = getPaymentTargetItems(p);
       if (matchedItems.length > 0) {
         if (matchedItems.some((it: any) => it.equipmentId === equipmentId)) {
           const coveredSum = matchedItems.reduce(
@@ -5833,7 +5877,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
       for (const p of agreementPayments.filter(isAdvancePayment)) {
         const amt = cleanNum(p.amount) + cleanNum(p.discount);
         if (amt <= 0) continue;
-        const matched = items.filter((x: any) => matchesItem(p, x));
+        const matched = getPaymentTargetItems(p);
         if (matched.length > 0) {
           if (matched.some((x: any) => x.equipmentId === it.equipmentId)) {
             const sumR = matched.reduce((s: number, x: any) => s + cleanNum(x.monthlyRent || x.dailyRent || x.rentRate), 0);

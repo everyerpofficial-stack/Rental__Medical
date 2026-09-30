@@ -6039,7 +6039,7 @@ function RentalsPage() {
       ) : (
         <>
           {/* Stats */}
-          {!isStaff && (
+          {(!isStaff || isSearching) && (
             <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               {[
                 { key: "all",     l: isSearching ? "Customer Agreements" : "Total Agreements", v: rentalCounts.all.toString(), icon: FileText,     c: "text-primary",           bg: "bg-primary/10 border-primary/20" },
@@ -6048,12 +6048,16 @@ function RentalsPage() {
                 { key: "overdue", l: "Overdue",          v: rentalCounts.overdue.toString(),  icon: AlertTriangle,c: "text-destructive",        bg: "bg-destructive/10 border-destructive/20" },
               ]
                 // Accountant sees only Pending Approval card when not searching.
-                // When searching, Accountant sees the searched customer's counts (agreements, active, overdue)!
+                // When searching, Accountant and Staff see the searched customer's counts (agreements, active, overdue)!
                 .filter((s) => {
                   if (isAdmin) return true;
                   if (isAccountant) {
                     if (isSearching) return true;
                     return s.key === "pending";
+                  }
+                  if (isStaff) {
+                    if (isSearching) return true;
+                    return false;
                   }
                   return true;
                 })
@@ -6675,7 +6679,7 @@ function RentalsPage() {
           {/* PERF: incremental rendering - only a page of rows mounts at a time */}
           {hasMoreRentals && (
             <div className="flex items-center justify-center gap-3 border-t border-border/60 py-4">
-              {!isStaff && !isAccountant && (
+              {((!isStaff && !isAccountant) || isSearching) && (
                 <span className="text-[12px] text-muted-foreground">
                   Showing {visibleRentals.length} of {filteredRentals.length}
                 </span>

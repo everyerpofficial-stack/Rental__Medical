@@ -1977,16 +1977,23 @@ function CustomersPage() {
         </>
       }
     >
-      {/* Stat cards - hidden for Staff & Accountant; protect total company customer counts */}
-      {!isStaff && !isAccountant && (
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Stat cards - hidden for Staff; Accountant sees only operational cards (Return Due, Pending KYC, Overdue) */}
+      {!isStaff && (
+        <div className={`mb-5 grid grid-cols-2 gap-3 sm:gap-4 ${isAccountant ? "sm:grid-cols-3 lg:grid-cols-3" : "sm:grid-cols-3 lg:grid-cols-5"}`}>
           {[
             { l: "Total Customers", v: totalCount.toString(), icon: UserCheck, color: "text-primary", key: "all-status" },
             { l: "Active",          v: activeCount.toString(),   icon: UserCheck, color: "text-success", key: "Active" },
             { l: "Return Due",      v: returnDueSet.size.toString(), sub: `₹${totalReturnDueAmount.toLocaleString("en-IN")}`, icon: CreditCard, color: "text-emerald-600 dark:text-emerald-400", key: "Return Due" },
             { l: "Pending KYC",     v: pendingKycCount.toString(),    icon: ShieldAlert,     color: "text-warning-foreground", key: "KYC Pending" },
             { l: "Overdue",         v: overdueCount.toString(),    icon: UserX,     color: "text-destructive", key: "Overdue" },
-          ].map((s, i) => {
+          ]
+            .filter((s) => {
+              if (isAccountant) {
+                return s.key === "Return Due" || s.key === "KYC Pending" || s.key === "Overdue";
+              }
+              return true;
+            })
+            .map((s, i) => {
             const isSelected = statusFilter === s.key;
             return (
               <Card 
