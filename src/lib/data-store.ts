@@ -13,17 +13,29 @@ import { createBackupSnapshot } from "./backup";
 // Helper to check for SSR
 const isBrowser = typeof window !== "undefined";
 
-// Purge known duplicate/erroneous payments (e.g. PAY-0276 duplicate ₹114,000 single-equipment payment on AGR-2026-0033)
+// Purge known duplicate/erroneous payments
 if (isBrowser) {
   try {
     recordDeletedId(SHEETS.PAYMENTS, "PAY-0276");
     removePendingSync(SHEETS.PAYMENTS, "PAY-0276");
+    recordDeletedId(SHEETS.PAYMENTS, "PAY-2050");
+    removePendingSync(SHEETS.PAYMENTS, "PAY-2050");
     const raw = localStorage.getItem("medirent-payments");
-    if (raw && raw.includes("PAY-0276")) {
+    if (raw && (raw.includes("PAY-0276") || raw.includes("PAY-2050") || raw.includes("PAY-0579"))) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        const filtered = parsed.filter((p: any) => p && p.id !== "PAY-0276");
-        if (filtered.length !== parsed.length) {
+        let changed = false;
+        const filtered = parsed.filter((p: any) => p && p.id !== "PAY-0276" && p.id !== "PAY-2050");
+        if (filtered.length !== parsed.length) changed = true;
+        const p0579 = filtered.find((p: any) => p && p.id === "PAY-0579");
+        if (p0579 && (p0579.amount !== 6500 || p0579.discount !== 1500 || !String(p0579.equipmentId).includes("EQ-OXY-0003"))) {
+          p0579.amount = 6500;
+          p0579.discount = 1500;
+          p0579.equipmentId = "EQ-OXY-0003,EQ-BIP-0006";
+          p0579.notes = "Oxygen Concentrator 5LP, Bipap Machine: Rent Payment [Discount of ₹1500 applied]";
+          changed = true;
+        }
+        if (changed) {
           localStorage.setItem("medirent-payments", JSON.stringify(filtered));
         }
       }
@@ -2083,9 +2095,10 @@ export function consolidatePayments(payments: any[]): any[] {
       // BUGFIX: Never merge payments that belong to different agreements, even if same customer/date.
       // Merging across agreements caused all payments for a customer made on the same day to be
       // collapsed into the first agreement, leaving other agreements with ₹0 paid on the Rent Dues page.
-      const isBothAgreementSet = !!(p.agreement && p2.agreement);
-      const hasDifferentAgreement = isBothAgreementSet && !isSameAgreement;
-      if (!hasDifferentAgreement && (isSameAgreement || isSameCustomer) && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId) {
+      const matchesCriteria = isSameAgreement
+        ? (isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus)
+        : (!hasDifferentAgreement && isSameCustomer && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId);
+      if (matchesCriteria) {
         group.push(p2);
         processed.add(p2.id);
       }
@@ -2462,6 +2475,32 @@ export function getPayments() {
       removePendingSync(SHEETS.PAYMENTS, "PAY-0276");
     }
     dirty = true;
+  }
+
+  // Purge PAY-2050 (merged into PAY-0579 as requested)
+  const pay2050Idx = mergedList.findIndex((p) => p && p.id === "PAY-2050");
+  if (pay2050Idx !== -1) {
+    mergedList.splice(pay2050Idx, 1);
+    if (isBrowser) {
+      recordDeletedId(SHEETS.PAYMENTS, "PAY-2050");
+      removePendingSync(SHEETS.PAYMENTS, "PAY-2050");
+    }
+    dirty = true;
+  }
+
+  // Update PAY-0579 to include both Oxygen Concentrator and Bipap Machine (amount ₹6,500, discount ₹1,500)
+  const pay0579 = mergedList.find((p) => p && p.id === "PAY-0579");
+  if (pay0579) {
+    if (pay0579.amount !== 6500 || pay0579.discount !== 1500 || !String(pay0579.equipmentId).includes("EQ-OXY-0003")) {
+      pay0579.amount = 6500;
+      pay0579.discount = 1500;
+      pay0579.equipmentId = "EQ-OXY-0003,EQ-BIP-0006";
+      pay0579.notes = "Oxygen Concentrator 5LP, Bipap Machine: Rent Payment [Discount of ₹1500 applied]";
+      dirty = true;
+      if (isBrowser && isGSheetsEnabled()) {
+        syncRowToSheet(SHEETS.PAYMENTS, pay0579 as any);
+      }
+    }
   }
 
   // Filter out any tombstoned deleted records

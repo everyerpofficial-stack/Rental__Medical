@@ -98,23 +98,6 @@ export const payments: any[] = [
     status: "Paid",
     collectedBy: "Admin",
   },
-  {
-    id: "PAY-2050",
-    agreement: "AGR-2026-0131",
-    customer: "Mrs.Riyan Banu",
-    customerId: "CUS-0125",
-    equipmentId: "EQ-OXY-0003",
-    date: "2026-09-23T18:30:00.000Z",
-    type: "Rent",
-    amount: 3250,
-    discount: 750,
-    mode: "Bank",
-    bankPaid: 3250,
-    cashPaid: 0,
-    notes: "Oxygen Concentrator 5LP: Rent Payment [Discount of ₹750 applied]",
-    status: "Paid",
-    collectedBy: "Admin",
-  },
 ];
 export const returns: any[] = [];
 export const activities: any[] = [];
