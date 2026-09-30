@@ -915,6 +915,14 @@ export function getAgreementInitialPayments(rental: any, existingPayments: any[]
       depAmount = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
     }
 
+    // FIX: For old agreements from Google Sheets that lack depositPaymentStatus
+    // but have deposit amounts in equipmentItems — try to recover the deposit
+    // total when the top-level `deposit` field is missing/zero.
+    if (depAmount <= 0 && !isExplicitlyNotPaid && !rental.depositPaymentStatus && Array.isArray(rental.equipmentItems)) {
+      const itemsDepTotal = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.deposit), 0);
+      if (itemsDepTotal > 0) depAmount = itemsDepTotal;
+    }
+
     if (depAmount > 0) {
       initialPayments.push({
         id: (rental as any).depositReceiptId || `PAY-DEP-${cleanIdStr}`,
@@ -958,6 +966,17 @@ export function getAgreementInitialPayments(rental: any, existingPayments: any[]
 
     if (advanceRentAmt <= 0 && isPaidStatus && Array.isArray(rental.equipmentItems)) {
       advanceRentAmt = rental.equipmentItems.reduce((s: number, it: any) => s + cleanNum(it.monthlyRent || it.rentRate || it.dailyRent), 0);
+    }
+
+    // FIX: For old agreements imported from Google Sheets that lack the
+    // rentalPaymentStatus / rentPaidAmount fields, infer that the first
+    // month's rent was collected at creation if the agreement is Active or
+    // Overdue (it wouldn't have been activated without payment).
+    const rentalStatusLower = String(rental.status || "").toLowerCase();
+    const isActiveOrOverdue = rentalStatusLower === "active" || rentalStatusLower === "overdue" || rentalStatusLower === "completed";
+    const hasNoExplicitRentStatus = !rental.rentalPaymentStatus && !rentPaidAmt;
+    if (advanceRentAmt <= 0 && isActiveOrOverdue && hasNoExplicitRentStatus && monthlyRent > 0) {
+      advanceRentAmt = monthlyRent;
     }
 
     if (advanceRentAmt > 0) {
