@@ -592,21 +592,27 @@ export function extractIdNumber(idStr: string | undefined | null): number {
 export function sortLatestFirst(list: any[], dateField?: string): any[] {
   if (!Array.isArray(list)) return [];
   return [...list].sort((a, b) => {
-    // 1. Highest numerical ID first (e.g. AGR-2026-0004 before AGR-2026-0001, RET-0010 before RET-0001)
+    // 1. Date descending (newest date first) when dateField is specified
+    if (dateField) {
+      const valA = a?.[dateField];
+      const valB = b?.[dateField];
+      const dateA = parseLocalDate(valA).getTime();
+      const dateB = parseLocalDate(valB).getTime();
+      const validA = !isNaN(dateA);
+      const validB = !isNaN(dateB);
+      if (validA && validB && dateA !== dateB) {
+        return dateB - dateA;
+      }
+      if (validA && !validB) return -1;
+      if (!validA && validB) return 1;
+    }
+    // 2. Highest numerical ID first (e.g. AGR-2026-0004 before AGR-2026-0001, RET-0010 before RET-0001)
     const idA = a?.id || a?.agreementId || a?.rentalId || "";
     const idB = b?.id || b?.agreementId || b?.rentalId || "";
     const numA = extractIdNumber(idA);
     const numB = extractIdNumber(idB);
     if (numA !== numB) {
       return numB - numA;
-    }
-    // 2. Date descending
-    if (dateField && a?.[dateField] && b?.[dateField]) {
-      const dateA = parseLocalDate(a[dateField]).getTime();
-      const dateB = parseLocalDate(b[dateField]).getTime();
-      if (!isNaN(dateA) && !isNaN(dateB) && dateA !== dateB) {
-        return dateB - dateA;
-      }
     }
     return (idB || "").localeCompare(idA || "");
   });

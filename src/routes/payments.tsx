@@ -1747,7 +1747,7 @@ function PaymentsPage() {
   const agreementList = Array.from(agreementMap.values()).map((g) => {
     const paidPayments = g.payments.filter((p) => p.status === "Paid");
     const totalCollected = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-    const sortedPayments = [...g.payments].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    const sortedPayments = sortLatestFirst(g.payments, "date");
     const latestPayment = sortedPayments[0];
 
     return {
