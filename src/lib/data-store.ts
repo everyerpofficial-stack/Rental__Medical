@@ -2447,21 +2447,8 @@ export function getPayments() {
     if (!mergedList.some((p) => p.id === initP.id)) {
       mergedList.push(initP);
       dirty = true;
-      if (isBrowser) {
-        if (isGSheetsEnabled()) {
-          syncRowToSheet(SHEETS.PAYMENTS, initP as any);
-        }
-        if (initP.agreement && initP.type === "Rent" && initP.status === "Paid") {
-          const rentalsList = getRentals();
-          const rental = rentalsList.find((r) => r.id === initP.agreement);
-          if (rental && rental.status === "Overdue") {
-            rental.status = "Active";
-            localStorage.setItem("medirent-rentals", JSON.stringify(rentalsList));
-            if (isGSheetsEnabled()) {
-              syncRowToSheet(SHEETS.RENTALS, rental as any);
-            }
-          }
-        }
+      if (isBrowser && isGSheetsEnabled()) {
+        syncRowToSheet(SHEETS.PAYMENTS, initP as any);
       }
     }
   });
