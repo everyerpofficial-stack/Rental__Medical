@@ -2496,6 +2496,28 @@ export function getPayments() {
     dirty = true;
   }
 
+  // Purge any erroneously saved "Not Paid" return due placeholder payments (e.g. PAY-0582)
+  const notPaidPayments = mergedList.filter((p) => {
+    if (!p) return false;
+    const status = String(p.status || "").trim().toLowerCase();
+    if (status === "not paid") return true;
+    if (p.notes && /outstanding remaining pending due balance/i.test(p.notes)) return true;
+    return false;
+  });
+  if (notPaidPayments.length > 0) {
+    const notPaidIds = new Set(notPaidPayments.map((p) => String(p.id)));
+    const remaining = mergedList.filter((p) => !p || !notPaidIds.has(String(p.id)));
+    mergedList.length = 0;
+    mergedList.push(...remaining);
+    if (isBrowser) {
+      notPaidIds.forEach((id) => {
+        recordDeletedId(SHEETS.PAYMENTS, id);
+        removePendingSync(SHEETS.PAYMENTS, id);
+      });
+    }
+    dirty = true;
+  }
+
   // Update PAY-0579 to include both Oxygen Concentrator and Bipap Machine (amount ₹6,500, discount ₹1,500)
   const pay0579 = mergedList.find((p) => p && p.id === "PAY-0579");
   if (pay0579) {
@@ -6267,6 +6289,8 @@ export function getAgreementPayments(rental: any, paymentsList?: any[]): any[] {
 
   const rawAgreementPayments = payments.filter((p: any) => {
     if (!p) return false;
+    const status = String(p.status || "").trim().toLowerCase();
+    if (status === "not paid" || status === "cancelled" || status === "failed") return false;
     if (p.agreement === agreementId) return true;
     const cleanP = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
     return cleanP && cleanP === cleanTarget;

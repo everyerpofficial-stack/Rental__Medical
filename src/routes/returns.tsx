@@ -1737,21 +1737,6 @@ function ReturnsPage() {
           });
         }
       }
-
-      if (remainingPendingDue > 0) {
-        savePayment({
-          id: getNextPaymentNumber(),
-          date: returnDate,
-          customer: selectedRental?.customer || "Unknown Customer",
-          customerId: selectedRental?.customerId || "",
-          agreement: selectedAgreement,
-          amount: remainingPendingDue,
-          mode: (duePaymentMode === "Cash+Bank" ? "Bank" : duePaymentMode) as any,
-          type: "Rent" as const,
-          notes: `Outstanding remaining pending due balance on return of: ${returnedNames}. (Total Due: ₹${outstandingPayable}, Paid: ₹${actualPaidAmount}, Pending: ₹${remainingPendingDue})`,
-          status: "Not Paid" as const,
-        });
-      }
     }
 
     // Refund adjustment: if the operator chose to transfer the refund to another
@@ -2174,11 +2159,6 @@ function ReturnsPage() {
                       <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
                         <div className="h-6 sm:h-7 flex items-center justify-between">
                           <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
-                          {totalReturningDiscount > 0 && (
-                            <span className="text-[8px] sm:text-[8.5px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 truncate" title="Discount applied on past rent payments">
-                              Disc: ₹{totalReturningDiscount.toLocaleString("en-IN")}
-                            </span>
-                          )}
                         </div>
                         <div className="relative">
                           <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
@@ -2955,11 +2935,6 @@ function ReturnsPage() {
                                   <span className="font-bold text-foreground text-[11.5px] block">
                                     ₹{cleanNum(p.amount).toLocaleString("en-IN")}
                                   </span>
-                                  {pDiscount > 0 && (
-                                    <span className="text-[9px] font-semibold text-emerald-600 block">
-                                      Disc. ₹{pDiscount.toLocaleString("en-IN")}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
                             );

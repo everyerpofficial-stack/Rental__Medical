@@ -908,9 +908,13 @@ function AgreementPaymentHistoryModal({
     return cleanR && cleanR === cleanTarget;
   });
 
-  const agreementPayments = getAgreementPayments(rental || agreementId, payments);
+  const rawPayments = getAgreementPayments(rental || agreementId, payments);
+  const agreementPayments = rawPayments.filter((p) => {
+    const s = String(p.status || "").trim().toLowerCase();
+    return s !== "not paid" && s !== "cancelled" && s !== "failed";
+  });
   const totalPaid = agreementPayments
-    .filter((p) => p.status === "Paid")
+    .filter((p) => String(p.status || "").toLowerCase() === "paid")
     .reduce((sum, p) => sum + p.amount, 0);
 
   const customerName = rental?.customer || agreementPayments[0]?.customer || "Unknown Customer";
@@ -936,6 +940,10 @@ function AgreementPaymentHistoryModal({
     : [{ name: equipmentName, model: modelStr || undefined }];
 
   const handleExportStatement = () => {
+    if (agreementPayments.length === 0) {
+      toast.info(`No payment records found for ${agreementId} to export.`);
+      return;
+    }
     const headers = ["Receipt ID", "Date", "Equipment", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
     const rows = agreementPayments.map(p => {
       const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
@@ -963,7 +971,9 @@ function AgreementPaymentHistoryModal({
       return;
     }
 
-    const tableRowsHtml = agreementPayments.map(p => {
+    const tableRowsHtml = agreementPayments.length === 0
+      ? `<tr><td colspan="8" style="text-align: center; border: 1px solid #cbd5e1; padding: 20px; color: #64748b;">No payments recorded for agreement ${agreementId} yet.</td></tr>`
+      : agreementPayments.map(p => {
       const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
         .map(it => it.model ? `${it.name} (${it.model})` : it.name)
         .join(", ");
@@ -1701,6 +1711,9 @@ function PaymentsPage() {
 
   // 2. Add payments to respective agreement group (create group if orphaned)
   payments.forEach((p) => {
+    if (!p) return;
+    const status = String(p.status || "").trim().toLowerCase();
+    if (status === "not paid" || status === "cancelled" || status === "failed") return;
     const agrId = p.agreement || "No Agreement";
     let group = agreementMap.get(agrId);
     if (!group) {
@@ -1745,9 +1758,14 @@ function PaymentsPage() {
 
   // Calculate totals and latest date for each agreement group
   const agreementList = Array.from(agreementMap.values()).map((g) => {
-    const paidPayments = g.payments.filter((p) => p.status === "Paid");
-    const totalCollected = paidPayments.reduce((sum, p) => sum + p.amount, 0);
-    const sortedPayments = sortLatestFirst(g.payments, "date");
+    const paidPayments = g.payments.filter((p) => {
+      const s = String(p.status || "").trim().toLowerCase();
+      return s !== "not paid" && s !== "cancelled" && s !== "failed";
+    });
+    const totalCollected = paidPayments
+      .filter((p) => String(p.status || "").toLowerCase() === "paid")
+      .reduce((sum, p) => sum + p.amount, 0);
+    const sortedPayments = sortLatestFirst(paidPayments, "date");
     const latestPayment = sortedPayments[0];
 
     return {
@@ -1755,7 +1773,7 @@ function PaymentsPage() {
       payments: sortedPayments,
       totalCollected,
       paidCount: paidPayments.length,
-      totalCount: g.payments.length,
+      totalCount: sortedPayments.length,
       latestDate: latestPayment?.date || g.startDate || "",
       latestMode: latestPayment?.mode || "—",
     };
@@ -1835,6 +1853,9 @@ function PaymentsPage() {
       return [];
     }
     return sortLatestFirst(payments.filter((p) => {
+      if (!p) return false;
+      const status = String(p.status || "").trim().toLowerCase();
+      if (status === "not paid" || status === "cancelled" || status === "failed") return false;
       const q = debouncedSearch.toLowerCase().trim();
       const rental = rentalsById.get(p.agreement);
       const customer = customersById.get(p.customerId) || (rental ? customersById.get(rental.customerId) : undefined);
