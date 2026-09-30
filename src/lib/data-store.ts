@@ -5680,7 +5680,7 @@ export function getRentPaidForAgreement(agreementId: string, monthlyRent: any, r
   return totalRentPayments + initialPaid;
 }
 
-export function getPaidForEquipment(rental: any, equipmentId: string, paymentsList: any[], excludeInitial = false): number {
+export function getPaidForEquipment(rental: any, equipmentId: string, paymentsList: any[], excludeInitial = false, includeDiscount = true): number {
   if (!rental || !equipmentId) return 0;
   
   const items: any[] = rental.equipmentItems && rental.equipmentItems.length > 0
@@ -5729,6 +5729,8 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     return false;
   };
 
+  const getAmt = (p: any) => cleanNum(p.amount) + (includeDiscount ? cleanNum(p.discount) : 0);
+
   // Initial advance collected when the agreement was created (if recorded on rental object)
   const initialTotal = (() => {
     if (excludeInitial) return 0;
@@ -5747,12 +5749,12 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   // If single equipment, all agreement payments belong to this item!
   if (items.length === 1) {
     const allAgreementPaid = agreementPayments.reduce(
-      (sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount),
+      (sum, p) => sum + getAmt(p),
       0
     );
 
     const bookedAdvance = agreementPayments.filter(isAdvancePayment).reduce(
-      (sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount),
+      (sum, p) => sum + getAmt(p),
       0
     );
     const unbookedAdvance = Math.max(0, initialTotal - bookedAdvance);
@@ -5822,7 +5824,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
       (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
       0
     );
-    const amt = cleanNum(p.amount) + cleanNum(p.discount);
+    const amt = getAmt(p);
 
     // If p.equipmentId matches the agreement header's equipmentId without specific serial in notes,
     // or if the amount paid exceeds the rent of the matched items, it is an agreement-wide payment!
@@ -5837,7 +5839,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   let currentItemPaid = 0;
 
   for (const p of agreementPayments) {
-    const amt = cleanNum(p.amount) + cleanNum(p.discount);
+    const amt = getAmt(p);
     if (amt <= 0) continue;
 
     // Find which equipment items are matched by this payment
@@ -5879,7 +5881,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
 
   // Include initial advance if not already booked in payment records
   const bookedAdvance = agreementPayments.filter(isAdvancePayment).reduce(
-    (sum, p) => sum + cleanNum(p.amount) + cleanNum(p.discount),
+    (sum, p) => sum + getAmt(p),
     0
   );
   const unbookedAdvance = Math.max(0, initialTotal - bookedAdvance);
@@ -5889,7 +5891,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
     // Check how much advance was already allocated to currentItem
     let currentItemAdvancePaid = 0;
     for (const p of agreementPayments.filter(isAdvancePayment)) {
-      const amt = cleanNum(p.amount) + cleanNum(p.discount);
+      const amt = getAmt(p);
       if (amt <= 0) continue;
       const matchedItems = getPaymentTargetItems(p);
       if (matchedItems.length > 0) {
@@ -5919,7 +5921,7 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
       const itRent = cleanNum(it.monthlyRent || it.dailyRent || it.rentRate);
       let itAdvPaid = 0;
       for (const p of agreementPayments.filter(isAdvancePayment)) {
-        const amt = cleanNum(p.amount) + cleanNum(p.discount);
+        const amt = getAmt(p);
         if (amt <= 0) continue;
         const matched = getPaymentTargetItems(p);
         if (matched.length > 0) {
@@ -5952,6 +5954,141 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   }
 
   return currentItemPaid + initialPaid;
+}
+
+export function getDiscountForEquipment(rental: any, equipmentId: string, paymentsList: any[]): number {
+  if (!rental || !equipmentId) return 0;
+  
+  const items: any[] = rental.equipmentItems && rental.equipmentItems.length > 0
+    ? rental.equipmentItems
+    : [
+        {
+          equipmentId: rental.equipmentId,
+          serial: rental.serial,
+          monthlyRent: cleanNum(rental.monthlyRent),
+          dailyRent: cleanNum(rental.dailyRent),
+          rentRate: cleanNum(rental.rentRate),
+          deposit: cleanNum(rental.deposit),
+          returned: false
+        }
+      ];
+  
+  const currentItem = items.find((it: any) => it.equipmentId === equipmentId);
+  if (!currentItem) return 0;
+
+  const currentItemRent = cleanNum(currentItem.monthlyRent || currentItem.dailyRent || currentItem.rentRate);
+  
+  const cleanId = (val: any) => String(val || "").trim().toUpperCase().replace(/^AGR-/i, "");
+
+  const isRentType = (type: any) => {
+    const s = String(type || "").toLowerCase();
+    return s.includes("rent") || s.includes("initial");
+  };
+  const isMatchAgreement = (p: any) => {
+    const pAgr = cleanId(p.agreement || p.rentalId || p.agreementId);
+    const rAgr = cleanId(rental.id);
+    if (!pAgr || !rAgr) return false;
+    return pAgr === rAgr;
+  };
+  const isPaidStatus = (status: any) => !status || status === "Paid" || status === "Completed";
+
+  const agreementPayments = paymentsList.filter(
+    (p) => isMatchAgreement(p) && isPaidStatus(p.status) && isRentType(p.type)
+  );
+
+  if (items.length === 1) {
+    return agreementPayments.reduce((sum, p) => sum + cleanNum(p.discount), 0);
+  }
+
+  const matchesItem = (p: any, item: any) => {
+    if (!p || !item) return false;
+    const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
+    const targetSerial = String(item.serial || "").trim().toLowerCase();
+    const targetName = String(item.name || item.equipment || "").trim().toLowerCase();
+    const targetLabel = String(item.label || "").trim().toLowerCase();
+    const targetModel = String(item.model || "").trim().toLowerCase();
+
+    if (p.equipmentId) {
+      const pEqIds = String(p.equipmentId).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (targetEqId && pEqIds.includes(targetEqId)) return true;
+      if (targetName && pEqIds.some((id) => id === targetName || targetName.includes(id))) return true;
+    }
+
+    if (p.notes) {
+      const notes = String(p.notes).toLowerCase();
+      if (targetSerial && targetSerial.length >= 3 && notes.includes(targetSerial)) return true;
+      if (targetEqId && targetEqId.length >= 3 && notes.includes(targetEqId)) return true;
+      if (targetName && targetName.length >= 3 && notes.includes(targetName)) return true;
+      if (targetLabel && targetLabel.length >= 3 && notes.includes(targetLabel)) return true;
+      if (targetModel && targetModel.length >= 3 && targetModel !== "standard" && notes.includes(targetModel)) return true;
+    }
+
+    return false;
+  };
+
+  const getPaymentTargetItems = (p: any): any[] => {
+    const serialMatched = items.filter((it: any) => {
+      const s = String(it.serial || "").trim().toLowerCase();
+      return s.length >= 3 && String(p.notes || "").toLowerCase().includes(s);
+    });
+    if (serialMatched.length > 0) return serialMatched;
+
+    const matched = items.filter((it: any) => matchesItem(p, it));
+    if (matched.length === 0 || matched.length === items.length) return matched;
+
+    const pEqId = String(p.equipmentId || "").trim().toLowerCase();
+    const rEqId = String(rental.equipmentId || "").trim().toLowerCase();
+    const coveredRentSum = matched.reduce(
+      (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+      0
+    );
+    const amt = cleanNum(p.amount) + cleanNum(p.discount);
+
+    if (pEqId === rEqId || (coveredRentSum > 0 && amt > coveredRentSum)) {
+      return [];
+    }
+
+    return matched;
+  };
+
+  let currentItemDiscount = 0;
+  for (const p of agreementPayments) {
+    const discAmt = cleanNum(p.discount);
+    if (discAmt <= 0) continue;
+
+    const matchedItems = getPaymentTargetItems(p);
+    if (matchedItems.length > 0) {
+      if (matchedItems.some((it: any) => it.equipmentId === equipmentId)) {
+        const coveredRentSum = matchedItems.reduce(
+          (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+          0
+        );
+        const itemRatio = coveredRentSum > 0 ? currentItemRent / coveredRentSum : 1 / matchedItems.length;
+        currentItemDiscount += Math.round(discAmt * itemRatio);
+      }
+    } else {
+      const pDate = parseLocalDate(p.date);
+      const activeItemsOnDate = items.filter((it: any) => {
+        if (!it.returned) return true;
+        if (!it.returnedDate) return true;
+        const retD = parseLocalDate(it.returnedDate);
+        if (isNaN(retD.getTime()) || isNaN(pDate.getTime())) return true;
+        return pDate <= retD;
+      });
+
+      const activeTargetItems = activeItemsOnDate.length > 0 ? activeItemsOnDate : items;
+      if (activeTargetItems.some((it: any) => it.equipmentId === equipmentId)) {
+        const activeRentSum = activeTargetItems.reduce(
+          (sum: number, it: any) => sum + cleanNum(it.monthlyRent || it.dailyRent || it.rentRate),
+          0
+        );
+        const itemRatio = activeRentSum > 0 ? currentItemRent / activeRentSum : 1 / activeTargetItems.length;
+        currentItemDiscount += Math.round(discAmt * itemRatio);
+      }
+    }
+  }
+
+  return currentItemDiscount;
 }
 
 /** Real outstanding rent across all unreturned equipment items on a rental,

@@ -55,6 +55,7 @@ import {
   cleanNum,
   getRentPaidForAgreement,
   getPaidForEquipment,
+  getDiscountForEquipment,
   getPayments,
   getPricingTableRate,
   useDatabaseTrigger,
@@ -1470,10 +1471,17 @@ function ReturnsPage() {
         }, 0);
 
         const rentPaidForReturningItems = returningItems.reduce((sum: number, item: any) => {
-          return sum + getPaidForEquipment(selectedRental, item.equipmentId, getPayments());
+          return sum + getPaidForEquipment(selectedRental, item.equipmentId, getPayments(), false, false);
         }, 0);
 
-        const calculatedPendingBalance = Math.max(0, calculatedFinalRent - rentPaidForReturningItems);
+        const rentalDiscountForReturningItems = returningItems.reduce((sum: number, item: any) => {
+          return sum + getDiscountForEquipment(selectedRental, item.equipmentId, getPayments());
+        }, 0);
+
+        const calculatedPendingBalance = Math.max(
+          0,
+          calculatedFinalRent - (rentPaidForReturningItems + rentalDiscountForReturningItems)
+        );
 
         setFinalRent(calculatedFinalRent.toString());
         setPendingBalance(calculatedPendingBalance.toString());
@@ -1545,7 +1553,11 @@ function ReturnsPage() {
   //   Discount         = applied to that due, capped at it
   //   Settlement       = deposit held + rent overpaid - due remaining
   //                      (positive = refund to customer, negative = collect)
-  const remainingRentDues = Math.max(0, fRent - paidAmt);
+  const totalReturningDiscount = returningItems.reduce((sum: number, item: any) => {
+    return sum + getDiscountForEquipment(selectedRental, item.equipmentId, getPayments());
+  }, 0);
+
+  const remainingRentDues = Math.max(0, fRent - (paidAmt + totalReturningDiscount));
   const rentOverpaid = Math.max(0, paidAmt - fRent);
   const totalDueBeforeDiscount = remainingRentDues + dmg + unpaidAccessoryTotal;
   const effectiveDiscount = Math.min(Math.max(0, disc), totalDueBeforeDiscount);
@@ -2151,7 +2163,7 @@ function ReturnsPage() {
                               setFinalRent(val);
                               const fRentNum = cleanNum(val);
                               const paidNum = cleanNum(totalPaidAmount);
-                              setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
+                              setPendingBalance(Math.max(0, fRentNum - (paidNum + totalReturningDiscount)).toString());
                             }}
                           />
                         </div>
@@ -2159,8 +2171,13 @@ function ReturnsPage() {
 
                       {/* Total Rent Paid */}
                       <div className="bg-background rounded-lg p-2 sm:p-2.5 border border-border flex flex-col justify-between h-[72px] sm:h-[76px] min-w-0">
-                        <div className="h-6 sm:h-7 flex items-center">
+                        <div className="h-6 sm:h-7 flex items-center justify-between">
                           <Label className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Rent Paid</Label>
+                          {totalReturningDiscount > 0 && (
+                            <span className="text-[8px] sm:text-[8.5px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 truncate" title="Discount applied on past rent payments">
+                              Disc: ₹{totalReturningDiscount.toLocaleString("en-IN")}
+                            </span>
+                          )}
                         </div>
                         <div className="relative">
                           <span className="absolute left-2 sm:left-2.5 top-2 text-[10px] sm:text-[11px] font-bold text-muted-foreground">₹</span>
@@ -2173,7 +2190,7 @@ function ReturnsPage() {
                               setTotalPaidAmount(val);
                               const fRentNum = cleanNum(finalRent);
                               const paidNum = cleanNum(val);
-                              setPendingBalance(Math.max(0, fRentNum - paidNum).toString());
+                              setPendingBalance(Math.max(0, fRentNum - (paidNum + totalReturningDiscount)).toString());
                             }}
                           />
                         </div>
@@ -2310,6 +2327,16 @@ function ReturnsPage() {
                                 </TableRow>
                               )}
 
+                              {totalReturningDiscount > 0 && (
+                                <TableRow className="hover:bg-muted/5 transition-colors bg-emerald-50/15 h-8">
+                                  <TableCell className="font-semibold text-[11.5px] text-emerald-700 pl-4 py-1">Rental Discount</TableCell>
+                                  <TableCell className="text-[10.5px] text-emerald-600 py-1">Discount granted on past rent payments</TableCell>
+                                  <TableCell className="text-right font-bold text-emerald-600 text-[11.5px] pr-4 py-1">
+                                    ₹{totalReturningDiscount.toLocaleString("en-IN")}
+                                  </TableCell>
+                                </TableRow>
+                              )}
+
                               <TableRow className="hover:bg-muted/5 transition-colors h-8">
                                 <TableCell className="font-semibold text-[11.5px] text-foreground pl-4 py-1">Return Discount</TableCell>
                                 <TableCell className="text-[10.5px] text-muted-foreground py-1">Discount applied on return</TableCell>
@@ -2374,6 +2401,18 @@ function ReturnsPage() {
                               </div>
                               <p className="text-right font-bold text-blue-600 text-[11.5px] shrink-0">
                                 + ₹{rentOverpaid.toLocaleString("en-IN")}
+                              </p>
+                            </div>
+                          )}
+
+                          {totalReturningDiscount > 0 && (
+                            <div className="flex items-start justify-between gap-3 px-3.5 py-2.5 bg-emerald-50/15">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-[11.5px] text-emerald-700">Rental Discount</p>
+                                <p className="text-[10px] text-emerald-600 mt-0.5">Discount granted on past rent payments</p>
+                              </div>
+                              <p className="text-right font-bold text-emerald-600 text-[11.5px] shrink-0">
+                                ₹{totalReturningDiscount.toLocaleString("en-IN")}
                               </p>
                             </div>
                           )}
@@ -2858,11 +2897,16 @@ function ReturnsPage() {
 
                   {/* Payment Ledger card (compact scrollable) */}
                   <Card className="border border-border/50 bg-card/65 shadow-soft flex flex-col overflow-hidden max-h-[180px]">
-                    <div className="p-3 border-b border-border/40 pb-2 flex items-center gap-1.5 bg-muted/10 shrink-0">
-                      <Receipt className="h-3.5 w-3.5 text-primary" />
-                      <div>
+                    <div className="p-3 border-b border-border/40 pb-2 flex items-center justify-between bg-muted/10 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <Receipt className="h-3.5 w-3.5 text-primary" />
                         <h4 className="text-[11.5px] font-bold text-foreground">Payment Ledger</h4>
                       </div>
+                      {totalReturningDiscount > 0 && (
+                        <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Discount: ₹{totalReturningDiscount.toLocaleString("en-IN")}
+                        </span>
+                      )}
                     </div>
                     <div className="overflow-y-auto flex-1 bg-background text-[11px]">
                       {agreementPayments.length === 0 ? (
@@ -2873,10 +2917,11 @@ function ReturnsPage() {
                         <div className="divide-y divide-border/40">
                           {agreementPayments.map((p) => {
                             const isDeposit = p.type?.toLowerCase().includes("deposit");
+                            const pDiscount = cleanNum(p.discount);
                             return (
                               <div key={p.id} className="p-2 flex items-start justify-between gap-3 hover:bg-muted/10 transition-colors">
                                 <div className="space-y-0.5 min-w-0">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className={`px-1 py-0.2 rounded text-[8.5px] font-black ${
                                       isDeposit 
                                         ? "bg-blue-50 text-blue-700 border border-blue-200" 
@@ -2886,12 +2931,24 @@ function ReturnsPage() {
                                     </span>
                                     <span className="font-mono text-[9.5px] font-bold text-muted-foreground/70">{p.id}</span>
                                     <span className="text-[9.5px] text-muted-foreground/60">{formatDateDDMMYYYY(p.date)}</span>
+                                    {pDiscount > 0 && (
+                                      <span className="px-1 py-0.2 rounded text-[8.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                        Discount ₹{pDiscount.toLocaleString("en-IN")}
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-[10px] text-muted-foreground truncate">{p.notes || "Rent payment"}</p>
                                 </div>
-                                <span className="font-bold text-foreground text-[11.5px]">
-                                  ₹{cleanNum(p.amount).toLocaleString("en-IN")}
-                                </span>
+                                <div className="text-right shrink-0">
+                                  <span className="font-bold text-foreground text-[11.5px] block">
+                                    ₹{cleanNum(p.amount).toLocaleString("en-IN")}
+                                  </span>
+                                  {pDiscount > 0 && (
+                                    <span className="text-[9px] font-semibold text-emerald-600 block">
+                                      Disc. ₹{pDiscount.toLocaleString("en-IN")}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
