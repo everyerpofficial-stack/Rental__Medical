@@ -2095,6 +2095,8 @@ export function consolidatePayments(payments: any[]): any[] {
       // BUGFIX: Never merge payments that belong to different agreements, even if same customer/date.
       // Merging across agreements caused all payments for a customer made on the same day to be
       // collapsed into the first agreement, leaving other agreements with ₹0 paid on the Rent Dues page.
+      const isBothAgreementSet = !!(p.agreement && p2.agreement);
+      const hasDifferentAgreement = isBothAgreementSet && !isSameAgreement;
       const matchesCriteria = isSameAgreement
         ? (isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus)
         : (!hasDifferentAgreement && isSameCustomer && isSameDate && isSameType && isSameMode && isSameCollector && isSameStatus && isCloseId);
