@@ -577,7 +577,17 @@ function ReportsPage() {
 
           // 1. Completed historical return cycles to owner (if any)
           if (item.ownerHistory && Array.isArray(item.ownerHistory)) {
-            const returnEvents = item.ownerHistory.filter((h: any) => h.action === "returned");
+            const seenRetKeys = new Set<string>();
+            const returnEvents = item.ownerHistory.filter((h: any) => {
+              if (h.action !== "returned") return false;
+              const rDate = String(h.date || "").trim();
+              const rStart = String(h.startDate || item.purchaseDate || "").trim();
+              const key = `${rDate}:::${rStart}`;
+              if (seenRetKeys.has(key)) return false;
+              seenRetKeys.add(key);
+              return true;
+            });
+
             returnEvents.forEach((retHist: any) => {
               rows.push({
                 owner: ownerName,
@@ -640,7 +650,31 @@ function ReportsPage() {
             });
           }
         });
-        list = rows;
+
+        // Deduplicate rows across all equipment: a single equipment asset (by serial or equipmentId)
+        // under the same owner cannot have duplicate entries for the exact same start & return period.
+        const uniqueRows: any[] = [];
+        const seenStatementKeys = new Set<string>();
+
+        rows.forEach((r) => {
+          const normOwner = String(r.owner || "").trim().toLowerCase();
+          const normSerial = String(r.serial || "").trim().toLowerCase();
+          const normEqId = String(r.equipmentId || "").trim().toLowerCase();
+          const normStart = r.start && r.start !== "—" ? formatDateDDMMYYYY(r.start) : "—";
+          const normReturn = r.returnDate && r.returnDate !== "—" ? formatDateDDMMYYYY(r.returnDate) : "—";
+
+          const isMeaningfulSerial = normSerial && normSerial !== "no serial" && normSerial !== "—";
+          const machineIdentifier = isMeaningfulSerial ? `ser:${normSerial}` : `id:${normEqId}`;
+
+          const key = `${normOwner}:::${machineIdentifier}:::${normStart}:::${normReturn}`;
+          if (seenStatementKeys.has(key)) {
+            return;
+          }
+          seenStatementKeys.add(key);
+          uniqueRows.push(r);
+        });
+
+        list = uniqueRows;
         break;
       }
       default:

@@ -545,8 +545,8 @@ export function getRentalEquipmentDetailedItems(
       equipmentId: rental.equipmentId || "",
       label: label === "Equipment" && !rental.equipment ? "Medical Equipment" : label,
       name: rental.equipment || "Medical Equipment",
-      model: rental.model,
-      serial: rental.serial,
+      model: rental.model != null ? String(rental.model) : undefined,
+      serial: rental.serial != null ? String(rental.serial) : undefined,
       owner: singleEq?.owner || rental.owner,
       returned: isReturned,
       returnedDate: retDateRaw ? String(retDateRaw) : undefined,
@@ -556,8 +556,8 @@ export function getRentalEquipmentDetailedItems(
   return items.map((item: any) => {
     const eq = byId.get(item.equipmentId);
     const name = eq?.name || item.equipment || item.name || eq?.category || rental.equipment;
-    const model = eq?.model || item.model;
-    const serial = item.serial || eq?.serial;
+    const model = (eq?.model ?? item.model) != null ? String(eq?.model ?? item.model) : undefined;
+    const serial = (item.serial ?? eq?.serial) != null ? String(item.serial ?? eq?.serial) : undefined;
 
     const label = formatEquipmentLabel({ name, model, serial }, includeSerial);
 
@@ -1124,8 +1124,43 @@ export function getEquipment() {
   
   const rentalsList = getRentals();
   let changed = false;
+
+  // 1. Deduplicate equipment items by ID to heal any Google Sheets / sync duplicates
+  const seenEqIds = new Set<string>();
+  const dedupedList: any[] = [];
+  for (const item of list) {
+    const id = String(item?.id || "").trim();
+    if (id && seenEqIds.has(id)) {
+      changed = true;
+      continue;
+    }
+    if (id) seenEqIds.add(id);
+    dedupedList.push(item);
+  }
   
-  const normalizedList = list.map((item: any) => {
+  const normalizedList = dedupedList.map((item: any) => {
+    // 2. Self-heal duplicate entries inside item.ownerHistory
+    if (item.ownerHistory && Array.isArray(item.ownerHistory)) {
+      const seenHistKeys = new Set<string>();
+      const dedupedHistory: any[] = [];
+      for (const h of item.ownerHistory) {
+        const action = String(h?.action || "").trim();
+        const hDate = String(h?.date || "").trim();
+        const hStart = String(h?.startDate || "").trim();
+        const key = `${action}:::${hDate}:::${hStart}`;
+        if (!seenHistKeys.has(key)) {
+          seenHistKeys.add(key);
+          dedupedHistory.push(h);
+        } else {
+          changed = true;
+        }
+      }
+      if (dedupedHistory.length !== item.ownerHistory.length) {
+        item.ownerHistory = dedupedHistory;
+        changed = true;
+      }
+    }
+
     // Check if this equipment item is currently in an active or overdue rental
     const isCurrentlyRented = rentalsList.some((r: any) => {
       if (r.status !== "Active" && r.status !== "Overdue") return false;

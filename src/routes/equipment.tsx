@@ -282,6 +282,8 @@ function OwnerActionDialog({
 
   const prevOpenRef = useRef(false);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Reset dialog state only when initially opened (preserves user-selected date while open)
   useEffect(() => {
     if (open && !prevOpenRef.current) {
@@ -289,11 +291,17 @@ function OwnerActionDialog({
       setDailyRate(eq.ownerDailyRate?.toString() || "");
       setAgreementNumber(eq.agreementNumber || "");
       setNotes("");
+      setIsSubmitting(false);
+    }
+    if (!open) {
+      setIsSubmitting(false);
     }
     prevOpenRef.current = open;
   }, [open, eq.ownerDailyRate, eq.agreementNumber]);
 
   const handleSave = () => {
+    if (isSubmitting) return;
+
     if (!date) {
       toast.error("Please select a date.");
       return;
@@ -303,6 +311,8 @@ function OwnerActionDialog({
       toast.error("Rate cannot be negative.");
       return;
     }
+
+    setIsSubmitting(true);
 
     const histEntry: any = {
       date,
@@ -318,7 +328,20 @@ function OwnerActionDialog({
       histEntry.totalCost = calculation.totalCost;
     }
 
-    const updatedHistory = [...(eq.ownerHistory || []), histEntry];
+    // Deduplicate history entry: if identical action & date already exists, update it rather than duplicating
+    const existingHistory = Array.isArray(eq.ownerHistory) ? eq.ownerHistory : [];
+    const isDuplicate = existingHistory.some((h: any) =>
+      h.action === histEntry.action &&
+      h.date === histEntry.date &&
+      (actionType !== "return" || h.startDate === histEntry.startDate)
+    );
+    const updatedHistory = isDuplicate
+      ? existingHistory.map((h: any) =>
+          (h.action === histEntry.action && h.date === histEntry.date && (actionType !== "return" || h.startDate === histEntry.startDate))
+            ? { ...h, ...histEntry }
+            : h
+        )
+      : [...existingHistory, histEntry];
 
     const savedEq = {
       ...eq,
@@ -332,6 +355,7 @@ function OwnerActionDialog({
     try {
       saveEquipment(savedEq);
     } catch (err) {
+      setIsSubmitting(false);
       // setStorageItem re-throws on QuotaExceededError; surface it instead of
       // letting the throw escape and leaving the dialog looking inert.
       toast.error("Could not save this equipment change — nothing was recorded.", {
@@ -346,6 +370,7 @@ function OwnerActionDialog({
         ? `"${eq.name}" returned to owner. Total payout calculated: ₹${calculation?.totalCost?.toLocaleString("en-IN")}`
         : `"${eq.name}" received from owner. Daily rate set to ₹${rateVal}/day.`
     );
+    setIsSubmitting(false);
     setOpen(false);
     if (onSave) onSave();
   };
@@ -468,9 +493,10 @@ function OwnerActionDialog({
           <Button
             type="button"
             onClick={handleSave}
+            disabled={isSubmitting}
             className="h-10 px-5 bg-primary text-primary-foreground hover:bg-primary/95 rounded-lg text-[13px] font-medium cursor-pointer border-0 shadow-sm"
           >
-            {actionType === "return" ? "Return to Owner" : "Receive & Mark Available"}
+            {isSubmitting ? "Saving..." : (actionType === "return" ? "Return to Owner" : "Receive & Mark Available")}
           </Button>
         </DialogFooter>
       </DialogContent>

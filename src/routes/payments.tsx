@@ -929,18 +929,21 @@ function AgreementPaymentHistoryModal({
   const equipmentCleanName = eqModelItems.length > 0
     ? eqModelItems.map(it => it.name).filter(Boolean).join(", ")
     : (equipmentName || "—");
-  const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
-  const serialStr = eqModelItems.map(it => it.serial).filter(Boolean).join(", ") || (rental?.serial && rental.serial.toLowerCase() !== "standard" ? rental.serial.trim() : "");
+  const modelStr = eqModelItems.map(it => it.model ? String(it.model).trim() : "").filter(Boolean).join(", ") || (rental?.model && String(rental.model).trim().toLowerCase() !== "standard" ? String(rental.model).trim() : "");
+  const serialStr = eqModelItems.map(it => it.serial ? String(it.serial).trim() : "").filter(Boolean).join(", ") || (rental?.serial && String(rental.serial).trim().toLowerCase() !== "standard" ? String(rental.serial).trim() : "");
 
   // Detailed string for Equipment + Model + Serial Numbers
   const detailedEqList = eqModelItems.length > 0
     ? eqModelItems.map(it => {
-        const parts = [it.name];
-        if (it.model && it.model.toLowerCase() !== "standard" && it.model.toLowerCase() !== it.name.toLowerCase()) {
-          parts.push(`(${it.model})`);
+        const parts = [it.name || "Equipment"];
+        const itModel = it.model != null ? String(it.model).trim() : "";
+        const itName = it.name != null ? String(it.name).trim() : "";
+        if (itModel && itModel.toLowerCase() !== "standard" && itModel.toLowerCase() !== itName.toLowerCase()) {
+          parts.push(`(${itModel})`);
         }
-        if (it.serial && it.serial.toLowerCase() !== "standard") {
-          parts.push(`· S/N: ${it.serial}`);
+        const itSerial = it.serial != null ? String(it.serial).trim() : "";
+        if (itSerial && itSerial.toLowerCase() !== "standard") {
+          parts.push(`· S/N: ${itSerial}`);
         }
         return parts.join(" ");
       })
@@ -1051,10 +1054,14 @@ function AgreementPaymentHistoryModal({
   }
 
   const displayEquipments: { name: string; model?: string }[] = eqModelItems.length > 0
-    ? eqModelItems.map(it => ({
-        name: it.name || equipmentName || "Medical Equipment",
-        model: (it.model && it.model.toLowerCase() !== "standard" && it.model.toLowerCase() !== it.name.toLowerCase()) ? it.model : undefined,
-      }))
+    ? eqModelItems.map(it => {
+        const itModel = it.model != null ? String(it.model).trim() : "";
+        const itName = it.name != null ? String(it.name).trim() : "";
+        return {
+          name: it.name || equipmentName || "Medical Equipment",
+          model: (itModel && itModel.toLowerCase() !== "standard" && itModel.toLowerCase() !== itName.toLowerCase()) ? itModel : undefined,
+        };
+      })
     : [{ name: equipmentName, model: modelStr || undefined }];
 
 

@@ -583,6 +583,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [draftSaveStatus, setDraftSaveStatus] = useState<string>("");
   const isInitializedRef = useRef(false);
   const latestDraftStateRef = useRef<any>(null);
+  const isSavedRef = useRef(false);
 
   const restoreDraftData = (draft: any) => {
     if (!draft) return;
@@ -693,6 +694,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
 
   const handleDiscardDraft = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
+    isSavedRef.current = true;
+    latestDraftStateRef.current = null;
     localStorage.removeItem("medirent_new_agreement_draft");
     setHasDraft(false);
     setDraftSavedAt("");
@@ -858,14 +861,17 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     thumbprintUrl, capturedLocation, deliveryPhotos, signedDocUrl, signedDocName
   ]);
 
-  latestDraftStateRef.current = currentFormData;
+  if (!isSavedRef.current) {
+    latestDraftStateRef.current = currentFormData;
+  }
 
   // Continuous auto-save draft effect
   useEffect(() => {
-    if (rental || !isInitializedRef.current) return;
+    if (rental || !isInitializedRef.current || isSavedRef.current) return;
     if (!isDraftNotEmpty(currentFormData)) return;
 
     const timer = setTimeout(() => {
+      if (isSavedRef.current) return;
       const now = new Date();
       const draftToSave = {
         ...currentFormData,
@@ -883,7 +889,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   // Synchronous flush on unmount
   useEffect(() => {
     return () => {
-      if (rental) return;
+      if (rental || isSavedRef.current) return;
       if (latestDraftStateRef.current && isDraftNotEmpty(latestDraftStateRef.current)) {
         saveDraftToStorage({
           ...latestDraftStateRef.current,
@@ -897,6 +903,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   useEffect(() => {
     if (rental) return;
     const handleBeforeUnload = () => {
+      if (isSavedRef.current) return;
       if (latestDraftStateRef.current && isDraftNotEmpty(latestDraftStateRef.current)) {
         saveDraftToStorage({
           ...latestDraftStateRef.current,
@@ -924,6 +931,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     prevOpenRef.current = open;
     if (open && justOpened) {
       setIsSubmitting(false);
+      isSavedRef.current = false;
 
       // Auto-restore unsaved draft for new rental agreements
       if (!rental) {
@@ -949,22 +957,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setHasDraft(false);
       setDraftSavedAt("");
       setDraftSaveStatus("");
-      setAgreementId(rental?.id || peekNextAgreementNumber());
-      setAgreementDate(rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
-      setEndDate(rental?.status === "Completed" && rental?.end ? getLocalYYYYMMDD(rental.end) : "");
-      setIsNewCustomer(false);
-      setSelectedCustomerId(rental?.customerId);
-      setSignatureUrl(rental?.signatureUrl || null);
-      setThumbprintUrl(rental?.thumbprintUrl || null);
-      setDeliveryPhotos([]);
-      setSignedDocUrl(null);
-      setSignedDocName("");
-      setIsDeliveryPhotoChanged(false);
-      setIsSignedDocChanged(false);
-      setIsLocationChanged(false);
-      setInitialDeliveryPhotoIds([]);
-      setExistingSignedDocId(null);
-      setExistingLocationDocId(null);
+      resetFormToFresh();
 
       if (rental) {
         try {
@@ -2393,10 +2386,13 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     }
 
     if (!rental) {
+      isSavedRef.current = true;
+      latestDraftStateRef.current = null;
       localStorage.removeItem("medirent_new_agreement_draft");
       setHasDraft(false);
       setDraftSavedAt("");
       setDraftSaveStatus("");
+      resetFormToFresh();
     }
 
     toast.success(rental ? `Agreement details for "${agreementId}" updated successfully.` : "New rental agreement saved successfully.");
