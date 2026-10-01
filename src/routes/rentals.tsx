@@ -3993,7 +3993,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   customerId: "",
                   equipmentId: selectedEquipments.map(item => item.equipmentId).join(", "),
                   start: agreementDate,
-                  end: rental?.status === "Completed" ? (rental.end || endDate || "") : "",
+                  end: "",
                   dailyRent: selectedEquipments.reduce((sum, item) => sum + (Number(item.dailyRent) || 0), 0),
                   deliveryCharges: Number(deliveryCharges) || 0,
                   removalCharges: Number(removalCharges) || 0,
