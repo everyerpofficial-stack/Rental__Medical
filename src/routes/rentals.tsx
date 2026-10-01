@@ -391,7 +391,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   // For edits: keep existing ID.
   const [agreementId, setAgreementId] = useState(rental?.id || peekNextAgreementNumber());
   const [agreementDate, setAgreementDate] = useState(rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
-  const [endDate, setEndDate] = useState(rental?.end ? getLocalYYYYMMDD(rental.end) : "");
+  const [endDate, setEndDate] = useState(rental?.status === "Completed" && rental?.end ? getLocalYYYYMMDD(rental.end) : "");
 
   const [isNewCustomer, setIsNewCustomer] = useState(false);
   // ITEM-15: see phoneMatches below - real-time duplicate-contact detection.
@@ -951,7 +951,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setDraftSaveStatus("");
       setAgreementId(rental?.id || peekNextAgreementNumber());
       setAgreementDate(rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
-      setEndDate(rental?.end ? getLocalYYYYMMDD(rental.end) : "");
+      setEndDate(rental?.status === "Completed" && rental?.end ? getLocalYYYYMMDD(rental.end) : "");
       setIsNewCustomer(false);
       setSelectedCustomerId(rental?.customerId);
       setSignatureUrl(rental?.signatureUrl || null);
@@ -1962,7 +1962,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       serial: compiledSerials,
       equipmentId: compiledIds,
       start: agreementDate,
-      end: endDate,
+      end: rental?.status === "Completed" ? (rental.end || endDate || "") : "",
       rentCycle: primaryCycle,
       monthlyRent: totalMonthlyRent,
       dailyRent: totalDailyRent,
@@ -3993,7 +3993,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                   customerId: "",
                   equipmentId: selectedEquipments.map(item => item.equipmentId).join(", "),
                   start: agreementDate,
-                  end: endDate,
+                  end: rental?.status === "Completed" ? (rental.end || endDate || "") : "",
                   dailyRent: selectedEquipments.reduce((sum, item) => sum + (Number(item.dailyRent) || 0), 0),
                   deliveryCharges: Number(deliveryCharges) || 0,
                   removalCharges: Number(removalCharges) || 0,
@@ -6003,6 +6003,13 @@ function RentalsPage() {
                       ? `₹${(r.dailyRent ?? 0).toLocaleString("en-IN")}/day`
                       : `₹${(r.monthlyRent ?? 0).toLocaleString("en-IN")}/mo`;
 
+                    const items = getRentalEquipmentDetailedItems(r, equipmentMasterList, returnsList, false);
+                    const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
+                    const allOngoing = !isCompleted && items.every(it => !it.returned);
+                    const returnDateStr = allOngoing
+                      ? "Ongoing"
+                      : (r.end ? formatDateDDMMYYYY(r.end) : (isCompleted ? "Completed" : "Ongoing"));
+
                     return [
                       `${r.customer} (${r.id})`,
                       fullAddress || "—",
@@ -6010,7 +6017,7 @@ function RentalsPage() {
                       formatDateDDMMYYYY(r.start),
                       rentRateDisplay,
                       (r.deposit ?? 0).toString(),
-                      r.end ? formatDateDDMMYYYY(r.end) : "Ongoing",
+                      returnDateStr,
                       r.status
                     ];
                   });
@@ -6416,36 +6423,36 @@ function RentalsPage() {
                         const isCompleted = r.status === "Completed" || (items.length > 0 && items.every(it => it.returned));
                         if (items.length <= 1) {
                           const single = items[0];
-                          if (single?.returned) {
-                            const retDate = single.returnedDate || r.end;
+                          if (single?.returned || isCompleted) {
+                            const retDate = single?.returnedDate || r.end;
                             return (
                               <span className="text-[12px] font-semibold text-rose-600 whitespace-nowrap">
-                                {retDate ? formatDateDDMMYY(retDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed")}
+                                {retDate ? formatDateDDMMYY(retDate) : "Completed"}
                               </span>
                             );
                           }
                           return (
                             <span className="text-[12px] font-semibold text-emerald-600 whitespace-nowrap">
-                              {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
+                              Ongoing
                             </span>
                           );
                         }
 
                         // If all equipments are ongoing, show single Ongoing in green
-                        const allOngoing = items.every(it => !it.returned);
+                        const allOngoing = !isCompleted && items.every(it => !it.returned);
                         if (allOngoing) {
                           return (
                             <span className="text-[12px] font-semibold text-emerald-600 whitespace-nowrap">
-                              {r.end ? formatDateDDMMYY(r.end) : "Ongoing"}
+                              Ongoing
                             </span>
                           );
                         }
 
                         // If all equipments are returned and have the same date, show single return date in red
-                        const allReturned = items.every(it => it.returned);
+                        const allReturned = isCompleted || items.every(it => it.returned);
                         if (allReturned) {
                           const dates = items.map(it => it.returnedDate ? formatDateDDMMYY(it.returnedDate) : (r.end ? formatDateDDMMYY(r.end) : "Completed"));
-                          const firstDate = dates[0];
+                          const firstDate = dates[0] || "Completed";
                           if (dates.every(d => d === firstDate)) {
                             return (
                               <span className="text-[12px] font-semibold text-rose-600 whitespace-nowrap">

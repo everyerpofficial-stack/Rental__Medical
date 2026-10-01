@@ -40,6 +40,24 @@ if (isBrowser) {
         }
       }
     }
+
+    const rawRentals = localStorage.getItem("medirent-rentals");
+    if (rawRentals && rawRentals.includes("AGR-2026-0400")) {
+      const parsedRentals = JSON.parse(rawRentals);
+      if (Array.isArray(parsedRentals)) {
+        let rChanged = false;
+        const fixedRentals = parsedRentals.map((r: any) => {
+          if (r && r.id === "AGR-2026-0400" && r.end) {
+            rChanged = true;
+            return { ...r, end: "" };
+          }
+          return r;
+        });
+        if (rChanged) {
+          localStorage.setItem("medirent-rentals", JSON.stringify(fixedRentals));
+        }
+      }
+    }
   } catch {}
 }
 
@@ -1890,15 +1908,27 @@ export function getRentals() {
 
   const statusCorrections: any[] = [];
   const statusCorrectedList = finalHealedList.map((r: any) => {
-    if (r.status !== "Active" && r.status !== "Overdue") return r;
+    let rentalObj = r;
 
-    const agreementPayments = paymentsByAgreement.get(r.id) || [];
-    const outstanding = getRentalOutstandingBalance(r, agreementPayments);
+    // Self-healing: active/unreturned rentals should not have an end/return date
+    if (rentalObj.status !== "Completed" && rentalObj.status !== "Cancelled") {
+      const allNotReturned = !rentalObj.equipmentItems || rentalObj.equipmentItems.length === 0 || rentalObj.equipmentItems.every((it: any) => !it.returned);
+      if (allNotReturned && rentalObj.end) {
+        changed = true;
+        rentalObj = { ...rentalObj, end: "" };
+        statusCorrections.push(rentalObj);
+      }
+    }
+
+    if (rentalObj.status !== "Active" && rentalObj.status !== "Overdue") return rentalObj;
+
+    const agreementPayments = paymentsByAgreement.get(rentalObj.id) || [];
+    const outstanding = getRentalOutstandingBalance(rentalObj, agreementPayments);
     const newStatus = outstanding > 0 ? "Overdue" : "Active";
-    if (newStatus === r.status) return r;
+    if (newStatus === rentalObj.status) return rentalObj;
 
     changed = true;
-    const corrected = { ...r, status: newStatus };
+    const corrected = { ...rentalObj, status: newStatus };
     statusCorrections.push(corrected);
     return corrected;
   });
