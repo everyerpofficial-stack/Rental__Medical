@@ -42,19 +42,27 @@ if (isBrowser) {
     }
 
     const rawRentals = localStorage.getItem("medirent-rentals");
-    if (rawRentals && rawRentals.includes("AGR-2026-0400")) {
+    if (rawRentals && (rawRentals.includes("AGR-2026-0400") || rawRentals.includes('"end":'))) {
       const parsedRentals = JSON.parse(rawRentals);
       if (Array.isArray(parsedRentals)) {
         let rChanged = false;
         const fixedRentals = parsedRentals.map((r: any) => {
-          if (r && r.id === "AGR-2026-0400" && r.end) {
-            rChanged = true;
-            return { ...r, end: "" };
+          if (r && r.status !== "Completed" && r.status !== "Cancelled") {
+            const allNotReturned = !r.equipmentItems || r.equipmentItems.length === 0 || r.equipmentItems.every((it: any) => !it.returned);
+            if (allNotReturned && r.end) {
+              rChanged = true;
+              const fixed = { ...r, end: "" };
+              if (isGSheetsEnabled()) {
+                syncRowToSheet(SHEETS.RENTALS, fixed as unknown as Record<string, unknown>);
+              }
+              return fixed;
+            }
           }
           return r;
         });
         if (rChanged) {
           localStorage.setItem("medirent-rentals", JSON.stringify(fixedRentals));
+          _invalidateRentalsCache();
         }
       }
     }
@@ -5547,6 +5555,17 @@ export async function syncFromSheetsToLocalStorage(force = false) {
       } else if (entity.key === "medirent-staff-users") {
         const cleanStaff = deduplicateStaffUsers(mergedData);
         localStorage.setItem(entity.key, JSON.stringify(cleanStaff));
+      } else if (entity.key === "medirent-rentals") {
+        const cleanedRentals = (mergedData as any[]).map((r: any) => {
+          if (r && r.status !== "Completed" && r.status !== "Cancelled") {
+            const allNotReturned = !r.equipmentItems || r.equipmentItems.length === 0 || r.equipmentItems.every((it: any) => !it.returned);
+            if (allNotReturned && r.end) {
+              return { ...r, end: "" };
+            }
+          }
+          return r;
+        });
+        localStorage.setItem(entity.key, JSON.stringify(cleanedRentals));
       } else {
         localStorage.setItem(entity.key, JSON.stringify(mergedData));
       }
