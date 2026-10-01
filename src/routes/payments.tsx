@@ -1346,9 +1346,7 @@ function AgreementPaymentHistoryModal({
                   {renderCardStatusBadge(rentPaymentStatus)}
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Initial rent: <strong className={rentPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (rentPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{rentPaymentStatus}</strong>
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">Initial rental rate</p>
             </div>
 
             {/* 4. Security Deposit (paid or not paid) */}
@@ -1360,9 +1358,7 @@ function AgreementPaymentHistoryModal({
                   {renderCardStatusBadge(depositPaymentStatus)}
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Deposit: <strong className={depositPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (depositPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{depositPaymentStatus}</strong>
-              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">Refundable deposit</p>
             </div>
 
             {/* 5. Additional Charges (paid or not paid) */}
@@ -1375,7 +1371,7 @@ function AgreementPaymentHistoryModal({
                 </div>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1 truncate" title={selectedAddons.map((i: any) => i.name).join(", ")}>
-                {selectedAddons.length > 0 ? selectedAddons.map((i: any) => i.name).join(", ") : `Charges: ${additionalPaymentStatus}`}
+                {selectedAddons.length > 0 ? selectedAddons.map((i: any) => i.name).join(", ") : "Add-on charges"}
               </p>
             </div>
 
