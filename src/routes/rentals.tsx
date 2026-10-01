@@ -1815,51 +1815,60 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         return;
       }
 
-      // ITEM-4 / ITEM-15: a repeated name is fine - customers are identified by
-      // their CUST-XXXX id and phone number. Only a phone number already on file
-      // blocks, since that is a genuine second record for the same person.
+      // Different name with same contact number is allowed (e.g. family members, caretakers, clinics).
+      // If exact same name AND phone match, reuse the existing customer record.
       const normalizedName = custName.trim().toLowerCase();
       const existingCustomers = getCustomers();
       const phoneOwner = findPhoneOwner(custPhone);
       if (phoneOwner) {
-        toast.error(
-          `This phone number is already registered to "${phoneOwner.name}" (${phoneOwner.id}). Select them from the customer list instead of adding new.`
+        if ((phoneOwner.name || "").trim().toLowerCase() === normalizedName) {
+          // Exactly the same name and same phone number - link to existing customer
+          customerId = phoneOwner.id;
+          customerName = phoneOwner.name;
+          toast.info(
+            `Using existing customer record "${phoneOwner.name}" (${phoneOwner.id}).`
+          );
+        } else {
+          // Different name with same contact number - allow saving as a separate customer record
+          toast.info(
+            `Phone number shared with "${phoneOwner.name}" (${phoneOwner.id}). Saving "${custName}" as a separate customer.`
+          );
+        }
+      }
+
+      if (!customerId) {
+        const nameTwin = existingCustomers.find(
+          (c) => (c.name || "").trim().toLowerCase() === normalizedName
         );
-        setIsSubmitting(false);
-        return;
-      }
+        if (nameTwin) {
+          toast.info(`Customer with this name already exists (${nameTwin.id}). Saving as a separate record.`);
+        }
 
-      const nameTwin = existingCustomers.find(
-        (c) => (c.name || "").trim().toLowerCase() === normalizedName
-      );
-      if (nameTwin) {
-        toast.info(`Customer with this name already exists (${nameTwin.id}). Saving as a separate record.`);
+        // Create new customer
+        const newCustId = getNextCustomerNumber();
+        const newCust = {
+          id: newCustId,
+          name: custName,
+          phone: custPhone || "+91 99999 99999",
+          altPhone: custAltPhone,
+          contactNumber3: custContactNumber3,
+          email: custEmail,
+          city: custCity,
+          state: custState,
+          pincode: custPincode,
+          address: custAddress || "No address provided",
+          area: custArea,
+          taluk: custTaluk,
+          aadhaar: custAadhaar,
+          pan: custPan,
+          rentals: 1,
+          status: "Active" as const,
+          notes: custNotes,
+        };
+        saveCustomer(newCust);
+        customerId = newCustId;
+        customerName = newCust.name;
       }
-
-      // Create new customer
-      const newCustId = getNextCustomerNumber();
-      const newCust = {
-        id: newCustId,
-        name: custName,
-        phone: custPhone || "+91 99999 99999",
-        altPhone: custAltPhone,
-        contactNumber3: custContactNumber3,
-        email: custEmail,
-        city: custCity,
-        state: custState,
-        pincode: custPincode,
-        address: custAddress || "No address provided",
-        area: custArea,
-        taluk: custTaluk,
-        aadhaar: custAadhaar,
-        pan: custPan,
-        rentals: 1,
-        status: "Active" as const,
-        notes: custNotes,
-      };
-      saveCustomer(newCust);
-      customerId = newCustId;
-      customerName = newCust.name;
     }
 
     if (!customerId) {
@@ -1946,7 +1955,8 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       // For new customers, the state isn't updated yet at this point, so using the
       // state would result in customerId: undefined and an orphaned rental record.
       customerId: customerId,
-      customer: isNewCustomer ? custName : selectedCustomer?.name || "",
+      customer: isNewCustomer ? customerName : selectedCustomer?.name || "",
+      phone: isNewCustomer ? custPhone : selectedCustomer?.phone || "",
       equipment: compiledEquipmentNames,
       model: rental?.model || "Standard",
       serial: compiledSerials,
@@ -2581,7 +2591,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       {custPhoneOwner && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>Phone number already registered to {custPhoneOwner.name} ({custPhoneOwner.id})</span>
+                          <span>
+                            {custName.trim().toLowerCase() === (custPhoneOwner.name || "").trim().toLowerCase()
+                              ? `Phone number matches existing customer ${custPhoneOwner.name} (${custPhoneOwner.id})`
+                              : `Phone number shared with ${custPhoneOwner.name} (${custPhoneOwner.id}) · Will be saved as separate customer`}
+                          </span>
                         </p>
                       )}
                     </div>
@@ -2605,7 +2619,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       {custAltPhoneOwner && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>Phone number already registered to {custAltPhoneOwner.name} ({custAltPhoneOwner.id})</span>
+                          <span>
+                            {custName.trim().toLowerCase() === (custAltPhoneOwner.name || "").trim().toLowerCase()
+                              ? `Phone number matches existing customer ${custAltPhoneOwner.name} (${custAltPhoneOwner.id})`
+                              : `Phone number shared with ${custAltPhoneOwner.name} (${custAltPhoneOwner.id}) · Will be saved as separate customer`}
+                          </span>
                         </p>
                       )}
                     </div>
@@ -2629,7 +2647,11 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                       {custContact3Owner && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>Phone number already registered to {custContact3Owner.name} ({custContact3Owner.id})</span>
+                          <span>
+                            {custName.trim().toLowerCase() === (custContact3Owner.name || "").trim().toLowerCase()
+                              ? `Phone number matches existing customer ${custContact3Owner.name} (${custContact3Owner.id})`
+                              : `Phone number shared with ${custContact3Owner.name} (${custContact3Owner.id}) · Will be saved as separate customer`}
+                          </span>
                         </p>
                       )}
                     </div>

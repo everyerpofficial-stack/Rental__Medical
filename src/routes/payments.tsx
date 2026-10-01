@@ -43,6 +43,7 @@ import {
   cleanNum,
   getAgreementInitialPayments,
   getAgreementPayments,
+  getReturns,
 } from "@/lib/data-store";
 import {
   normalizeWhatsAppPhone,
@@ -900,6 +901,7 @@ function AgreementPaymentHistoryModal({
   const rentals = getRentals();
   const equipmentList = getEquipment();
   const payments = getPayments();
+  const returns = getReturns();
   const rental = rentals.find((r) => {
     if (!r) return false;
     if (r.id === agreementId) return true;
@@ -923,14 +925,122 @@ function AgreementPaymentHistoryModal({
   const custObj = (customerId ? customers.find(c => c.id === customerId) : undefined) || customers.find(c => c.name && c.name.toLowerCase() === customerName.toLowerCase());
   const custPhone = rental?.phone || custObj?.phone || "";
   const equipmentName = rental?.equipment || "—";
-  const eqModelItems = rental ? getRentalEquipmentDetailedItems(rental, equipmentList, undefined, false) : [];
+  const eqModelItems = rental ? getRentalEquipmentDetailedItems(rental, equipmentList, returns, true) : [];
   const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
+  const serialStr = eqModelItems.map(it => it.serial).filter(Boolean).join(", ") || (rental?.serial && rental.serial.toLowerCase() !== "standard" ? rental.serial.trim() : "");
+
+  // Detailed string for Equipment + Model + Serial Numbers
+  const detailedEqList = eqModelItems.length > 0
+    ? eqModelItems.map(it => {
+        const parts = [it.name];
+        if (it.model && it.model.toLowerCase() !== "standard" && it.model.toLowerCase() !== it.name.toLowerCase()) {
+          parts.push(`(${it.model})`);
+        }
+        if (it.serial && it.serial.toLowerCase() !== "standard") {
+          parts.push(`· S/N: ${it.serial}`);
+        }
+        return parts.join(" ");
+      })
+    : [
+        [
+          equipmentName,
+          modelStr ? `(${modelStr})` : "",
+          serialStr ? `· S/N: ${serialStr}` : ""
+        ].filter(Boolean).join(" ")
+      ];
+  const equipmentDetailedText = detailedEqList.join(", ") || equipmentName;
+
   const status = rental?.status || "Active";
   const monthlyRent = rental?.monthlyRent || 0;
   const deposit = cleanNum(rental?.deposit) ||
     cleanNum(rental?.depositPaidAmount) ||
     (agreementPayments.find((p) => /deposit|security/i.test(p.type))?.amount ?? 0);
   const rentalDate = rental?.start || (rental as any)?.startDate || "";
+
+  // Return Date: Date or ongoing
+  const isCompleted = status === "Completed";
+  const retRecord = returns.find((ret: any) => {
+    if (!ret) return false;
+    if (ret.agreement === agreementId || (rental && ret.agreement === rental.id)) return true;
+    const cleanRetAgr = String(ret.agreement || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    const cleanTarget = String(agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+    return cleanRetAgr && cleanRetAgr === cleanTarget;
+  });
+  const returnDateRaw = rental?.returnedDate || rental?.returnDate || (rental as any)?.actualReturnDate || retRecord?.date || (isCompleted ? rental?.end : undefined);
+  const returnDateDisplay = returnDateRaw ? formatDateDDMMYYYY(returnDateRaw) : "Ongoing";
+
+  // Initial Rent Payment Status: Paid / Not Paid / Partial / Free of Cost
+  const hasRentPayment = agreementPayments.some((p) => /rent/i.test(p.type) && String(p.status || "").toLowerCase() === "paid");
+  const initialRentPaidAmt = cleanNum(rental?.rentPaidAmount);
+  let rentPaymentStatus: "Paid" | "Not Paid" | "Partial" | "Free of Cost" = (rental?.rentalPaymentStatus as any) || (hasRentPayment ? "Paid" : "Not Paid");
+  if (rentPaymentStatus === "Not Paid" && (hasRentPayment || (monthlyRent > 0 && initialRentPaidAmt >= monthlyRent))) {
+    rentPaymentStatus = "Paid";
+  } else if (rentPaymentStatus === "Not Paid" && initialRentPaidAmt > 0 && initialRentPaidAmt < monthlyRent) {
+    rentPaymentStatus = "Partial";
+  }
+
+  // Security Deposit Payment Status: Paid / Not Paid / Partial / Free of Cost
+  const hasDepositPayment = agreementPayments.some((p) => /deposit|security/i.test(p.type) && String(p.status || "").toLowerCase() === "paid");
+  const initialDepPaidAmt = cleanNum(rental?.depositPaidAmount);
+  let depositPaymentStatus: "Paid" | "Not Paid" | "Partial" | "Free of Cost" = (rental?.depositPaymentStatus as any) || (hasDepositPayment ? "Paid" : (deposit === 0 ? "Paid" : "Not Paid"));
+  if (depositPaymentStatus === "Not Paid" && (hasDepositPayment || (deposit > 0 && initialDepPaidAmt >= deposit))) {
+    depositPaymentStatus = "Paid";
+  } else if (depositPaymentStatus === "Not Paid" && initialDepPaidAmt > 0 && initialDepPaidAmt < deposit) {
+    depositPaymentStatus = "Partial";
+  }
+
+  // Additional Charges: amount & payment status
+  const addItems = Array.isArray(rental?.additionalItems) ? rental.additionalItems : [];
+  const selectedAddons = addItems.filter((i: any) => i && (i.selected || i.isCustom));
+
+  let additionalChargesAmount = 0;
+  let additionalPaymentStatus: "Paid" | "Not Paid" | "Partial" | "Free of Cost" = "Not Paid";
+
+  if (selectedAddons.length > 0) {
+    additionalChargesAmount = selectedAddons.reduce((sum: number, i: any) => sum + (i.status === "Free of Cost" ? 0 : cleanNum(i.amount)), 0);
+    const paidCount = selectedAddons.filter((i: any) => i.status === "Paid").length;
+    const focCount = selectedAddons.filter((i: any) => i.status === "Free of Cost").length;
+    if (paidCount === selectedAddons.length && selectedAddons.length > 0) {
+      additionalPaymentStatus = "Paid";
+    } else if (focCount === selectedAddons.length && selectedAddons.length > 0) {
+      additionalPaymentStatus = "Free of Cost";
+    } else if (paidCount > 0) {
+      additionalPaymentStatus = "Partial";
+    } else {
+      additionalPaymentStatus = "Not Paid";
+    }
+  } else {
+    additionalChargesAmount = cleanNum(rental?.additionalCharges) + cleanNum(rental?.deliveryCharges) + cleanNum(rental?.installationCharges) + cleanNum(rental?.removalCharges);
+    const addonPayments = agreementPayments.filter((p: any) =>
+      /additional|delivery|setup|installation|removal/i.test(p.type) && String(p.status || "").toLowerCase() === "paid"
+    );
+    const addonPaidSum = addonPayments.reduce((s: number, p: any) => s + cleanNum(p.amount), 0);
+    if (additionalChargesAmount === 0 && addonPaidSum > 0) {
+      additionalChargesAmount = addonPaidSum;
+    }
+    if (addonPaidSum >= additionalChargesAmount && additionalChargesAmount > 0) {
+      additionalPaymentStatus = "Paid";
+    } else if (addonPaidSum > 0 && addonPaidSum < additionalChargesAmount) {
+      additionalPaymentStatus = "Partial";
+    } else if ((rental as any)?.additionalPaymentStatus) {
+      additionalPaymentStatus = (rental as any).additionalPaymentStatus;
+    } else if (additionalChargesAmount === 0) {
+      additionalPaymentStatus = "Paid";
+    } else {
+      additionalPaymentStatus = "Not Paid";
+    }
+  }
+
+  // Total Due calculation
+  const balance = rental ? getAgreementBalance(rental, payments) : null;
+  let totalDue = 0;
+  if (retRecord && (retRecord.duePendingBalance !== undefined || retRecord.pendingBalance !== undefined)) {
+    totalDue = retRecord.duePendingBalance !== undefined
+      ? cleanNum(retRecord.duePendingBalance)
+      : cleanNum(retRecord.pendingBalance) + cleanNum(retRecord.damageCharges) + cleanNum(retRecord.unpaidAccessoryTotal);
+  } else if (balance) {
+    totalDue = balance.totalDue;
+  }
 
   const displayEquipments: { name: string; model?: string }[] = eqModelItems.length > 0
     ? eqModelItems.map(it => ({
@@ -939,15 +1049,50 @@ function AgreementPaymentHistoryModal({
       }))
     : [{ name: equipmentName, model: modelStr || undefined }];
 
+  const renderCardStatusBadge = (st: "Paid" | "Not Paid" | "Partial" | "Free of Cost") => {
+    if (st === "Paid") {
+      return (
+        <span className="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded leading-none">
+          Paid
+        </span>
+      );
+    }
+    if (st === "Partial") {
+      return (
+        <span className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded leading-none">
+          Partial
+        </span>
+      );
+    }
+    if (st === "Free of Cost") {
+      return (
+        <span className="inline-flex items-center text-[10px] font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded leading-none">
+          FOC
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded leading-none">
+        Not Paid
+      </span>
+    );
+  };
+
   const handleExportStatement = () => {
     if (agreementPayments.length === 0) {
       toast.info(`No payment records found for ${agreementId} to export.`);
       return;
     }
-    const headers = ["Receipt ID", "Date", "Equipment", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
+    const headers = ["Receipt ID", "Date", "Equipment (Model & Serial)", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
     const rows = agreementPayments.map(p => {
-      const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
-        .map(it => it.model ? `${it.name} (${it.model})` : it.name)
+      const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
+      const eqStr = pEquipments
+        .map(it => {
+          const parts = [it.name];
+          if (it.model) parts.push(`(${it.model})`);
+          if ((it as any).serial) parts.push(`· S/N: ${(it as any).serial}`);
+          return parts.join(" ");
+        })
         .join(", ");
       return [
         p.id,
@@ -960,7 +1105,7 @@ function AgreementPaymentHistoryModal({
         p.status
       ];
     });
-    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 110, 180, 120, 110, 120, 110, 100]);
+    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 110, 220, 120, 110, 120, 110, 100]);
     toast.success(`Payment statement for ${agreementId} exported successfully.`);
   };
 
@@ -974,8 +1119,14 @@ function AgreementPaymentHistoryModal({
     const tableRowsHtml = agreementPayments.length === 0
       ? `<tr><td colspan="8" style="text-align: center; border: 1px solid #cbd5e1; padding: 20px; color: #64748b;">No payments recorded for agreement ${agreementId} yet.</td></tr>`
       : agreementPayments.map(p => {
-      const eqStr = getPaymentEquipmentDisplay(p, rentals, equipmentList)
-        .map(it => it.model ? `${it.name} (${it.model})` : it.name)
+      const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
+      const eqStr = pEquipments
+        .map(it => {
+          const parts = [it.name];
+          if (it.model) parts.push(`(${it.model})`);
+          if ((it as any).serial) parts.push(`· S/N: ${(it as any).serial}`);
+          return parts.join(" ");
+        })
         .join(", ");
       return `
       <tr>
@@ -995,6 +1146,10 @@ function AgreementPaymentHistoryModal({
     `;
     }).join("");
 
+    const rentPaidLabel = rentPaymentStatus === "Paid" ? "Initial rent paid" : (rentPaymentStatus === "Partial" ? "Initial rent partial" : "Initial rent not paid");
+    const depPaidLabel = depositPaymentStatus === "Paid" ? "Paid" : (depositPaymentStatus === "Partial" ? "Partial" : "Not paid");
+    const addPaidLabel = additionalPaymentStatus === "Paid" ? "Paid" : (additionalPaymentStatus === "Partial" ? "Partial" : "Not paid");
+
     const htmlContent = `
       <html>
       <head>
@@ -1002,10 +1157,10 @@ function AgreementPaymentHistoryModal({
         <style>
           body { font-family: 'Segoe UI', system-ui, sans-serif; padding: 30px; color: #1e293b; }
           .header-title { font-size: 22px; font-weight: bold; color: #1e3a8a; text-align: center; padding: 15px; background-color: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 8px; margin-bottom: 20px; }
-          .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; }
+          .meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 25px; background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px; }
           .meta-item { display: flex; flex-direction: column; }
-          .meta-label { font-weight: bold; color: #64748b; font-size: 11px; text-transform: uppercase; tracking-wider: 0.05em; }
-          .meta-val { font-weight: 600; color: #0f172a; margin-top: 2px; }
+          .meta-label { font-weight: bold; color: #64748b; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+          .meta-val { font-weight: 600; color: #0f172a; margin-top: 2px; font-size: 12.5px; }
           .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
           .data-table th { background-color: #3b82f6; color: white; padding: 10px 8px; font-size: 12px; font-weight: bold; border: 1px solid #cbd5e1; text-align: left; }
           .data-table td { padding: 10px 8px; font-size: 11.5px; border: 1px solid #e2e8f0; color: #334155; }
@@ -1022,11 +1177,30 @@ function AgreementPaymentHistoryModal({
         <div class="meta-grid">
           <div class="meta-item"><span class="meta-label">Agreement ID</span><span class="meta-val" style="font-family: monospace; font-weight: bold;">${agreementId}</span></div>
           <div class="meta-item"><span class="meta-label">Rental Date</span><span class="meta-val">${rentalDate ? formatDateDDMMYYYY(rentalDate) : "—"}</span></div>
+          <div class="meta-item"><span class="meta-label">Return Date</span><span class="meta-val" style="font-weight: 600; color: ${returnDateRaw ? '#0f172a' : '#2563eb'};">${returnDateDisplay}</span></div>
+
           <div class="meta-item"><span class="meta-label">Customer Name</span><span class="meta-val">${customerName}</span></div>
-          <div class="meta-item"><span class="meta-label">Equipment</span><span class="meta-val">${equipmentName}</span></div>
-          <div class="meta-item"><span class="meta-label">Monthly Rent</span><span class="meta-val">₹${monthlyRent.toLocaleString("en-IN")}</span></div>
-          <div class="meta-item"><span class="meta-label">Security Deposit</span><span class="meta-val">₹${deposit.toLocaleString("en-IN")}</span></div>
+          <div class="meta-item"><span class="meta-label">Contact Number</span><span class="meta-val">${custPhone || "—"}</span></div>
+          <div class="meta-item"><span class="meta-label">Agreement Status</span><span class="meta-val" style="font-weight: bold; color: ${status === 'Active' ? '#15803d' : '#2563eb'};">${status}</span></div>
+
+          <div class="meta-item" style="grid-column: span 3;"><span class="meta-label">Equipment, Model & Sr. No's</span><span class="meta-val">${equipmentDetailedText}</span></div>
+
+          <div class="meta-item">
+            <span class="meta-label">Monthly Rent</span>
+            <span class="meta-val">₹${monthlyRent.toLocaleString("en-IN")} <span style="font-size: 11px; font-weight: bold; color: ${rentPaymentStatus === 'Paid' ? '#15803d' : '#b91c1c'};">(${rentPaidLabel})</span></span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Security Deposit</span>
+            <span class="meta-val">₹${deposit.toLocaleString("en-IN")} <span style="font-size: 11px; font-weight: bold; color: ${depositPaymentStatus === 'Paid' ? '#15803d' : '#b91c1c'};">(${depPaidLabel})</span></span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Additional Charge</span>
+            <span class="meta-val">₹${additionalChargesAmount.toLocaleString("en-IN")} <span style="font-size: 11px; font-weight: bold; color: ${additionalPaymentStatus === 'Paid' ? '#15803d' : '#b91c1c'};">(${addPaidLabel})</span></span>
+          </div>
+
           <div class="meta-item"><span class="meta-label">Total Collected</span><span class="meta-val" style="color: #15803d; font-weight: bold;">₹${totalPaid.toLocaleString("en-IN")}</span></div>
+          <div class="meta-item"><span class="meta-label">Total Due</span><span class="meta-val" style="color: ${totalDue > 0 ? '#b91c1c' : '#15803d'}; font-weight: bold;">₹${totalDue.toLocaleString("en-IN")}</span></div>
+          <div class="meta-item"><span class="meta-label">Total Receipts</span><span class="meta-val" style="color: #2563eb; font-weight: bold;">${agreementPayments.length}</span></div>
         </div>
         
         <table class="data-table">
@@ -1113,6 +1287,7 @@ function AgreementPaymentHistoryModal({
                 <span className="min-w-0 wrap-break-word">
                   Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong>
                   {modelStr && <span className="text-muted-foreground font-semibold ml-1">({modelStr})</span>}
+                  {serialStr && <span className="text-muted-foreground font-mono text-[11px] ml-1.5">· S/N: {serialStr}</span>}
                 </span>
               </div>
               {rentalDate && (
@@ -1123,6 +1298,12 @@ function AgreementPaymentHistoryModal({
                   </span>
                 </div>
               )}
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                <span>
+                  Return Date: <strong className={`font-semibold ${returnDateRaw ? "text-foreground" : "text-primary"}`}>{returnDateDisplay}</strong>
+                </span>
+              </div>
             </div>
             <div className="flex w-full items-center gap-2 md:w-auto md:shrink-0">
               {canExport && (
@@ -1137,22 +1318,78 @@ function AgreementPaymentHistoryModal({
           </div>
 
           {/* Financial Summary Cards */}
-          <div className="px-4 py-3.5 sm:p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Collected</p>
-              <p className="text-[16px] sm:text-[18px] font-bold text-success mt-1 wrap-anywhere">₹{totalPaid.toLocaleString("en-IN")}</p>
+          <div className="px-4 py-3.5 sm:p-5 bg-muted/10 border-b border-border/50 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+            {/* 1. Total Collected */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Collected</p>
+                <p className="text-[16px] sm:text-[18px] font-bold text-success mt-1 wrap-anywhere">₹{totalPaid.toLocaleString("en-IN")}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Paid receipts</p>
             </div>
-            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Receipts</p>
-              <p className="text-[16px] sm:text-[18px] font-bold text-primary mt-1">{agreementPayments.length}</p>
+
+            {/* 2. Total Receipts */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Receipts</p>
+                <p className="text-[16px] sm:text-[18px] font-bold text-primary mt-1">{agreementPayments.length}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">Transactions recorded</p>
             </div>
-            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Monthly Rent</p>
-              <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
+
+            {/* 3. Monthly Rent (Initial rent paid or not paid) */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Monthly Rent</p>
+                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
+                  {renderCardStatusBadge(rentPaymentStatus)}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Initial rent: <strong className={rentPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (rentPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{rentPaymentStatus}</strong>
+              </p>
             </div>
-            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</p>
-              <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{deposit.toLocaleString("en-IN")}</p>
+
+            {/* 4. Security Deposit (paid or not paid) */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</p>
+                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{deposit.toLocaleString("en-IN")}</p>
+                  {renderCardStatusBadge(depositPaymentStatus)}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Deposit: <strong className={depositPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (depositPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{depositPaymentStatus}</strong>
+              </p>
+            </div>
+
+            {/* 5. Additional Charges (paid or not paid) */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Additional Charges</p>
+                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
+                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{additionalChargesAmount.toLocaleString("en-IN")}</p>
+                  {renderCardStatusBadge(additionalPaymentStatus)}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1 truncate" title={selectedAddons.map((i: any) => i.name).join(", ")}>
+                {selectedAddons.length > 0 ? selectedAddons.map((i: any) => i.name).join(", ") : `Charges: ${additionalPaymentStatus}`}
+              </p>
+            </div>
+
+            {/* 6. Total Due */}
+            <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Total Due</p>
+                <p className={`text-[15px] sm:text-[16px] font-bold mt-1 wrap-anywhere ${totalDue > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                  ₹{totalDue.toLocaleString("en-IN")}
+                </p>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {totalDue > 0 ? "Pending balance" : "All cleared"}
+              </p>
             </div>
           </div>
 

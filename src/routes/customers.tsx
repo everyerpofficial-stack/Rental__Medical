@@ -116,12 +116,11 @@ function importCustomerRow(row: Record<string, string>): { ok: boolean; error?: 
   const contactNumber3Digits = String(row.contactNumber3 || "").replace(/\D/g, "");
   if (contactNumber3Digits && contactNumber3Digits.length !== 10) return { ok: false, error: `${name}: Alternative Phone 1 must be exactly 10 digits` };
 
-  // ITEM-4: names may repeat across customers - only the phone number is unique.
   const phoneOwner = getCustomers().find(
     (c) => String(c.phone || "").replace(/\D/g, "") === phoneDigits
   );
-  if (phoneOwner) {
-    return { ok: false, error: `${name}: phone number already registered to "${phoneOwner.name}" (${phoneOwner.id})` };
+  if (phoneOwner && (phoneOwner.name || "").trim().toLowerCase() === name.trim().toLowerCase()) {
+    return { ok: false, error: `${name}: customer with this exact name and phone number already exists (${phoneOwner.id})` };
   }
 
   saveCustomer({
@@ -339,10 +338,15 @@ function CustomerFormDialog({
       (c) => String(c.phone || "").replace(/\D/g, "") === normalizedPhone
     );
     if (phoneOwner) {
-      toast.error(
-        `This phone number is already registered to "${phoneOwner.name}" (${phoneOwner.id}). Please use a different number.`
+      if ((phoneOwner.name || "").trim().toLowerCase() === normalizedName) {
+        toast.error(
+          `A customer with this exact name and phone number already exists (${phoneOwner.id}).`
+        );
+        return;
+      }
+      toast.info(
+        `Phone number shared with "${phoneOwner.name}" (${phoneOwner.id}). Saving as a separate customer record.`
       );
-      return;
     }
 
     const nameTwin = others.find(
