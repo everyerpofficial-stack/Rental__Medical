@@ -3052,7 +3052,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                             syncAdditionalItemsWithEquipments(newEquipments);
                           }}
                           placeholder="Select equipment"
-                          searchPlaceholder="Search equipment by series number, name, owner..."
+                          searchPlaceholder="Search equipment by serial number, name, owner..."
                           emptyText="No equipment found."
                           options={itemsForSelect.map((e) => {
                             const fullLabel = formatEquipmentLabel({ name: e.name || e.category, model: e.model, serial: e.serial });
@@ -3136,19 +3136,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                               newEquipments[idx].monthlyRent = newD > 0 ? (newD * 30).toString() : "";
                             }
                             setSelectedEquipments(newEquipments);
-                            if (agreementDate) {
-                              const parts = agreementDate.split("-");
-                              if (parts.length === 3) {
-                                const year = parseInt(parts[0], 10);
-                                const month = parseInt(parts[1], 10) - 1;
-                                const day = parseInt(parts[2], 10);
-                                if (val === "Daily") {
-                                  setEndDate(getLocalYYYYMMDD(new Date(year, month, day)));
-                                } else {
-                                  setEndDate(getLocalYYYYMMDD(new Date(year, month + 1, day)));
-                                }
-                              }
-                            }
                           }}
                         >
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>

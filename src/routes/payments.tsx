@@ -955,6 +955,11 @@ function AgreementPaymentHistoryModal({
 
   const status = rental?.status || "Active";
   const monthlyRent = rental?.monthlyRent || 0;
+  const dailyRent = cleanNum(rental?.dailyRent);
+  const rentCycle = rental?.rentCycle || (dailyRent > 0 && monthlyRent === 0 ? "Daily" : "Monthly");
+  const isDaily = rentCycle === "Daily";
+  const displayRent = isDaily ? dailyRent : monthlyRent;
+  const rentLabel = isDaily ? "Daily Rent" : "Monthly Rent";
   const deposit = cleanNum(rental?.deposit) ||
     cleanNum(rental?.depositPaidAmount) ||
     (agreementPayments.find((p) => /deposit|security/i.test(p.type))?.amount ?? 0);
@@ -976,9 +981,9 @@ function AgreementPaymentHistoryModal({
   const hasRentPayment = agreementPayments.some((p) => /rent/i.test(p.type) && String(p.status || "").toLowerCase() === "paid");
   const initialRentPaidAmt = cleanNum(rental?.rentPaidAmount);
   let rentPaymentStatus: "Paid" | "Not Paid" | "Partial" | "Free of Cost" = (rental?.rentalPaymentStatus as any) || (hasRentPayment ? "Paid" : "Not Paid");
-  if (rentPaymentStatus === "Not Paid" && (hasRentPayment || (monthlyRent > 0 && initialRentPaidAmt >= monthlyRent))) {
+  if (rentPaymentStatus === "Not Paid" && (hasRentPayment || (displayRent > 0 && initialRentPaidAmt >= displayRent))) {
     rentPaymentStatus = "Paid";
-  } else if (rentPaymentStatus === "Not Paid" && initialRentPaidAmt > 0 && initialRentPaidAmt < monthlyRent) {
+  } else if (rentPaymentStatus === "Not Paid" && initialRentPaidAmt > 0 && initialRentPaidAmt < displayRent) {
     rentPaymentStatus = "Partial";
   }
 
@@ -1058,7 +1063,7 @@ function AgreementPaymentHistoryModal({
       toast.info(`No payment records found for ${agreementId} to export.`);
       return;
     }
-    const headers = ["Receipt ID", "Date", "Equipment", "Model", "Series / Sr. No", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
+    const headers = ["Receipt ID", "Date", "Equipment", "Model", "S/N", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
     const rows = agreementPayments.map(p => {
       const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
       const itemEqName = pEquipments.map(it => it.name).filter(Boolean).join(", ") || equipmentCleanName;
@@ -1154,11 +1159,11 @@ function AgreementPaymentHistoryModal({
 
           <div class="meta-item"><span class="meta-label">Equipment</span><span class="meta-val">${equipmentCleanName}</span></div>
           <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val">${modelStr || "—"}</span></div>
-          <div class="meta-item"><span class="meta-label">Series / Sr. No</span><span class="meta-val" style="font-family: monospace;">${serialStr || "—"}</span></div>
+          <div class="meta-item"><span class="meta-label">S/N</span><span class="meta-val" style="font-family: monospace;">${serialStr || "—"}</span></div>
 
           <div class="meta-item">
-            <span class="meta-label">Monthly Rent</span>
-            <span class="meta-val">₹${monthlyRent.toLocaleString("en-IN")} <span style="font-size: 11px; font-weight: bold; color: ${rentPaymentStatus === 'Paid' ? '#15803d' : '#b91c1c'};">(${rentPaidLabel})</span></span>
+            <span class="meta-label">${rentLabel}</span>
+            <span class="meta-val">₹${displayRent.toLocaleString("en-IN")} <span style="font-size: 11px; font-weight: bold; color: ${rentPaymentStatus === 'Paid' ? '#15803d' : '#b91c1c'};">(${rentPaidLabel})</span></span>
           </div>
           <div class="meta-item">
             <span class="meta-label">Security Deposit</span>
@@ -1181,7 +1186,7 @@ function AgreementPaymentHistoryModal({
               <th style="width: 85px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Date</th>
               <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Equipment</th>
               <th style="width: 100px; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Model</th>
-              <th style="width: 110px; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Series / S/N</th>
+              <th style="width: 110px; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">S/N</th>
               <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Payment Type</th>
               <th style="width: 80px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Mode</th>
               <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Collected By</th>
@@ -1271,7 +1276,7 @@ function AgreementPaymentHistoryModal({
               {serialStr && (
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="min-w-0 wrap-break-word">
-                    Series / S/N: <strong className="text-foreground font-mono text-[11px] font-semibold">{serialStr}</strong>
+                    S/N: <strong className="text-foreground font-mono text-[11px] font-semibold">{serialStr}</strong>
                   </span>
                 </div>
               )}
@@ -1325,8 +1330,8 @@ function AgreementPaymentHistoryModal({
             {/* 3. Monthly Rent (Initial rent paid or not paid) */}
             <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Monthly Rent</p>
-                <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">{rentLabel}</p>
+                <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{displayRent.toLocaleString("en-IN")}</p>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1">
                 Initial rent: <strong className={rentPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (rentPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{rentPaymentStatus}</strong>
