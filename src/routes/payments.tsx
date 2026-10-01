@@ -926,6 +926,9 @@ function AgreementPaymentHistoryModal({
   const custPhone = rental?.phone || custObj?.phone || "";
   const equipmentName = rental?.equipment || "—";
   const eqModelItems = rental ? getRentalEquipmentDetailedItems(rental, equipmentList, returns, true) : [];
+  const equipmentCleanName = eqModelItems.length > 0
+    ? eqModelItems.map(it => it.name).filter(Boolean).join(", ")
+    : (equipmentName || "—");
   const modelStr = eqModelItems.map(it => it.model).filter(Boolean).join(", ") || (rental?.model && rental.model.toLowerCase() !== "standard" ? rental.model.trim() : "");
   const serialStr = eqModelItems.map(it => it.serial).filter(Boolean).join(", ") || (rental?.serial && rental.serial.toLowerCase() !== "standard" ? rental.serial.trim() : "");
 
@@ -1049,55 +1052,24 @@ function AgreementPaymentHistoryModal({
       }))
     : [{ name: equipmentName, model: modelStr || undefined }];
 
-  const renderCardStatusBadge = (st: "Paid" | "Not Paid" | "Partial" | "Free of Cost") => {
-    if (st === "Paid") {
-      return (
-        <span className="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-1.5 py-0.5 rounded leading-none">
-          Paid
-        </span>
-      );
-    }
-    if (st === "Partial") {
-      return (
-        <span className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded leading-none">
-          Partial
-        </span>
-      );
-    }
-    if (st === "Free of Cost") {
-      return (
-        <span className="inline-flex items-center text-[10px] font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded leading-none">
-          FOC
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded leading-none">
-        Not Paid
-      </span>
-    );
-  };
 
   const handleExportStatement = () => {
     if (agreementPayments.length === 0) {
       toast.info(`No payment records found for ${agreementId} to export.`);
       return;
     }
-    const headers = ["Receipt ID", "Date", "Equipment (Model & Serial)", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
+    const headers = ["Receipt ID", "Date", "Equipment", "Model", "Series / Sr. No", "Payment Type", "Payment Mode", "Collected By", "Amount (₹)", "Status"];
     const rows = agreementPayments.map(p => {
       const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
-      const eqStr = pEquipments
-        .map(it => {
-          const parts = [it.name];
-          if (it.model) parts.push(`(${it.model})`);
-          if ((it as any).serial) parts.push(`· S/N: ${(it as any).serial}`);
-          return parts.join(" ");
-        })
-        .join(", ");
+      const itemEqName = pEquipments.map(it => it.name).filter(Boolean).join(", ") || equipmentCleanName;
+      const itemModel = pEquipments.map(it => it.model).filter(Boolean).join(", ") || modelStr || "—";
+      const itemSerial = pEquipments.map(it => (it as any).serial).filter(Boolean).join(", ") || serialStr || "—";
       return [
         p.id,
         p.date,
-        eqStr,
+        itemEqName,
+        itemModel,
+        itemSerial,
         p.type,
         p.mode,
         (p.collectedBy as string) || "Admin",
@@ -1105,7 +1077,7 @@ function AgreementPaymentHistoryModal({
         p.status
       ];
     });
-    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 110, 220, 120, 110, 120, 110, 100]);
+    downloadExcel(`payment_history_${agreementId}.xls`, headers, rows, [110, 100, 180, 120, 140, 120, 110, 120, 110, 100]);
     toast.success(`Payment statement for ${agreementId} exported successfully.`);
   };
 
@@ -1117,22 +1089,19 @@ function AgreementPaymentHistoryModal({
     }
 
     const tableRowsHtml = agreementPayments.length === 0
-      ? `<tr><td colspan="8" style="text-align: center; border: 1px solid #cbd5e1; padding: 20px; color: #64748b;">No payments recorded for agreement ${agreementId} yet.</td></tr>`
+      ? `<tr><td colspan="10" style="text-align: center; border: 1px solid #cbd5e1; padding: 20px; color: #64748b;">No payments recorded for agreement ${agreementId} yet.</td></tr>`
       : agreementPayments.map(p => {
       const pEquipments = getPaymentEquipmentDisplay(p, rentals, equipmentList);
-      const eqStr = pEquipments
-        .map(it => {
-          const parts = [it.name];
-          if (it.model) parts.push(`(${it.model})`);
-          if ((it as any).serial) parts.push(`· S/N: ${(it as any).serial}`);
-          return parts.join(" ");
-        })
-        .join(", ");
+      const itemEqName = pEquipments.map(it => it.name).filter(Boolean).join(", ") || equipmentCleanName;
+      const itemModel = pEquipments.map(it => it.model).filter(Boolean).join(", ") || modelStr || "—";
+      const itemSerial = pEquipments.map(it => (it as any).serial).filter(Boolean).join(", ") || serialStr || "—";
       return `
       <tr>
         <td style="font-family: monospace; font-weight: bold; text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.id}</td>
         <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${formatDateDDMMYYYY(p.date)}</td>
-        <td style="border: 1px solid #cbd5e1; padding: 8px;">${eqStr}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px;">${itemEqName}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px;">${itemModel}</td>
+        <td style="border: 1px solid #cbd5e1; padding: 8px; font-family: monospace; font-size: 11px;">${itemSerial}</td>
         <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.type}</td>
         <td style="text-align: center; border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.mode}</td>
         <td style="border: 1px solid #cbd5e1; padding: 8px; white-space: nowrap;">${p.collectedBy || "Admin"}</td>
@@ -1162,8 +1131,8 @@ function AgreementPaymentHistoryModal({
           .meta-label { font-weight: bold; color: #64748b; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
           .meta-val { font-weight: 600; color: #0f172a; margin-top: 2px; font-size: 12.5px; }
           .data-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-          .data-table th { background-color: #3b82f6; color: white; padding: 10px 8px; font-size: 12px; font-weight: bold; border: 1px solid #cbd5e1; text-align: left; }
-          .data-table td { padding: 10px 8px; font-size: 11.5px; border: 1px solid #e2e8f0; color: #334155; }
+          .data-table th { background-color: #3b82f6; color: white; padding: 8px 6px; font-size: 12px; font-weight: bold; border: 1px solid #cbd5e1; text-align: left; }
+          .data-table td { padding: 8px 6px; font-size: 11.5px; border: 1px solid #e2e8f0; color: #334155; }
           .data-table tr:nth-child(even) { background-color: #f8fafc; }
           .totals-row { font-weight: bold; background-color: #f1f5f9 !important; }
           .totals-row td { border-top: 2px solid #94a3b8; font-size: 12.5px; color: #0f172a; border: 1px solid #cbd5e1; padding: 8px; }
@@ -1183,7 +1152,9 @@ function AgreementPaymentHistoryModal({
           <div class="meta-item"><span class="meta-label">Contact Number</span><span class="meta-val">${custPhone || "—"}</span></div>
           <div class="meta-item"><span class="meta-label">Agreement Status</span><span class="meta-val" style="font-weight: bold; color: ${status === 'Active' ? '#15803d' : '#2563eb'};">${status}</span></div>
 
-          <div class="meta-item" style="grid-column: span 3;"><span class="meta-label">Equipment, Model & Sr. No's</span><span class="meta-val">${equipmentDetailedText}</span></div>
+          <div class="meta-item"><span class="meta-label">Equipment</span><span class="meta-val">${equipmentCleanName}</span></div>
+          <div class="meta-item"><span class="meta-label">Model</span><span class="meta-val">${modelStr || "—"}</span></div>
+          <div class="meta-item"><span class="meta-label">Series / Sr. No</span><span class="meta-val" style="font-family: monospace;">${serialStr || "—"}</span></div>
 
           <div class="meta-item">
             <span class="meta-label">Monthly Rent</span>
@@ -1206,20 +1177,22 @@ function AgreementPaymentHistoryModal({
         <table class="data-table">
           <thead>
             <tr>
-              <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Receipt ID</th>
-              <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Date</th>
-              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Equipment</th>
-              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Payment Type</th>
-              <th style="width: 120px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Mode</th>
-              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Collected By</th>
-              <th style="width: 120px; text-align: right; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Amount</th>
-              <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 10px 8px;">Status</th>
+              <th style="width: 100px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Receipt ID</th>
+              <th style="width: 85px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Date</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Equipment</th>
+              <th style="width: 100px; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Model</th>
+              <th style="width: 110px; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Series / S/N</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Payment Type</th>
+              <th style="width: 80px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Mode</th>
+              <th style="background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Collected By</th>
+              <th style="width: 95px; text-align: right; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Amount</th>
+              <th style="width: 75px; text-align: center; background-color: #3b82f6; color: white; border: 1px solid #cbd5e1; padding: 8px 6px;">Status</th>
             </tr>
           </thead>
           <tbody>
             ${tableRowsHtml}
             <tr class="totals-row">
-              <td colspan="6" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">Total Paid:</td>
+              <td colspan="8" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">Total Paid:</td>
               <td style="text-align: right; color: #15803d; font-weight: bold; border: 1px solid #cbd5e1; padding: 8px;">₹${totalPaid.toLocaleString("en-IN")}</td>
               <td style="border: 1px solid #cbd5e1; padding: 8px;"></td>
             </tr>
@@ -1285,11 +1258,23 @@ function AgreementPaymentHistoryModal({
               <div className="flex items-start gap-1.5 min-w-0">
                 <Package className="h-3.5 w-3.5 mt-px text-primary/70 shrink-0" />
                 <span className="min-w-0 wrap-break-word">
-                  Equipment: <strong className="text-foreground font-semibold">{equipmentName}</strong>
-                  {modelStr && <span className="text-muted-foreground font-semibold ml-1">({modelStr})</span>}
-                  {serialStr && <span className="text-muted-foreground font-mono text-[11px] ml-1.5">· S/N: {serialStr}</span>}
+                  Equipment: <strong className="text-foreground font-semibold">{equipmentCleanName}</strong>
                 </span>
               </div>
+              {modelStr && (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="min-w-0 wrap-break-word">
+                    Model: <strong className="text-foreground font-semibold">{modelStr}</strong>
+                  </span>
+                </div>
+              )}
+              {serialStr && (
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="min-w-0 wrap-break-word">
+                    Series / S/N: <strong className="text-foreground font-mono text-[11px] font-semibold">{serialStr}</strong>
+                  </span>
+                </div>
+              )}
               {rentalDate && (
                 <div className="flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5 text-primary/70 shrink-0" />
@@ -1341,37 +1326,32 @@ function AgreementPaymentHistoryModal({
             <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Monthly Rent</p>
-                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
-                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
-                  {renderCardStatusBadge(rentPaymentStatus)}
-                </div>
+                <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{monthlyRent.toLocaleString("en-IN")}</p>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">Initial rental rate</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Initial rent: <strong className={rentPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (rentPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{rentPaymentStatus}</strong>
+              </p>
             </div>
 
             {/* 4. Security Deposit (paid or not paid) */}
             <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Security Deposit</p>
-                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
-                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{deposit.toLocaleString("en-IN")}</p>
-                  {renderCardStatusBadge(depositPaymentStatus)}
-                </div>
+                <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{deposit.toLocaleString("en-IN")}</p>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1">Refundable deposit</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Deposit: <strong className={depositPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (depositPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400")}>{depositPaymentStatus}</strong>
+              </p>
             </div>
 
             {/* 5. Additional Charges (paid or not paid) */}
             <div className="bg-card p-3 rounded-lg border border-border/50 min-w-0 flex flex-col justify-between">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground leading-tight">Additional Charges</p>
-                <div className="flex items-baseline gap-1.5 flex-wrap mt-1">
-                  <p className="text-[15px] sm:text-[16px] font-semibold text-foreground wrap-anywhere">₹{additionalChargesAmount.toLocaleString("en-IN")}</p>
-                  {renderCardStatusBadge(additionalPaymentStatus)}
-                </div>
+                <p className="text-[15px] sm:text-[16px] font-semibold text-foreground mt-1 wrap-anywhere">₹{additionalChargesAmount.toLocaleString("en-IN")}</p>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1 truncate" title={selectedAddons.map((i: any) => i.name).join(", ")}>
-                {selectedAddons.length > 0 ? selectedAddons.map((i: any) => i.name).join(", ") : "Add-on charges"}
+              <p className="text-[10px] text-muted-foreground mt-1 truncate" title={selectedAddons.length > 0 ? `${selectedAddons.map((i: any) => i.name).join(", ")} · Charges: ${additionalPaymentStatus}` : `Charges: ${additionalPaymentStatus}`}>
+                Charges: <strong className={additionalPaymentStatus === "Paid" ? "text-emerald-600 dark:text-emerald-400" : (additionalPaymentStatus === "Partial" ? "text-amber-600 dark:text-amber-400" : (additionalPaymentStatus === "Free of Cost" ? "text-blue-600 dark:text-blue-400" : "text-rose-600 dark:text-rose-400"))}>{additionalPaymentStatus}</strong>
               </p>
             </div>
 
