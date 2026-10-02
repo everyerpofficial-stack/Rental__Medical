@@ -5864,6 +5864,45 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
   };
   const isPaidStatus = (status: any) => !status || status === "Paid" || status === "Completed";
 
+  // Helper to check if a payment specifies a particular equipment item
+  function matchesItem(p: any, item: any) {
+    if (!p || !item) return false;
+    const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
+    const targetSerial = String(item.serial || "").trim().toLowerCase();
+    const targetName = String(item.name || item.equipment || "").trim().toLowerCase();
+    const targetLabel = String(item.label || "").trim().toLowerCase();
+    const targetModel = String(item.model || "").trim().toLowerCase();
+
+    // Check equipmentId field
+    if (p.equipmentId) {
+      const pEqIds = String(p.equipmentId).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      if (targetEqId && pEqIds.includes(targetEqId)) return true;
+      if (targetName && pEqIds.some((id) => id === targetName || targetName.includes(id))) return true;
+    }
+
+    // Check notes field
+    if (p.notes) {
+      const notes = String(p.notes).toLowerCase();
+      // If this note is an adjustment from a return, don't match the equipment that was returned
+      const isAdjustmentNote = /refund.*from return of/i.test(notes) && /adjusted to/i.test(notes);
+      if (isAdjustmentNote) {
+        const returnOfPart = (notes.match(/return of\s+([^,]+)/i) || [])[1] || "";
+        const isSourceOfReturn = (targetName && returnOfPart.includes(targetName)) || (targetSerial && returnOfPart.includes(targetSerial));
+        if (isSourceOfReturn) {
+          return false;
+        }
+      }
+
+      if (targetSerial && targetSerial.length >= 3 && notes.includes(targetSerial)) return true;
+      if (targetEqId && targetEqId.length >= 3 && notes.includes(targetEqId)) return true;
+      if (targetName && targetName.length >= 3 && notes.includes(targetName)) return true;
+      if (targetLabel && targetLabel.length >= 3 && notes.includes(targetLabel)) return true;
+      if (targetModel && targetModel.length >= 3 && targetModel !== "standard" && notes.includes(targetModel)) return true;
+    }
+
+    return false;
+  }
+
   const isAdvancePayment = (p: any) => {
     // Equipment refund adjustments and return settlements are never agreement-creation advances
     if (p.mode === "Equipment Refund" || /refund.*adjusted/i.test(p.notes || "")) return false;
@@ -5919,45 +5958,6 @@ export function getPaidForEquipment(rental: any, equipmentId: string, paymentsLi
 
     return allAgreementPaid + unbookedAdvance;
   }
-
-  // Helper to check if a payment specifies a particular equipment item
-  const matchesItem = (p: any, item: any) => {
-    if (!p || !item) return false;
-    const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
-    const targetSerial = String(item.serial || "").trim().toLowerCase();
-    const targetName = String(item.name || item.equipment || "").trim().toLowerCase();
-    const targetLabel = String(item.label || "").trim().toLowerCase();
-    const targetModel = String(item.model || "").trim().toLowerCase();
-
-    // Check equipmentId field
-    if (p.equipmentId) {
-      const pEqIds = String(p.equipmentId).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-      if (targetEqId && pEqIds.includes(targetEqId)) return true;
-      if (targetName && pEqIds.some((id) => id === targetName || targetName.includes(id))) return true;
-    }
-
-    // Check notes field
-    if (p.notes) {
-      const notes = String(p.notes).toLowerCase();
-      // If this note is an adjustment from a return, don't match the equipment that was returned
-      const isAdjustmentNote = /refund.*from return of/i.test(notes) && /adjusted to/i.test(notes);
-      if (isAdjustmentNote) {
-        const returnOfPart = (notes.match(/return of\s+([^,]+)/i) || [])[1] || "";
-        const isSourceOfReturn = (targetName && returnOfPart.includes(targetName)) || (targetSerial && returnOfPart.includes(targetSerial));
-        if (isSourceOfReturn) {
-          return false;
-        }
-      }
-
-      if (targetSerial && targetSerial.length >= 3 && notes.includes(targetSerial)) return true;
-      if (targetEqId && targetEqId.length >= 3 && notes.includes(targetEqId)) return true;
-      if (targetName && targetName.length >= 3 && notes.includes(targetName)) return true;
-      if (targetLabel && targetLabel.length >= 3 && notes.includes(targetLabel)) return true;
-      if (targetModel && targetModel.length >= 3 && targetModel !== "standard" && notes.includes(targetModel)) return true;
-    }
-
-    return false;
-  };
 
   // Helper to determine which items a payment targets.
   // On multi-item rentals, general payments and agreement creation advance payments
@@ -6202,7 +6202,7 @@ export function getDiscountForEquipment(rental: any, equipmentId: string, paymen
     return agreementPayments.reduce((sum, p) => sum + cleanNum(p.discount), 0);
   }
 
-  const matchesItem = (p: any, item: any) => {
+  function matchesItem(p: any, item: any) {
     if (!p || !item) return false;
     const targetEqId = String(item.equipmentId || "").trim().toLowerCase();
     const targetSerial = String(item.serial || "").trim().toLowerCase();
