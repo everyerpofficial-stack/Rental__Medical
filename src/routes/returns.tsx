@@ -1664,6 +1664,8 @@ function ReturnsPage() {
       finalRent: fRent,
       pendingBalance: pend,
       refund: netRefund,
+      totalPaidAmount: paidAmt,
+      rentOverpaid: rentOverpaid,
       refundAdjustedToEquipmentId: (netRefund > 0 && refundAction === "adjust" && refundTargetEquipmentId) ? refundTargetEquipmentId : undefined,
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
@@ -1742,7 +1744,8 @@ function ReturnsPage() {
     // Refund adjustment: if the operator chose to transfer the refund to another
     // equipment on the same agreement, create a payment record for that amount.
     if (netRefund > 0 && refundAction === "adjust" && refundTargetEquipmentId) {
-      const targetEqName = getEquipment().find((e) => e.id === refundTargetEquipmentId)?.name || refundTargetEquipmentId;
+      const targetEq = getEquipment().find((e) => e.id === refundTargetEquipmentId);
+      const targetEqName = targetEq?.name || refundTargetEquipmentId;
       savePayment({
         id: getNextPaymentNumber(),
         date: returnDate,
@@ -1753,7 +1756,7 @@ function ReturnsPage() {
         amount: netRefund,
         mode: "Equipment Refund" as any,
         type: "Rent" as const,
-        notes: `Refund of ₹${netRefund.toLocaleString("en-IN")} from return of ${returnedNames} adjusted to ${targetEqName}`,
+        notes: `Refund of ₹${netRefund.toLocaleString("en-IN")} from return of ${returnedNames} adjusted to ${targetEqName}${targetEq?.serial ? ` (${targetEq.serial})` : ""}`,
         status: "Paid" as const,
       });
     }
@@ -1817,6 +1820,8 @@ function ReturnsPage() {
       finalRent: fRent,
       pendingBalance: pend,
       refund: netRefund,
+      totalPaidAmount: paidAmt,
+      rentOverpaid: rentOverpaid,
       status: "Pending Approval",
       returnedEquipmentIds: selectedEquipmentIds,
       returnedAdditionalItemNames: unpaidItems.map((item: any) => item.name),

@@ -386,6 +386,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
     return () => window.removeEventListener("medirent-db-updated", handleUpdate);
   }, []);
   const prevOpenRef = useRef(false);
+  const prevRentalIdRef = useRef<string | undefined>(rental?.id);
   const prevNeededAutoItemsRef = useRef<Set<string>>(new Set());
   // For new agreements: peek (don't increment) the counter for display — counter is consumed only on actual save.
   // For edits: keep existing ID.
@@ -393,9 +394,27 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [agreementDate, setAgreementDate] = useState(rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
   const [endDate, setEndDate] = useState(rental?.status === "Completed" && rental?.end ? getLocalYYYYMMDD(rental.end) : "");
 
-  const [isNewCustomer, setIsNewCustomer] = useState(false);
+  const [isNewCustomer, setIsNewCustomer] = useState(() => {
+    if (!rental) return false;
+    if (rental.customerId) return false;
+    const custs = getCustomers();
+    const found = custs.find(c => 
+      (rental.customer && c.name && c.name.trim().toLowerCase() === rental.customer.trim().toLowerCase()) ||
+      (rental.phone && (c.phone === rental.phone || c.altPhone === rental.phone))
+    );
+    return !found && !!rental.customer;
+  });
   // ITEM-15: see phoneMatches below - real-time duplicate-contact detection.
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(rental?.customerId);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(() => {
+    if (!rental) return undefined;
+    if (rental.customerId) return rental.customerId;
+    const custs = getCustomers();
+    const found = custs.find(c => 
+      (rental.customer && c.name && c.name.trim().toLowerCase() === rental.customer.trim().toLowerCase()) ||
+      (rental.phone && (c.phone === rental.phone || c.altPhone === rental.phone))
+    );
+    return found?.id;
+  });
   const [signatureUrl, setSignatureUrl] = useState<string | null>(rental?.signatureUrl || null);
   const [thumbprintUrl, setThumbprintUrl] = useState<string | null>(rental?.thumbprintUrl || null);
   const [deliveryPhotos, setDeliveryPhotos] = useState<Array<{ url: string; name: string; size?: string; id?: string }>>([]);
@@ -925,10 +944,19 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   }, [rental]);
 
   useEffect(() => {
-    // Only reset form state when the dialog transitions from closed → open.
+    // Only reset form state when the dialog transitions from closed → open or rental changes.
     // This prevents user edits from being undone by re-renders while the dialog is open.
-    const justOpened = open && !prevOpenRef.current;
+    const isRentalChanged = rental ? prevRentalIdRef.current !== rental.id : !!prevRentalIdRef.current;
+    prevRentalIdRef.current = rental?.id;
+    const justOpened = (open && !prevOpenRef.current) || (open && isRentalChanged);
     prevOpenRef.current = open;
+
+    if (!open) {
+      prevOpenRef.current = false;
+      prevRentalIdRef.current = undefined;
+      return;
+    }
+
     if (open && justOpened) {
       setIsSubmitting(false);
       isSavedRef.current = false;
@@ -952,12 +980,80 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
             console.warn("Failed to parse saved agreement draft:", err);
           }
         }
-      }
 
-      setHasDraft(false);
-      setDraftSavedAt("");
-      setDraftSaveStatus("");
-      resetFormToFresh();
+        setHasDraft(false);
+        setDraftSavedAt("");
+        setDraftSaveStatus("");
+        resetFormToFresh();
+      } else {
+        // Edit mode: populate from existing rental
+        setHasDraft(false);
+        setDraftSavedAt("");
+        setDraftSaveStatus("");
+
+        // Populate agreement ID and dates from rental
+        setAgreementId(rental.id);
+        setAgreementDate(rental.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD());
+        setEndDate(rental.status === "Completed" && rental.end ? getLocalYYYYMMDD(rental.end) : (rental.end ? getLocalYYYYMMDD(rental.end) : ""));
+
+        // Match and populate customer details
+        const freshCustomers = getCustomers();
+        setCustomersList(freshCustomers);
+        let targetCustId = rental.customerId;
+        let matchedCustomer = freshCustomers.find((c: any) => c.id === targetCustId);
+        if (!matchedCustomer && rental.customer) {
+          matchedCustomer = freshCustomers.find((c: any) =>
+            c.name && c.name.trim().toLowerCase() === rental.customer.trim().toLowerCase()
+          );
+        }
+        if (!matchedCustomer && (rental.phone || (rental as any).customerPhone)) {
+          const ph = rental.phone || (rental as any).customerPhone;
+          matchedCustomer = freshCustomers.find((c: any) =>
+            c.phone === ph || c.altPhone === ph || c.contactNumber3 === ph
+          );
+        }
+
+        if (matchedCustomer) {
+          setSelectedCustomerId(matchedCustomer.id);
+          setIsNewCustomer(false);
+          setCustName(matchedCustomer.name || "");
+          setCustPhone(matchedCustomer.phone || "");
+          setCustAltPhone(matchedCustomer.altPhone || "");
+          setCustContactNumber3(matchedCustomer.contactNumber3 || "");
+          setCustEmail(matchedCustomer.email || "");
+          setCustAadhaar(matchedCustomer.aadhaar || "");
+          setCustPan(matchedCustomer.pan || "");
+          setCustAddress(matchedCustomer.address || "");
+          setCustArea(matchedCustomer.area || "");
+          setCustTaluk(matchedCustomer.taluk || "");
+          setCustCity(matchedCustomer.city || "Mysore");
+          setCustState(matchedCustomer.state || "Karnataka");
+          setCustPincode(matchedCustomer.pincode || "");
+          setCustNotes(matchedCustomer.notes || "");
+          setCustFiles([]);
+        } else if (rental.customer) {
+          setSelectedCustomerId(undefined);
+          setIsNewCustomer(true);
+          setCustName(rental.customer);
+          setCustPhone(rental.phone || (rental as any).customerPhone || "");
+          setCustAltPhone("");
+          setCustContactNumber3("");
+          setCustEmail("");
+          setCustAadhaar("");
+          setCustPan("");
+          setCustAddress((rental as any)?.address || "");
+          setCustArea((rental as any)?.area || "");
+          setCustTaluk((rental as any)?.taluk || "");
+          setCustCity("Mysore");
+          setCustState("Karnataka");
+          setCustPincode("");
+          setCustNotes("");
+          setCustFiles([]);
+        } else {
+          setSelectedCustomerId(rental.customerId || undefined);
+          setIsNewCustomer(false);
+        }
+      }
 
       if (rental) {
         try {
@@ -1040,23 +1136,6 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         setCapturedLocation(null);
       }
       setIsCapturingLocation(false);
-      
-      // New Customer states
-      setCustName("");
-      setCustPhone("");
-      setCustAltPhone("");
-      setCustContactNumber3("");
-      setCustEmail("");
-      setCustAadhaar("");
-      setCustPan("");
-      setCustAddress((rental as any)?.address || "");
-      setCustArea((rental as any)?.area || "");
-      setCustTaluk((rental as any)?.taluk || "");
-      setCustCity("Mysore");
-      setCustState("Karnataka");
-      setCustPincode("");
-      setCustNotes("");
-      setCustFiles([]);
 
       // Charges
       setDeliveryCharges(rental?.deliveryCharges?.toString() || "0");
@@ -1752,6 +1831,12 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
         setIsSubmitting(false);
         return;
       }
+    }
+
+    if (!isNewCustomer && !selectedCustomerId) {
+      toast.error("Please select an existing customer or switch to Add New Customer.");
+      setIsSubmitting(false);
+      return;
     }
 
     if (isNewCustomer) {
@@ -6042,6 +6127,7 @@ function RentalsPage() {
     >
       {activeView === "new" ? (
         <CreateRentalDialog
+          key="new-rental-dialog"
           inline
           title="New Rental Agreement"
           onSave={refresh}
@@ -6049,6 +6135,7 @@ function RentalsPage() {
         />
       ) : activeView === "edit" ? (
         <CreateRentalDialog
+          key={`edit-rental-${editingRental?.id || "unknown"}`}
           inline
           title="Edit Rental Agreement"
           rental={editingRental!}
