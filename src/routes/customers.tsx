@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AppShell, StatusBadge } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -189,6 +189,37 @@ function CustomerFormDialog({
   // drop it silently, because it had not been read into `selectedFiles` yet.
   const [pendingReads, setPendingReads] = useState(0);
 
+  const customersList = useMemo(() => getCustomers(), [open]);
+  const findPhoneOwners = useCallback(
+    (value: string) => {
+      const digits = String(value || "").replace(/\D/g, "");
+      if (digits.length !== 10) return [];
+      return customersList.filter((c: any) =>
+        c.id !== customer?.id &&
+        [c.phone, c.altPhone, c.contactNumber3].some(
+          (p: any) => String(p || "").replace(/\D/g, "") === digits
+        )
+      );
+    },
+    [customersList, customer?.id]
+  );
+
+  const phoneOwners = useMemo(() => findPhoneOwners(phone), [findPhoneOwners, phone]);
+  const altPhoneOwners = useMemo(() => findPhoneOwners(altPhone), [findPhoneOwners, altPhone]);
+  const contact3Owners = useMemo(() => findPhoneOwners(contactNumber3), [findPhoneOwners, contactNumber3]);
+
+  const formatPhoneAlert = (owners: any[], currentName: string) => {
+    if (!owners || owners.length === 0) return null;
+    const norm = currentName.trim().toLowerCase();
+    const matching = owners.filter((o: any) => (o.name || "").trim().toLowerCase() === norm);
+    if (matching.length > 0) {
+      const names = matching.map((o: any) => `${o.name} (${o.id})`).join(", ");
+      return `Phone number matches existing customer ${names}`;
+    }
+    const allNames = owners.map((o: any) => `${o.name} (${o.id})`).join(", ");
+    return `Phone number shared with ${allNames} · Will be saved as separate customer`;
+  };
+
   useEffect(() => {
     if (open) {
       setName(asText(customer?.name));
@@ -334,18 +365,24 @@ function CustomerFormDialog({
     const normalizedPhone = phone.replace(/\D/g, "");
     const others = getCustomers().filter((c) => c.id !== customer?.id);
 
-    const phoneOwner = others.find(
-      (c) => String(c.phone || "").replace(/\D/g, "") === normalizedPhone
+    const matchingPhoneOwners = others.filter((c) =>
+      [c.phone, c.altPhone, c.contactNumber3].some(
+        (p: any) => String(p || "").replace(/\D/g, "") === normalizedPhone
+      )
     );
-    if (phoneOwner) {
-      if ((phoneOwner.name || "").trim().toLowerCase() === normalizedName) {
+    if (matchingPhoneOwners.length > 0) {
+      const exactMatch = matchingPhoneOwners.find(
+        (o) => (o.name || "").trim().toLowerCase() === normalizedName
+      );
+      if (exactMatch) {
         toast.error(
-          `A customer with this exact name and phone number already exists (${phoneOwner.id}).`
+          `A customer with this exact name and phone number already exists (${exactMatch.id}).`
         );
         return;
       }
+      const namesList = matchingPhoneOwners.map((o) => `"${o.name}" (${o.id})`).join(", ");
       toast.info(
-        `Phone number shared with "${phoneOwner.name}" (${phoneOwner.id}). Saving as a separate customer record.`
+        `Phone number shared with ${namesList}. Saving as a separate customer record.`
       );
     }
 
@@ -570,7 +607,14 @@ function CustomerFormDialog({
                 }
               }} 
               maxLength={14}
-            />
+            >
+              {phoneOwners.length > 0 && (
+                <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500 mt-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                  <span>{formatPhoneAlert(phoneOwners, name)}</span>
+                </p>
+              )}
+            </Field>
             <Field 
               label="Alternative Phone" 
               placeholder="optional (10 digits)"                
@@ -586,7 +630,14 @@ function CustomerFormDialog({
                 }
               }} 
               maxLength={14}
-            />
+            >
+              {altPhoneOwners.length > 0 && (
+                <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500 mt-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                  <span>{formatPhoneAlert(altPhoneOwners, name)}</span>
+                </p>
+              )}
+            </Field>
             <Field 
               label="Alternative Phone 1"  
               placeholder="optional (10 digits)"                
@@ -602,7 +653,14 @@ function CustomerFormDialog({
                 }
               }} 
               maxLength={14}
-            />
+            >
+              {contact3Owners.length > 0 && (
+                <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500 mt-1">
+                  <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
+                  <span>{formatPhoneAlert(contact3Owners, name)}</span>
+                </p>
+              )}
+            </Field>
             <Field label="Email" placeholder="email@domain.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             
             <div className="sm:col-span-2 border-b border-border/40 pb-1 mt-2">
@@ -2415,6 +2473,7 @@ function Field({
   onChange,
   maxLength,
   required,
+  children,
 }: {
   label: string;
   placeholder?: string;
@@ -2424,6 +2483,7 @@ function Field({
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   maxLength?: number;
   required?: boolean;
+  children?: React.ReactNode;
 }) {
   return (
     <div className={`space-y-1.5 ${className ?? ""}`}>
@@ -2431,6 +2491,7 @@ function Field({
         {label} {required && <span className="text-destructive font-bold">*</span>}
       </Label>
       <Input type={type} placeholder={placeholder} value={value} onChange={onChange} maxLength={maxLength} />
+      {children}
     </div>
   );
 }

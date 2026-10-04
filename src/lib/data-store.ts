@@ -20,12 +20,16 @@ if (isBrowser) {
     removePendingSync(SHEETS.PAYMENTS, "PAY-0276");
     recordDeletedId(SHEETS.PAYMENTS, "PAY-2050");
     removePendingSync(SHEETS.PAYMENTS, "PAY-2050");
+    recordDeletedId(SHEETS.PAYMENTS, "PAY-2852");
+    removePendingSync(SHEETS.PAYMENTS, "PAY-2852");
+    recordDeletedId(SHEETS.PAYMENTS, "PAY-2853");
+    removePendingSync(SHEETS.PAYMENTS, "PAY-2853");
     const raw = localStorage.getItem("medirent-payments");
-    if (raw && (raw.includes("PAY-0276") || raw.includes("PAY-2050") || raw.includes("PAY-0579"))) {
+    if (raw && (raw.includes("PAY-0276") || raw.includes("PAY-2050") || raw.includes("PAY-0579") || raw.includes("PAY-2852") || raw.includes("PAY-2853"))) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         let changed = false;
-        const filtered = parsed.filter((p: any) => p && p.id !== "PAY-0276" && p.id !== "PAY-2050");
+        const filtered = parsed.filter((p: any) => p && p.id !== "PAY-0276" && p.id !== "PAY-2050" && p.id !== "PAY-2852" && p.id !== "PAY-2853");
         if (filtered.length !== parsed.length) changed = true;
         const p0579 = filtered.find((p: any) => p && p.id === "PAY-0579");
         if (p0579 && (p0579.amount !== 6500 || p0579.discount !== 1500 || !String(p0579.equipmentId).includes("EQ-OXY-0003"))) {
@@ -2109,6 +2113,30 @@ export function cancelRental(id: string) {
 
     // Sync cancellation to Google Sheets
     if (isGSheetsEnabled()) syncRowToSheet(SHEETS.RENTALS, rental as unknown as Record<string, unknown>);
+
+    // Mark all payments associated with this cancelled agreement as 'Cancelled'
+    // so they do not count in Monthly Revenue, Collections, or Receipts
+    const cleanAgr = String(id).trim().toUpperCase().replace(/^AGR-/i, "");
+    const paymentsList = getStorageItem<any[]>("medirent-payments", []);
+    let paymentsChanged = false;
+    paymentsList.forEach((p: any) => {
+      if (!p) return;
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+      if (pAgr && pAgr === cleanAgr && p.status !== "Cancelled") {
+        p.status = "Cancelled";
+        paymentsChanged = true;
+        if (isGSheetsEnabled()) {
+          syncRowToSheet(SHEETS.PAYMENTS, p as unknown as Record<string, unknown>);
+        }
+      }
+    });
+    if (paymentsChanged) {
+      setStorageItem("medirent-payments", paymentsList);
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("medirent-db-updated"));
+    }
   }
   return list;
 }
@@ -2569,6 +2597,19 @@ export function getPayments() {
     dirty = true;
   }
 
+  // Purge PAY-2852 and PAY-2853 (duplicate payments for Darshan AGR-2026-0033)
+  ["PAY-2852", "PAY-2853"].forEach((delId) => {
+    const idx = mergedList.findIndex((p) => p && p.id === delId);
+    if (idx !== -1) {
+      mergedList.splice(idx, 1);
+      if (isBrowser) {
+        recordDeletedId(SHEETS.PAYMENTS, delId);
+        removePendingSync(SHEETS.PAYMENTS, delId);
+      }
+      dirty = true;
+    }
+  });
+
   // Purge any erroneously saved "Not Paid" return due placeholder payments (e.g. PAY-0582)
   const notPaidPayments = mergedList.filter((p) => {
     if (!p) return false;
@@ -2627,6 +2668,30 @@ export function getPayments() {
       dirty = true;
     }
   });
+
+  // Self-healing: if an agreement is Cancelled, ensure all its payments are marked as Cancelled
+  // so they do not count towards Monthly Revenue, Collections, or Receipts
+  const allRentals = getStorageItem<any[]>("medirent-rentals", []);
+  const cancelledAgrIds = new Set(
+    allRentals
+      .filter((r) => r && r.status === "Cancelled")
+      .map((r) => String(r.id || "").trim().toUpperCase().replace(/^AGR-/i, ""))
+      .filter(Boolean)
+  );
+
+  if (cancelledAgrIds.size > 0) {
+    mergedList.forEach((p) => {
+      if (!p) return;
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+      if (pAgr && cancelledAgrIds.has(pAgr) && p.status !== "Cancelled") {
+        p.status = "Cancelled";
+        dirty = true;
+        if (isBrowser && isGSheetsEnabled()) {
+          syncRowToSheet(SHEETS.PAYMENTS, p as any);
+        }
+      }
+    });
+  }
 
   if (isBrowser) {
     if (reconcileRentalEquipmentPayments(mergedList)) {
@@ -3216,9 +3281,22 @@ export function getDynamicKPIs() {
   }
 
   // 6. Monthly Revenue growth (Relife vs Overall)
+  const isExcludedRevenuePayment = (p: any) => {
+    if (!p) return true;
+    const status = String(p.status || "").trim().toLowerCase();
+    if (status === "cancelled" || status === "failed" || status === "not paid" || status === "void") return true;
+    if (status !== "paid" && status !== "completed") return true;
+    if (p.agreement || p.rentalId || p.agreementId) {
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+      const r = rent.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+      if (r && r.status === "Cancelled") return true;
+    }
+    return false;
+  };
+
   const currentMonthRevenue = pay
     .filter((p) => {
-      if (p.status !== "Paid") return false;
+      if (isExcludedRevenuePayment(p)) return false;
       const d = parseLocalDate(p.date);
       return !isNaN(d.getTime()) && d.getMonth() === curMonth && d.getFullYear() === curYear;
     })
@@ -3226,7 +3304,7 @@ export function getDynamicKPIs() {
 
   const relifeMonthlyRevenue = pay
     .filter((p) => {
-      if (p.status !== "Paid") return false;
+      if (isExcludedRevenuePayment(p)) return false;
       const d = parseLocalDate(p.date);
       if (isNaN(d.getTime()) || d.getMonth() !== curMonth || d.getFullYear() !== curYear) return false;
 
@@ -3252,7 +3330,7 @@ export function getDynamicKPIs() {
 
   const prevMonthRevenue = pay
     .filter((p) => {
-      if (p.status !== "Paid") return false;
+      if (isExcludedRevenuePayment(p)) return false;
       const d = parseLocalDate(p.date);
       return !isNaN(d.getTime()) && d.getMonth() === prevMonth && d.getFullYear() === prevYear;
     })
@@ -6340,7 +6418,7 @@ export function getDiscountForEquipment(rental: any, equipmentId: string, paymen
  * for agreements where they were collected at creation but not saved as separate payment records.
  */
 export function getAgreementInitialPayments(rental: any, existingPayments: any[] = []): any[] {
-  if (!rental || !rental.id) return [];
+  if (!rental || !rental.id || rental.status === "Cancelled") return [];
 
   const initialPayments: any[] = [];
   const agreementId = rental.id;

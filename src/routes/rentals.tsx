@@ -453,24 +453,34 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   // picks the existing customer instead of creating a second record for them.
   // Matching is on the normalised 10 digits and covers all three stored numbers,
   // because a person's "alternate" number is often someone else's primary.
-  const findPhoneOwner = useCallback(
+  const findPhoneOwners = useCallback(
     (value: string) => {
       const digits = String(value || "").replace(/\D/g, "");
-      if (digits.length !== 10) return null;
-      return (
-        customersList.find((c: any) =>
-          [c.phone, c.altPhone, c.contactNumber3].some(
-            (p: any) => String(p || "").replace(/\D/g, "") === digits
-          )
-        ) || null
+      if (digits.length !== 10) return [];
+      return customersList.filter((c: any) =>
+        [c.phone, c.altPhone, c.contactNumber3].some(
+          (p: any) => String(p || "").replace(/\D/g, "") === digits
+        )
       );
     },
     [customersList]
   );
 
-  const custPhoneOwner = useMemo(() => findPhoneOwner(custPhone), [findPhoneOwner, custPhone]);
-  const custAltPhoneOwner = useMemo(() => findPhoneOwner(custAltPhone), [findPhoneOwner, custAltPhone]);
-  const custContact3Owner = useMemo(() => findPhoneOwner(custContactNumber3), [findPhoneOwner, custContactNumber3]);
+  const custPhoneOwners = useMemo(() => findPhoneOwners(custPhone), [findPhoneOwners, custPhone]);
+  const custAltPhoneOwners = useMemo(() => findPhoneOwners(custAltPhone), [findPhoneOwners, custAltPhone]);
+  const custContact3Owners = useMemo(() => findPhoneOwners(custContactNumber3), [findPhoneOwners, custContactNumber3]);
+
+  const formatPhoneAlert = (owners: any[], currentName: string) => {
+    if (!owners || owners.length === 0) return null;
+    const norm = currentName.trim().toLowerCase();
+    const matching = owners.filter((o) => (o.name || "").trim().toLowerCase() === norm);
+    if (matching.length > 0) {
+      const names = matching.map((o) => `${o.name} (${o.id})`).join(", ");
+      return `Phone number matches existing customer ${names}`;
+    }
+    const allNames = owners.map((o) => `${o.name} (${o.id})`).join(", ");
+    return `Phone number shared with ${allNames} · Will be saved as separate customer`;
+  };
   const [custEmail, setCustEmail] = useState("");
   const [custAadhaar, setCustAadhaar] = useState("");
   const [custPan, setCustPan] = useState("");
@@ -1897,19 +1907,21 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       // If exact same name AND phone match, reuse the existing customer record.
       const normalizedName = custName.trim().toLowerCase();
       const existingCustomers = getCustomers();
-      const phoneOwner = findPhoneOwner(custPhone);
-      if (phoneOwner) {
-        if ((phoneOwner.name || "").trim().toLowerCase() === normalizedName) {
+      const phoneOwners = findPhoneOwners(custPhone);
+      if (phoneOwners.length > 0) {
+        const exactMatch = phoneOwners.find((o: any) => (o.name || "").trim().toLowerCase() === normalizedName);
+        if (exactMatch) {
           // Exactly the same name and same phone number - link to existing customer
-          customerId = phoneOwner.id;
-          customerName = phoneOwner.name;
+          customerId = exactMatch.id;
+          customerName = exactMatch.name;
           toast.info(
-            `Using existing customer record "${phoneOwner.name}" (${phoneOwner.id}).`
+            `Using existing customer record "${exactMatch.name}" (${exactMatch.id}).`
           );
         } else {
           // Different name with same contact number - allow saving as a separate customer record
+          const namesList = phoneOwners.map((o: any) => `"${o.name}" (${o.id})`).join(", ");
           toast.info(
-            `Phone number shared with "${phoneOwner.name}" (${phoneOwner.id}). Saving "${custName}" as a separate customer.`
+            `Phone number shared with ${namesList}. Saving "${custName}" as a separate customer.`
           );
         }
       }
@@ -2669,14 +2681,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
-                      {custPhoneOwner && (
+                      {custPhoneOwners.length > 0 && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>
-                            {custName.trim().toLowerCase() === (custPhoneOwner.name || "").trim().toLowerCase()
-                              ? `Phone number matches existing customer ${custPhoneOwner.name} (${custPhoneOwner.id})`
-                              : `Phone number shared with ${custPhoneOwner.name} (${custPhoneOwner.id}) · Will be saved as separate customer`}
-                          </span>
+                          <span>{formatPhoneAlert(custPhoneOwners, custName)}</span>
                         </p>
                       )}
                     </div>
@@ -2697,14 +2705,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
-                      {custAltPhoneOwner && (
+                      {custAltPhoneOwners.length > 0 && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>
-                            {custName.trim().toLowerCase() === (custAltPhoneOwner.name || "").trim().toLowerCase()
-                              ? `Phone number matches existing customer ${custAltPhoneOwner.name} (${custAltPhoneOwner.id})`
-                              : `Phone number shared with ${custAltPhoneOwner.name} (${custAltPhoneOwner.id}) · Will be saved as separate customer`}
-                          </span>
+                          <span>{formatPhoneAlert(custAltPhoneOwners, custName)}</span>
                         </p>
                       )}
                     </div>
@@ -2725,14 +2729,10 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
                         }} 
                         maxLength={14}
                       />
-                      {custContact3Owner && (
+                      {custContact3Owners.length > 0 && (
                         <p className="flex items-start gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-500">
                           <AlertTriangle className="h-3 w-3 shrink-0 mt-[1px]" />
-                          <span>
-                            {custName.trim().toLowerCase() === (custContact3Owner.name || "").trim().toLowerCase()
-                              ? `Phone number matches existing customer ${custContact3Owner.name} (${custContact3Owner.id})`
-                              : `Phone number shared with ${custContact3Owner.name} (${custContact3Owner.id}) · Will be saved as separate customer`}
-                          </span>
+                          <span>{formatPhoneAlert(custContact3Owners, custName)}</span>
                         </p>
                       )}
                     </div>

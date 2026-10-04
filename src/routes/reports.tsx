@@ -467,7 +467,17 @@ function ReportsPage() {
     .map((c) => {
       const rentalsCount = rentalsList.filter((r) => r.customerId === c.id).length;
       const revenueSum = paymentsList
-        .filter((p) => p.customerId === c.id && p.status === "Paid")
+        .filter((p) => {
+          if (p.customerId !== c.id) return false;
+          const status = String(p.status || "").trim().toLowerCase();
+          if (status !== "paid" && status !== "completed") return false;
+          if (p.agreement || p.rentalId || p.agreementId) {
+            const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+            const r = rentalsList.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+            if (r && r.status === "Cancelled") return false;
+          }
+          return true;
+        })
         .reduce((sum, p) => sum + p.amount, 0);
       return {
         id: c.id,
@@ -1714,7 +1724,13 @@ function ReportsPage() {
     const paymentYear = idx < 3 ? activeFY.endYear : activeFY.startYear;
 
     const monthPayments = paymentsList.filter((p) => {
-      if (p.status !== "Paid") return false;
+      const status = String(p.status || "").trim().toLowerCase();
+      if (status !== "paid" && status !== "completed") return false;
+      if (p.agreement || p.rentalId || p.agreementId) {
+        const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+        const r = rentalsList.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+        if (r && r.status === "Cancelled") return false;
+      }
       try {
         const pDate = parseLocalDate(p.date);
         if (!isNaN(pDate.getTime())) {

@@ -142,9 +142,22 @@ function Dashboard() {
 
   const maintenanceCount = relifeEquipmentList.filter(e => e.status === "UnderMaintenance").length;
 
+  const isCancelledPayment = (p: any) => {
+    if (!p) return true;
+    const status = String(p.status || "").trim().toLowerCase();
+    if (status === "cancelled" || status === "failed" || status === "not paid" || status === "void") return true;
+    if (status !== "paid" && status !== "completed") return true;
+    if (p.agreement || p.rentalId || p.agreementId) {
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+      const r = rentalsList.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+      if (r && r.status === "Cancelled") return true;
+    }
+    return false;
+  };
+
   // Total Paid
   const totalCollected = paymentsList
-    .filter(p => p.status === "Paid")
+    .filter(p => !isCancelledPayment(p))
     .reduce((sum, p) => sum + p.amount, 0);
 
   const today = new Date();
@@ -280,7 +293,7 @@ function Dashboard() {
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const revenueData = months.map((m, idx) => {
     const monthlyPayments = paymentsList.filter(p => {
-      if (p.status !== "Paid") return false;
+      if (isCancelledPayment(p)) return false;
       const pDate = parseLocalDate(p.date);
       return !isNaN(pDate.getTime()) && pDate.getMonth() === idx;
     });
