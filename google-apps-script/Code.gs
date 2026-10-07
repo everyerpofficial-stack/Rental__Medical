@@ -10,6 +10,13 @@
 //     - Execute as: Me
 //     - Who has access: Anyone
 //
+// v8 CHANGES (vs v7):
+//  - upsert / bulkUpsert now look rows up by reading ONLY the id (and, for
+//    Staff, email) column instead of the entire sheet. Every write holds the
+//    script lock, and reading all rows x all columns on every single save made
+//    each write slow enough that bursts (one return = 6-10 rows) queued past
+//    LOCK_WAIT_MS and failed with "Server busy, please retry".
+//
 // v7 CHANGES (vs v6):
 //  - NEW ACTION `sendWhatsApp`: sends a rental agreement (or any message) to a
 //    customer through the Meta WhatsApp Cloud API, server-side. The frontend
@@ -114,7 +121,7 @@ function doGet(e) {
   if (action === "ping") {
     const ss = getSS();
     return ContentService
-      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v7" }))
+      .createTextOutput(JSON.stringify({ status: "ok", sheetName: ss.getName(), version: "v8" }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -336,16 +343,20 @@ function bulkUpsertRows(sh, rows) {
     if (hLower === "id") idCol = h;
     if (hLower === "email") emailCol = h;
   }
-  var existingData = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
+  // Read only the key columns — not every row x every column — while holding the lock.
+  var dataRows = Math.max(0, sh.getLastRow() - 1);
+  var isStaffSheet = sh.getName() === "Staff";
+  var idVals = (dataRows > 0 && idCol !== -1) ? sh.getRange(2, idCol + 1, dataRows, 1).getValues() : [];
+  var emailVals = (dataRows > 0 && isStaffSheet && emailCol !== -1) ? sh.getRange(2, emailCol + 1, dataRows, 1).getValues() : [];
   var idToRowIndex = {};
-  existingData.forEach(function(r, i) {
-    if (idCol !== -1 && r[idCol] !== undefined && String(r[idCol]).trim() !== "") {
-      idToRowIndex[String(r[idCol]).trim()] = i;
+  for (var ri = 0; ri < dataRows; ri++) {
+    if (idVals.length && idVals[ri][0] !== undefined && String(idVals[ri][0]).trim() !== "") {
+      idToRowIndex[String(idVals[ri][0]).trim()] = ri;
     }
-    if (sh.getName() === "Staff" && emailCol !== -1 && r[emailCol]) {
-      idToRowIndex["email:" + String(r[emailCol]).toLowerCase().trim()] = i;
+    if (emailVals.length && emailVals[ri][0]) {
+      idToRowIndex["email:" + String(emailVals[ri][0]).toLowerCase().trim()] = ri;
     }
-  });
+  }
   var toAppend = [];
   rows.forEach(function(row) {
     var newRow = headers.map(function(h) {
@@ -368,8 +379,8 @@ function bulkUpsertRows(sh, rows) {
       sh.getRange(matchedIdx + 2, 1, 1, headers.length).setValues([newRow]);
     } else {
       toAppend.push(newRow);
-      if (rowId) idToRowIndex[rowId] = existingData.length + toAppend.length - 1;
-      if (rowEmail) idToRowIndex[rowEmail] = existingData.length + toAppend.length - 1;
+      if (rowId) idToRowIndex[rowId] = dataRows + toAppend.length - 1;
+      if (rowEmail) idToRowIndex[rowEmail] = dataRows + toAppend.length - 1;
     }
   });
   if (toAppend.length > 0) {
@@ -414,12 +425,15 @@ function upsertRow(sh, row) {
   var rowId = (idCol !== -1 && row[headers[idCol]] !== undefined) ? String(row[headers[idCol]]).trim() : (row["id"] !== undefined ? String(row["id"]).trim() : null);
   var rowEmail = (sh.getName() === "Staff" && row["email"]) ? String(row["email"]).toLowerCase().trim() : null;
 
-  var existingData = sh.getLastRow() > 1 && sh.getLastColumn() > 0
-    ? sh.getRange(2, 1, sh.getLastRow() - 1, headers.length).getValues() : [];
+  // Read only the key columns — not every row x every column — while holding the lock.
+  var dataRows = Math.max(0, sh.getLastRow() - 1);
+  var isStaffSheet = sh.getName() === "Staff";
+  var idVals = (dataRows > 0 && idCol !== -1) ? sh.getRange(2, idCol + 1, dataRows, 1).getValues() : [];
+  var emailVals = (dataRows > 0 && isStaffSheet && emailCol !== -1) ? sh.getRange(2, emailCol + 1, dataRows, 1).getValues() : [];
   var found = false;
-  for (var i = 0; i < existingData.length; i++) {
-    var cellId = idCol !== -1 ? String(existingData[i][idCol]).trim() : null;
-    var cellEmail = (sh.getName() === "Staff" && emailCol !== -1) ? String(existingData[i][emailCol]).toLowerCase().trim() : null;
+  for (var i = 0; i < dataRows; i++) {
+    var cellId = idVals.length ? String(idVals[i][0]).trim() : null;
+    var cellEmail = emailVals.length ? String(emailVals[i][0]).toLowerCase().trim() : null;
     if ((rowId && cellId === rowId) || (rowEmail && cellEmail === rowEmail)) {
       sh.getRange(i + 2, 1, 1, headers.length).setValues([newRow]);
       found = true;

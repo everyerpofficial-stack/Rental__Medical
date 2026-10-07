@@ -30,7 +30,7 @@ import {
   Banknote,
 } from "lucide-react";
 import { useEffect, useState, useRef, type ReactNode } from "react";
-import { isGSheetsEnabled } from "@/lib/google-sheets";
+import { isGSheetsEnabled, getSyncStatus, retryPendingSyncsNow, type SyncStatus } from "@/lib/google-sheets";
 import { syncFromSheetsToLocalStorage, syncMissingFileChunks, flushPendingStatusCorrections } from "@/lib/data-store";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -157,6 +157,19 @@ export function AppShell({
     return () => window.removeEventListener("medirent-db-updated", handleDbUpdate);
   }, []);
 
+  // Live count of changes not yet confirmed by Google Sheets, so staff can
+  // see at a glance whether their payments/returns have actually been saved.
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ pending: 0, failing: 0, syncing: false });
+  useEffect(() => {
+    setSyncStatus(getSyncStatus());
+    const onStatus = (e: Event) => {
+      const detail = (e as CustomEvent<SyncStatus>).detail;
+      setSyncStatus(detail ?? getSyncStatus());
+    };
+    window.addEventListener("medirent-sync-status", onStatus);
+    return () => window.removeEventListener("medirent-sync-status", onStatus);
+  }, []);
+
   // C-6: getRentals() runs during render, so when its status-correction pass
   // fixes a rental it only *queues* the row. Draining that queue is a network
   // write and belongs in an effect — doing it inline meant one POST per
@@ -224,8 +237,19 @@ export function AppShell({
     setIsSyncing(true);
     toast.info("Syncing data with Google Sheets...");
     try {
+      // Push unsaved local changes first, then pull.
+      const status = await retryPendingSyncsNow();
       await syncFromSheetsToLocalStorage(true);
-      toast.success("Database synced successfully!");
+      if (status.pending > 0) {
+        toast.warning(
+          `${status.pending} change${status.pending === 1 ? " is" : "s are"} still waiting to be saved to Google Sheets` +
+            (status.lastError ? ` (${status.lastError.slice(0, 120)})` : "") +
+            ". They are safe on this device and will keep retrying.",
+          { duration: 10000 }
+        );
+      } else {
+        toast.success("Database synced successfully!");
+      }
     } catch (e) {
       toast.error("Sync failed: " + String(e));
     } finally {
@@ -581,13 +605,34 @@ export function AppShell({
 
             {/* Database Status Badge — desktop only */}
             {isGSheetsEnabled() ? (
-              <div
-                className="hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border bg-success/10 text-success border-success/20 mr-1.5 shadow-sm"
-                title="Google Sheets Database is Connected."
-              >
-                <Wifi className="h-3 w-3 text-success animate-pulse" />
-                <span className="hidden sm:inline">DB Connected</span>
-              </div>
+              syncStatus.pending > 0 ? (
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isSyncing}
+                  className={`hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border mr-1.5 shadow-sm ${
+                    syncStatus.failing > 0
+                      ? "bg-destructive/10 text-destructive border-destructive/20"
+                      : "bg-warning/10 text-warning border-warning/20"
+                  }`}
+                  title={
+                    syncStatus.failing > 0
+                      ? `${syncStatus.pending} change(s) not yet saved to Google Sheets. Retrying automatically.${syncStatus.lastError ? `\nLast error: ${syncStatus.lastError}` : ""}\nClick to retry now.`
+                      : `${syncStatus.pending} change(s) being saved to Google Sheets...`
+                  }
+                >
+                  <RefreshCw className={`h-3 w-3 ${syncStatus.syncing ? "animate-spin" : ""}`} />
+                  <span>{syncStatus.pending} unsaved</span>
+                </button>
+              ) : (
+                <div
+                  className="hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border bg-success/10 text-success border-success/20 mr-1.5 shadow-sm"
+                  title="Google Sheets Database is Connected. All changes saved."
+                >
+                  <Wifi className="h-3 w-3 text-success animate-pulse" />
+                  <span className="hidden sm:inline">DB Connected</span>
+                </div>
+              )
             ) : (
               <div
                 className="hidden sm:flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border bg-destructive/10 text-destructive border-destructive/20 mr-1.5 shadow-sm"

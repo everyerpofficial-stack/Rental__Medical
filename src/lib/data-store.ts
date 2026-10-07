@@ -5679,7 +5679,7 @@ export async function syncFromSheetsToLocalStorage(force = false) {
       const pendingUpserts = pending.filter((p) => p.type === "upsert");
       pendingUpserts.forEach((p) => {
         if (!p.data) return;
-        const idx = mergedData.findIndex((item) => item.id === p.id);
+        const idx = mergedData.findIndex((item) => String(item.id) === String(p.id));
         if (idx > -1) {
           mergedData[idx] = p.data;
         } else {
