@@ -45,28 +45,31 @@ if (isBrowser) {
       }
     }
 
-    const rawRentals = localStorage.getItem("medirent-rentals");
-    if (rawRentals && (rawRentals.includes("AGR-2026-0400") || rawRentals.includes('"end":'))) {
-      const parsedRentals = JSON.parse(rawRentals);
-      if (Array.isArray(parsedRentals)) {
-        let rChanged = false;
-        const fixedRentals = parsedRentals.map((r: any) => {
-          if (r && r.status !== "Completed" && r.status !== "Cancelled") {
-            const allNotReturned = !r.equipmentItems || r.equipmentItems.length === 0 || r.equipmentItems.every((it: any) => !it.returned);
-            if (allNotReturned && r.end) {
-              rChanged = true;
-              const fixed = { ...r, end: "" };
-              if (isGSheetsEnabled()) {
-                syncRowToSheet(SHEETS.RENTALS, fixed as unknown as Record<string, unknown>);
+    if (localStorage.getItem("medirent-rental-end-migration-v1") !== "true") {
+      localStorage.setItem("medirent-rental-end-migration-v1", "true");
+      const rawRentals = localStorage.getItem("medirent-rentals");
+      if (rawRentals && (rawRentals.includes("AGR-2026-0400") || rawRentals.includes('"end":'))) {
+        const parsedRentals = JSON.parse(rawRentals);
+        if (Array.isArray(parsedRentals)) {
+          let rChanged = false;
+          const fixedRentals = parsedRentals.map((r: any) => {
+            if (r && r.status !== "Completed" && r.status !== "Cancelled") {
+              const allNotReturned = !r.equipmentItems || r.equipmentItems.length === 0 || r.equipmentItems.every((it: any) => !it.returned);
+              if (allNotReturned && r.end) {
+                rChanged = true;
+                const fixed = { ...r, end: "" };
+                if (isGSheetsEnabled()) {
+                  syncRowToSheet(SHEETS.RENTALS, fixed as unknown as Record<string, unknown>);
+                }
+                return fixed;
               }
-              return fixed;
             }
+            return r;
+          });
+          if (rChanged) {
+            localStorage.setItem("medirent-rentals", JSON.stringify(fixedRentals));
+            _invalidateRentalsCache();
           }
-          return r;
-        });
-        if (rChanged) {
-          localStorage.setItem("medirent-rentals", JSON.stringify(fixedRentals));
-          _invalidateRentalsCache();
         }
       }
     }
@@ -2049,7 +2052,7 @@ export function saveRental(rental: typeof initialRentals[number] & { equipmentIt
             p.type === "Security Deposit" ||
             p.date === oldRental.start ||
             p.date === (oldRental as any).paymentDate;
-          if (isInitial && p.date !== targetDate) {
+          if (isInitial && getLocalYYYYMMDD(p.date) !== targetDate) {
             p.date = targetDate;
             paymentsChanged = true;
             if (isGSheetsEnabled()) {
@@ -2727,34 +2730,6 @@ export function getPayments() {
     });
   }
 
-  // Self-healing: if an agreement's start/paymentDate was modified, ensure initial agreement creation payments sync their date
-  allRentals.forEach((r) => {
-    if (!r || !r.id || !r.start) return;
-    const cleanAgr = String(r.id).trim().toUpperCase().replace(/^AGR-/i, "");
-    const targetDate = getLocalYYYYMMDD((r as any).paymentDate || r.start);
-    if (!targetDate) return;
-
-    mergedList.forEach((p) => {
-      if (!p) return;
-      const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
-      if (pAgr === cleanAgr) {
-        const isInitialPayment =
-          (p.notes &&
-            (/at agreement creation/i.test(p.notes) ||
-              /advance rent payment/i.test(p.notes) ||
-              /security deposit/i.test(p.notes))) ||
-          p.type === "Deposit" ||
-          p.type === "Security Deposit";
-        if (isInitialPayment && p.date !== targetDate) {
-          p.date = targetDate;
-          dirty = true;
-          if (isBrowser && isGSheetsEnabled()) {
-            syncRowToSheet(SHEETS.PAYMENTS, p as any);
-          }
-        }
-      }
-    });
-  });
 
   if (isBrowser) {
     if (reconcileRentalEquipmentPayments(mergedList)) {

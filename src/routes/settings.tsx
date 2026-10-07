@@ -76,6 +76,10 @@ import {
   SHEETS,
   syncRowToSheet,
   deleteRowFromSheet,
+  getSyncStatus,
+  retryPendingSyncsNow,
+  clearPendingSyncs,
+  type SyncStatus,
 } from "@/lib/google-sheets";
 
 // ─── WhatsApp Tab ────────────────────────────────────────────────────────────
@@ -462,6 +466,31 @@ function DatabaseSettingsTab() {
   const [fileSyncProgress, setFileSyncProgress] = useState<{ checked: number; total: number } | null>(null);
   const [fileSyncResult, setFileSyncResult] = useState<{ checked: number; uploaded: number; alreadySynced: number; failed: number } | null>(null);
   const [isPulling, setIsPulling] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus());
+
+  useEffect(() => {
+    setSyncStatus(getSyncStatus());
+    const onStatus = (e: Event) => {
+      const detail = (e as CustomEvent<SyncStatus>).detail;
+      setSyncStatus(detail ?? getSyncStatus());
+    };
+    window.addEventListener("medirent-sync-status", onStatus);
+    return () => window.removeEventListener("medirent-sync-status", onStatus);
+  }, []);
+
+  const handleClearQueue = () => {
+    if (window.confirm("Are you sure you want to clear the unsaved write queue? Any pending local changes waiting to be pushed to Google Sheets will be cleared.")) {
+      clearPendingSyncs();
+      setSyncStatus(getSyncStatus());
+      toast.success("Unsaved write queue cleared.");
+    }
+  };
+
+  const handleRetryQueue = async () => {
+    toast.info("Retrying pending writes...");
+    const status = await retryPendingSyncsNow();
+    setSyncStatus(status);
+  };
 
   const SHEET_ID = "1f5mJV8P90ID2-BiyeZZvtBF0Q3JjvyElbfI4omxkJRw";
 
@@ -1561,6 +1590,29 @@ function waListTemplates() {
                 : "Sync Missing Files"}
             </Button>
           </div>
+
+          {/* Unsaved queue status banner */}
+          {syncStatus.pending > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-amber-600 dark:text-amber-400">
+                  {syncStatus.pending} change(s) waiting to be saved to Google Sheets
+                </p>
+                {syncStatus.lastError && (
+                  <p className="text-muted-foreground mt-0.5">Last error: {syncStatus.lastError}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button size="sm" variant="outline" onClick={handleRetryQueue} disabled={syncStatus.syncing} className="h-8 text-xs">
+                  <RefreshCw className={`h-3 w-3 mr-1 ${syncStatus.syncing ? "animate-spin" : ""}`} />
+                  Retry Now
+                </Button>
+                <Button size="sm" variant="destructive" onClick={handleClearQueue} className="h-8 text-xs">
+                  Clear Queue
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Connection status message */}
           {testMessage && (

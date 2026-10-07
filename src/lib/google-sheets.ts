@@ -671,7 +671,37 @@ export function deleteRowFromSheet(sheet: string, id: string, attempts = 0) {
   scheduleFlush();
 }
 
+/** Clear all pending syncs from the queue */
+export function clearPendingSyncs() {
+  if (!isBrowser) return;
+  setPendingSyncs([]);
+}
+
 if (isBrowser) {
+  // Purge any spurious initial-payment syncs that were queued by date format mismatch
+  if (localStorage.getItem("medirent-spurious-syncs-purged-v3") !== "true") {
+    localStorage.setItem("medirent-spurious-syncs-purged-v3", "true");
+    const syncs = getPendingSyncs();
+    if (syncs.length > 0) {
+      const filtered = syncs.filter((s) => {
+        if (s.sheet === "Payments" && s.type === "upsert") {
+          const notes = s.data?.notes || "";
+          const isInitial =
+            /at agreement creation/i.test(notes) ||
+            /advance rent payment/i.test(notes) ||
+            /security deposit/i.test(notes) ||
+            s.data?.type === "Deposit" ||
+            s.data?.type === "Security Deposit";
+          if (isInitial) return false;
+        }
+        return true;
+      });
+      if (filtered.length !== syncs.length) {
+        setPendingSyncs(filtered);
+      }
+    }
+  }
+
   // Resume as soon as the connection comes back, and pick up anything left
   // over from a previous session (tab closed before the write confirmed).
   window.addEventListener("online", () => scheduleFlush(0));
