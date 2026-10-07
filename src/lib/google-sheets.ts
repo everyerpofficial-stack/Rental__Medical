@@ -95,6 +95,7 @@ export async function sheetsRequest(
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, token: getGSheetsToken(), ...payload }),
       signal: controller?.signal,
+      credentials: "omit",
     });
 
     // Auto-fallback: if a custom URL stored in localStorage returned 404,
@@ -109,6 +110,7 @@ export async function sheetsRequest(
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ action, token: getGSheetsToken(), ...payload }),
           signal: controller?.signal,
+          credentials: "omit",
         });
         if (fallbackRes.ok) {
           localStorage.removeItem("medirent-gsheets-url");
@@ -120,7 +122,7 @@ export async function sheetsRequest(
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error(`HTTP error 404 (Apps Script URL not found)`);
+        throw new Error(`HTTP error 404 (Google returned 404. Check that 'Who has access' is set to 'Anyone' in Apps Script deployment)`);
       }
       throw new Error(`HTTP error ${response.status}`);
     }
@@ -168,7 +170,7 @@ async function sheetsGet(
     if (filter) {
       getUrl += `&filterKey=${encodeURIComponent(filter.key)}&filterValue=${encodeURIComponent(filter.value)}`;
     }
-    let response = await fetch(getUrl, { method: "GET" });
+    let response = await fetch(getUrl, { method: "GET", credentials: "omit" });
 
     // Auto-fallback on 404
     if (response.status === 404 && isBrowser) {
@@ -179,7 +181,7 @@ async function sheetsGet(
         if (filter) {
           fallbackUrl += `&filterKey=${encodeURIComponent(filter.key)}&filterValue=${encodeURIComponent(filter.value)}`;
         }
-        const fallbackRes = await fetch(fallbackUrl, { method: "GET" });
+        const fallbackRes = await fetch(fallbackUrl, { method: "GET", credentials: "omit" });
         if (fallbackRes.ok) {
           localStorage.removeItem("medirent-gsheets-url");
           response = fallbackRes;
@@ -199,22 +201,26 @@ async function sheetsGet(
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /** Test connectivity to the Apps Script Web App */
-export async function testConnection(): Promise<{
+export async function testConnection(
+  urlOverride?: string,
+  tokenOverride?: string
+): Promise<{
   ok: boolean;
   message: string;
 }> {
-  const url = getGSheetsUrl();
+  const url = cleanGSheetsUrl(urlOverride) || getGSheetsUrl();
+  const token = (tokenOverride !== undefined ? tokenOverride.trim() : getGSheetsToken());
   if (!url) return { ok: false, message: "No URL configured" };
   if (!url.startsWith("https://script.google.com/")) {
     return { ok: false, message: "URL must start with https://script.google.com/" };
   }
 
   try {
-    let testUrl = `${url}?action=ping&token=${encodeURIComponent(getGSheetsToken())}`;
-    let response = await fetch(testUrl, { method: "GET" });
+    let testUrl = `${url}?action=ping&token=${encodeURIComponent(token)}`;
+    let response = await fetch(testUrl, { method: "GET", credentials: "omit" });
     if (!response.ok) {
       if (response.status === 404) {
-        return { ok: false, message: `HTTP 404: Web App URL not found (${url}). Please check Settings → Database.` };
+        return { ok: false, message: `HTTP 404: Google cannot reach this Web App (${url}). Ensure that under Deploy → Manage deployments in Apps Script: 'Who has access' is set to 'Anyone' and 'Execute as' is set to 'Me'.` };
       }
       throw new Error(`HTTP ${response.status}`);
     }
@@ -703,6 +709,7 @@ export async function syncAllToSheets(
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "bulkUpsert", sheet, rows, token: getGSheetsToken() }),
+        credentials: "omit",
       });
       
       if (response.status === 404 && isBrowser) {
@@ -713,6 +720,7 @@ export async function syncAllToSheets(
             method: "POST",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify({ action: "bulkUpsert", sheet, rows, token: getGSheetsToken() }),
+            credentials: "omit",
           });
           if (fallbackRes.ok) {
             localStorage.removeItem("medirent-gsheets-url");
@@ -810,7 +818,7 @@ export async function sendOtpEmail(email: string, otp: string): Promise<{ succes
 
   try {
     const getUrl = `${url}?action=sendOtp&email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp)}&token=${encodeURIComponent(getGSheetsToken())}`;
-    const response = await fetch(getUrl, { method: "GET" });
+    const response = await fetch(getUrl, { method: "GET", credentials: "omit" });
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);

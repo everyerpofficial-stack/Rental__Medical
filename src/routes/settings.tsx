@@ -1203,13 +1203,14 @@ function waListTemplates() {
   };
 
   const handleTestConnection = async () => {
-    if (!sheetsUrl) {
-      toast.error("Please enter and save the Apps Script URL first.");
+    const cleanUrl = cleanGSheetsUrl(sheetsUrl);
+    if (!cleanUrl) {
+      toast.error("Please enter the Apps Script Web App URL first.");
       return;
     }
     setTestStatus("testing");
     setTestMessage("Testing connection...");
-    const result = await testConnection();
+    const result = await testConnection(cleanUrl, sheetsToken);
     setTestStatus(result.ok ? "ok" : "error");
     setTestMessage(result.message);
     if (result.ok) {
