@@ -19,18 +19,37 @@ const isBrowser = typeof window !== "undefined";
 
 // ─── Config helpers ─────────────────────────────────────────────────────────
 
+export function cleanGSheetsUrl(raw?: string | null): string {
+  if (!raw) return "";
+  let url = raw.trim();
+  // Strip trailing slashes
+  url = url.replace(/\/+$/, "");
+  return url;
+}
+
+export function getDefaultGSheetsUrl(): string {
+  return cleanGSheetsUrl(import.meta.env.VITE_GSHEETS_URL || "");
+}
+
+export function getDefaultGSheetsToken(): string {
+  return (import.meta.env.VITE_GSHEETS_TOKEN || "").trim();
+}
+
 export function getGSheetsUrl(): string {
   if (!isBrowser) return "";
-  // Priority: localStorage (user-saved) → build-time env var → empty (forces user to configure)
-  // ⚠️  No hardcoded fallback URL — the URL must be configured explicitly to protect the database.
-  //     A literal here ships to every visitor in the client bundle and grants full
-  //     read/write/delete access to the spreadsheet. Configure via Settings → Database
-  //     or VITE_GSHEETS_URL instead.
-  return localStorage.getItem("medirent-gsheets-url") || import.meta.env.VITE_GSHEETS_URL || "";
+  const stored = cleanGSheetsUrl(localStorage.getItem("medirent-gsheets-url"));
+  const envUrl = getDefaultGSheetsUrl();
+  return stored || envUrl;
 }
 
 export function setGSheetsUrl(url: string) {
-  if (isBrowser) localStorage.setItem("medirent-gsheets-url", url);
+  if (!isBrowser) return;
+  const cleaned = cleanGSheetsUrl(url);
+  if (cleaned) {
+    localStorage.setItem("medirent-gsheets-url", cleaned);
+  } else {
+    localStorage.removeItem("medirent-gsheets-url");
+  }
 }
 
 export function isGSheetsEnabled(): boolean {
@@ -38,19 +57,22 @@ export function isGSheetsEnabled(): boolean {
   return !!url && url.startsWith("https://script.google.com/");
 }
 
-/** Shared-secret token sent with every Apps Script request. The Apps Script
- *  rejects requests whose token doesn't match its own TOKEN constant.
- *  This doesn't make the endpoint fully private (it still ships to the
- *  browser bundle like the URL above), but it blocks opportunistic/automated
- *  access to a leaked or scanned Apps Script URL. Rotate it by changing the
- *  TOKEN constant in Code.gs and re-saving it here (or via Settings). */
+/** Shared-secret token sent with every Apps Script request. */
 export function getGSheetsToken(): string {
   if (!isBrowser) return "";
-  return localStorage.getItem("medirent-gsheets-token") || import.meta.env.VITE_GSHEETS_TOKEN || "";
+  const stored = (localStorage.getItem("medirent-gsheets-token") || "").trim();
+  const envToken = getDefaultGSheetsToken();
+  return stored || envToken;
 }
 
 export function setGSheetsToken(token: string) {
-  if (isBrowser) localStorage.setItem("medirent-gsheets-token", token);
+  if (!isBrowser) return;
+  const cleaned = token.trim();
+  if (cleaned) {
+    localStorage.setItem("medirent-gsheets-token", cleaned);
+  } else {
+    localStorage.removeItem("medirent-gsheets-token");
+  }
 }
 
 // ─── Core request helper ─────────────────────────────────────────────────────
@@ -60,7 +82,7 @@ export async function sheetsRequest(
   payload?: Record<string, unknown>,
   timeoutMs?: number
 ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-  const url = getGSheetsUrl();
+  let url = getGSheetsUrl();
   if (!url) return { success: false, error: "No Apps Script URL configured" };
 
   // A hung Apps Script call must not stall the write queue forever.
@@ -68,20 +90,38 @@ export async function sheetsRequest(
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
-    // NOTE: no `keepalive: true`. Chrome caps the *combined* body size of all
-    // in-flight keepalive requests at 64 KB. A single return saves 6-10 rows at
-    // once, and the retry loop re-sent every stuck row together, so once a
-    // backlog built up every write failed instantly with "Failed to fetch" —
-    // that is how payments/returns stopped reaching the sheet. Unsent writes
-    // are persisted in localStorage and resumed on next load instead.
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, token: getGSheetsToken(), ...payload }),
       signal: controller?.signal,
     });
 
+    // Auto-fallback: if a custom URL stored in localStorage returned 404,
+    // but the system has a valid default URL from env, automatically switch and recover.
+    if (response.status === 404 && isBrowser) {
+      const stored = cleanGSheetsUrl(localStorage.getItem("medirent-gsheets-url"));
+      const defUrl = getDefaultGSheetsUrl();
+      if (stored && defUrl && stored !== defUrl) {
+        console.warn(`[GSheets] Stored URL (${stored}) returned 404. Falling back to default URL (${defUrl}).`);
+        const fallbackRes = await fetch(defUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action, token: getGSheetsToken(), ...payload }),
+          signal: controller?.signal,
+        });
+        if (fallbackRes.ok) {
+          localStorage.removeItem("medirent-gsheets-url");
+          response = fallbackRes;
+          url = defUrl;
+        }
+      }
+    }
+
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`HTTP error 404 (Apps Script URL not found)`);
+      }
       throw new Error(`HTTP error ${response.status}`);
     }
 
@@ -90,11 +130,6 @@ export async function sheetsRequest(
     try {
       data = JSON.parse(text);
     } catch {
-      // Apps Script answers with an HTML page — not JSON — when the deployment
-      // isn't shared publicly, when the script threw, or when Google serves a
-      // sign-in interstitial. Treating that as success made syncRowToSheet drop
-      // the pending-write guard for a row that was never written, so the next
-      // pull silently replaced the local record with the stale remote one.
       return {
         success: false,
         error: `Non-JSON response from Apps Script (likely an auth or deployment error): ${text.slice(0, 200)}`,
@@ -125,7 +160,7 @@ async function sheetsGet(
   sheet: string,
   filter?: { key: string; value: string }
 ): Promise<{ success: boolean; data?: unknown[]; error?: string }> {
-  const url = getGSheetsUrl();
+  let url = getGSheetsUrl();
   if (!url) return { success: false, error: "No Apps Script URL configured" };
 
   try {
@@ -133,7 +168,25 @@ async function sheetsGet(
     if (filter) {
       getUrl += `&filterKey=${encodeURIComponent(filter.key)}&filterValue=${encodeURIComponent(filter.value)}`;
     }
-    const response = await fetch(getUrl, { method: "GET" });
+    let response = await fetch(getUrl, { method: "GET" });
+
+    // Auto-fallback on 404
+    if (response.status === 404 && isBrowser) {
+      const stored = cleanGSheetsUrl(localStorage.getItem("medirent-gsheets-url"));
+      const defUrl = getDefaultGSheetsUrl();
+      if (stored && defUrl && stored !== defUrl) {
+        let fallbackUrl = `${defUrl}?action=getAll&sheet=${encodeURIComponent(sheet)}&token=${encodeURIComponent(getGSheetsToken())}`;
+        if (filter) {
+          fallbackUrl += `&filterKey=${encodeURIComponent(filter.key)}&filterValue=${encodeURIComponent(filter.value)}`;
+        }
+        const fallbackRes = await fetch(fallbackUrl, { method: "GET" });
+        if (fallbackRes.ok) {
+          localStorage.removeItem("medirent-gsheets-url");
+          response = fallbackRes;
+        }
+      }
+    }
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const json = await response.json();
     return { success: true, data: json.data || [] };
@@ -157,12 +210,17 @@ export async function testConnection(): Promise<{
   }
 
   try {
-    const testUrl = `${url}?action=ping&token=${encodeURIComponent(getGSheetsToken())}`;
-    const response = await fetch(testUrl, { method: "GET" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    let testUrl = `${url}?action=ping&token=${encodeURIComponent(getGSheetsToken())}`;
+    let response = await fetch(testUrl, { method: "GET" });
+    if (!response.ok) {
+      if (response.status === 404) {
+        return { ok: false, message: `HTTP 404: Web App URL not found (${url}). Please check Settings → Database.` };
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
     const json = await response.json();
     if (json.status === "ok") {
-      return { ok: true, message: `Connected! Sheet: "${json.sheetName || "Unknown"}"` };
+      return { ok: true, message: `Connected! Sheet: "${json.sheetName || "Unknown"}" (version: ${json.version || "legacy"})` };
     }
     throw new Error(json.error || "Unknown error");
   } catch (err) {
@@ -618,7 +676,7 @@ if (isBrowser) {
 export async function syncAllToSheets(
   allData: Record<string, unknown[]>
 ): Promise<{ success: boolean; sheetsWritten: string[]; errors: string[] }> {
-  const url = getGSheetsUrl();
+  let url = getGSheetsUrl();
   if (!url) return { success: false, sheetsWritten: [], errors: ["No URL configured"] };
 
   const sheetsWritten: string[] = [];
@@ -641,13 +699,29 @@ export async function syncAllToSheets(
 
   for (const [sheet, rows] of Object.entries(cleanedData)) {
     try {
-      // For bulk sync we use a direct POST with all rows
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "bulkUpsert", sheet, rows, token: getGSheetsToken() }),
       });
       
+      if (response.status === 404 && isBrowser) {
+        const stored = cleanGSheetsUrl(localStorage.getItem("medirent-gsheets-url"));
+        const defUrl = getDefaultGSheetsUrl();
+        if (stored && defUrl && stored !== defUrl) {
+          const fallbackRes = await fetch(defUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "bulkUpsert", sheet, rows, token: getGSheetsToken() }),
+          });
+          if (fallbackRes.ok) {
+            localStorage.removeItem("medirent-gsheets-url");
+            response = fallbackRes;
+            url = defUrl;
+          }
+        }
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`);
       }

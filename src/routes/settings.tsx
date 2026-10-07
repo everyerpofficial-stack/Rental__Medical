@@ -66,6 +66,9 @@ import {
   setGSheetsUrl,
   getGSheetsToken,
   setGSheetsToken,
+  cleanGSheetsUrl,
+  getDefaultGSheetsUrl,
+  getDefaultGSheetsToken,
   testConnection,
   syncAllToSheets,
   isGSheetsEnabled,
@@ -1170,13 +1173,30 @@ function waListTemplates() {
 `;
 
   const handleSaveUrl = () => {
-    if (sheetsUrl && !sheetsUrl.startsWith("https://script.google.com/")) {
+    const cleanUrl = cleanGSheetsUrl(sheetsUrl);
+    if (cleanUrl && !cleanUrl.startsWith("https://script.google.com/")) {
       toast.error("URL must start with https://script.google.com/");
       return;
     }
-    setGSheetsUrl(sheetsUrl);
-    setGSheetsToken(sheetsToken);
-    toast.success(sheetsUrl ? "Apps Script URL saved successfully." : "Google Sheets integration disabled.");
+    const cleanTok = sheetsToken.trim();
+    setGSheetsUrl(cleanUrl);
+    setGSheetsToken(cleanTok);
+    setSheetsUrl(cleanUrl);
+    setSheetsToken(cleanTok);
+    toast.success(cleanUrl ? "Apps Script URL saved successfully." : "Google Sheets integration reset.");
+    setTestStatus("idle");
+    setTestMessage("");
+    setSyncResult(null);
+  };
+
+  const handleResetDefaultUrl = () => {
+    const defUrl = getDefaultGSheetsUrl();
+    const defTok = getDefaultGSheetsToken();
+    setSheetsUrl(defUrl);
+    setSheetsToken(defTok);
+    setGSheetsUrl("");
+    setGSheetsToken("");
+    toast.success("Reset to built-in default Google Sheets URL and Token.");
     setTestStatus("idle");
     setTestMessage("");
     setSyncResult(null);
@@ -1413,6 +1433,14 @@ function waListTemplates() {
               </div>
               <Button onClick={handleSaveUrl} className="h-10 shrink-0">
                 <Check className="h-4 w-4 mr-1.5" /> Save URL
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleResetDefaultUrl}
+                className="h-10 shrink-0 text-muted-foreground hover:text-foreground"
+                title="Reset to the built-in system default URL and token"
+              >
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Reset Default
               </Button>
             </div>
             {sheetsUrl && !sheetsUrl.startsWith("https://script.google.com/") && (
