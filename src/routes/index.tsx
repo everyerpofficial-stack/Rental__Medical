@@ -291,11 +291,12 @@ function Dashboard() {
 
   // 1. Dynamic revenueData
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const currentYear = new Date().getFullYear();
   const revenueData = months.map((m, idx) => {
     const monthlyPayments = paymentsList.filter(p => {
       if (isCancelledPayment(p)) return false;
       const pDate = parseLocalDate(p.date);
-      return !isNaN(pDate.getTime()) && pDate.getMonth() === idx;
+      return !isNaN(pDate.getTime()) && pDate.getMonth() === idx && pDate.getFullYear() === currentYear;
     });
     const currentMonthSum = monthlyPayments.reduce((sum, p) => sum + p.amount, 0);
     return {

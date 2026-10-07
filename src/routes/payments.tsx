@@ -771,6 +771,130 @@ function CollectPaymentDialog({
   );
 }
 
+function EditPaymentDialog({
+  payment,
+  trigger,
+  onSave,
+}: {
+  payment: Payment;
+  trigger?: React.ReactNode;
+  onSave?: () => void;
+}) {
+  const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
+  if (!isAdmin) return null;
+
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(getLocalYYYYMMDD(payment.date));
+  const [amount, setAmount] = useState(String(payment.amount || ""));
+  const [mode, setPaymentMode] = useState(payment.mode || "Cash");
+  const [collectedBy, setCollectedBy] = useState((payment.collectedBy as string) || "");
+  const [notes, setNotes] = useState(payment.notes || "");
+
+  useEffect(() => {
+    if (open) {
+      setDate(getLocalYYYYMMDD(payment.date));
+      setAmount(String(payment.amount || ""));
+      setPaymentMode(payment.mode || "Cash");
+      setCollectedBy((payment.collectedBy as string) || "");
+      setNotes(payment.notes || "");
+    }
+  }, [open, payment]);
+
+  const handleSave = () => {
+    if (!date) {
+      toast.error("Please enter a valid payment date.");
+      return;
+    }
+    const numAmt = Number(amount);
+    if (isNaN(numAmt) || numAmt < 0) {
+      toast.error("Please enter a valid payment amount.");
+      return;
+    }
+    const updated: any = {
+      ...payment,
+      date,
+      amount: numAmt,
+      mode,
+      collectedBy: collectedBy.trim(),
+      notes: notes.trim(),
+    };
+    savePayment(updated);
+    toast.success(`Payment ${payment.id} updated successfully.`);
+    setOpen(false);
+    if (onSave) onSave();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        {trigger || (
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" title="Edit Payment">
+            <Edit className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Edit className="h-4 w-4 text-primary" /> Edit Payment Transaction
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-3.5">
+          <div className="flex items-center justify-between text-[12px] bg-muted/40 p-2.5 rounded-lg border border-border/60">
+            <div>
+              <span className="text-muted-foreground">Receipt ID: </span>
+              <strong className="font-mono text-primary font-bold">{payment.id}</strong>
+            </div>
+            {payment.agreement && (
+              <div>
+                <span className="text-muted-foreground">Agreement: </span>
+                <strong className="font-mono font-bold">{payment.agreement}</strong>
+              </div>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="bg-background h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount (₹)</Label>
+            <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-background h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Payment Mode</Label>
+            <Select value={mode} onValueChange={setPaymentMode}>
+              <SelectTrigger className="bg-background h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Cash">Cash</SelectItem>
+                <SelectItem value="UPI">UPI</SelectItem>
+                <SelectItem value="Bank">Bank Transfer</SelectItem>
+                <SelectItem value="Cheque">Cheque</SelectItem>
+                <SelectItem value="Credit Card">Credit Card</SelectItem>
+                <SelectItem value="Debit Card">Debit Card</SelectItem>
+                <SelectItem value="Cash+Bank">Cash+Bank</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Collected By</Label>
+            <Input value={collectedBy} onChange={(e) => setCollectedBy(e.target.value)} placeholder="Collector Name" className="bg-background h-10" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes / Remarks</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" className="bg-background h-10" />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button type="button" onClick={handleSave}>Save Changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DeletePaymentDialog({ payment, trigger, onDelete }: { payment: Payment; trigger: React.ReactNode; onDelete?: () => void }) {
   const isAdmin = typeof window !== "undefined" && localStorage.getItem("medirent-user-role") === "Admin";
   if (!isAdmin) return null;
@@ -1458,6 +1582,9 @@ function AgreementPaymentHistoryModal({
                         <TableCell className="text-right whitespace-nowrap px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
+                            {isAdmin && (
+                              <EditPaymentDialog payment={p} onSave={onRefresh} />
+                            )}
                             {isAdmin && !String(p.id).startsWith("PAY-DEP-") && !String(p.id).startsWith("PAY-RENT-") && !String(p.id).startsWith("PAY-ADD-") && (
                               <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
@@ -1524,6 +1651,17 @@ function AgreementPaymentHistoryModal({
                         </div>
                         <div className="flex shrink-0 items-center -mr-1.5">
                           <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                          {isAdmin && (
+                            <EditPaymentDialog
+                              payment={p}
+                              onSave={onRefresh}
+                              trigger={
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary">
+                                  <Edit className="h-3.5 w-3.5" />
+                                </Button>
+                              }
+                            />
+                          )}
                           {isAdmin && !String(p.id).startsWith("PAY-DEP-") && !String(p.id).startsWith("PAY-RENT-") && !String(p.id).startsWith("PAY-ADD-") && (
                             <DeletePaymentDialog payment={p} onDelete={onRefresh} trigger={
                               <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">
@@ -2620,6 +2758,9 @@ function PaymentsPage() {
                           <div className="flex items-center justify-end gap-1">
                             <PrintReceiptDialog payment={p} />
                             {isAdmin && (
+                              <EditPaymentDialog payment={p} onSave={refresh} />
+                            )}
+                            {isAdmin && (
                               <DeletePaymentDialog payment={p} onDelete={refresh} trigger={
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive">
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -2722,6 +2863,17 @@ function PaymentsPage() {
                             </div>
                             <div className="flex shrink-0 items-center -mr-1.5">
                               <PrintReceiptDialog payment={p} triggerClassName="h-9 w-9" />
+                              {isAdmin && (
+                                <EditPaymentDialog
+                                  payment={p}
+                                  onSave={refresh}
+                                  trigger={
+                                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary">
+                                      <Edit className="h-3.5 w-3.5" />
+                                    </Button>
+                                  }
+                                />
+                              )}
                               {isAdmin && (
                                 <DeletePaymentDialog payment={p} onDelete={refresh} trigger={
                                   <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive">

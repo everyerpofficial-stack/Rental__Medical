@@ -567,7 +567,18 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
   const [cashPaidAmount, setCashPaidAmount] = useState((rental as any)?.cashPaidAmount?.toString() || "");
   const [bankUpiPaidAmount, setBankUpiPaidAmount] = useState((rental as any)?.bankUpiPaidAmount?.toString() || "");
   const [paymentMode, setPaymentMode] = useState((rental?.paymentMode as string) || "Cash");
-  const [paymentDate, setPaymentDate] = useState(rental?.paymentDate ? getLocalYYYYMMDD(rental.paymentDate as string) : getLocalYYYYMMDD());
+  const [paymentDate, setPaymentDate] = useState(
+    rental?.paymentDate
+      ? getLocalYYYYMMDD(rental.paymentDate as string)
+      : rental?.start
+      ? getLocalYYYYMMDD(rental.start)
+      : getLocalYYYYMMDD()
+  );
+  const handleAgreementDateChange = (val: string) => {
+    setAgreementDate(val);
+    // Requirement 5 & 1: Auto-select payment date same as rent date
+    setPaymentDate(val);
+  };
   const [paymentCollectedBy, setPaymentCollectedBy] = useState((rental?.paymentCollectedBy as string) || "");
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1166,7 +1177,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       setCashPaidAmount((rental as any)?.cashPaidAmount?.toString() || "");
       setBankUpiPaidAmount((rental as any)?.bankUpiPaidAmount?.toString() || "");
       setPaymentMode((rental?.paymentMode as string) || "Cash");
-      setPaymentDate(rental?.paymentDate ? getLocalYYYYMMDD(rental.paymentDate as string) : getLocalYYYYMMDD());
+      setPaymentDate(rental?.paymentDate ? getLocalYYYYMMDD(rental.paymentDate as string) : (rental?.start ? getLocalYYYYMMDD(rental.start) : getLocalYYYYMMDD()));
       setPaymentCollectedBy((rental?.paymentCollectedBy as string) || "");
 
       // Selected equipment
@@ -1904,14 +1915,32 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       }
 
       // Different name with same contact number is allowed (e.g. family members, caretakers, clinics).
-      // If exact same name AND phone match, reuse the existing customer record.
+      // If exact same name AND any of the 3 contact numbers match, reuse the existing customer record.
       const normalizedName = custName.trim().toLowerCase();
       const existingCustomers = getCustomers();
-      const phoneOwners = findPhoneOwners(custPhone);
+      const getDigits10 = (v: any) => {
+        const d = String(v || "").replace(/\D/g, "");
+        return d.length >= 10 ? d.slice(-10) : "";
+      };
+      const enteredCustPhones = [
+        getDigits10(custPhone),
+        getDigits10(custAltPhone),
+        getDigits10(custContactNumber3),
+      ].filter(Boolean);
+
+      const phoneOwners = existingCustomers.filter((c: any) => {
+        const exPhones = [
+          getDigits10(c.phone),
+          getDigits10(c.altPhone),
+          getDigits10(c.contactNumber3),
+        ].filter(Boolean);
+        return enteredCustPhones.some((ep) => exPhones.includes(ep));
+      });
+
       if (phoneOwners.length > 0) {
         const exactMatch = phoneOwners.find((o: any) => (o.name || "").trim().toLowerCase() === normalizedName);
         if (exactMatch) {
-          // Exactly the same name and same phone number - link to existing customer
+          // Exactly the same name and same contact number - link to existing customer
           customerId = exactMatch.id;
           customerName = exactMatch.name;
           toast.info(
@@ -1921,7 +1950,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
           // Different name with same contact number - allow saving as a separate customer record
           const namesList = phoneOwners.map((o: any) => `"${o.name}" (${o.id})`).join(", ");
           toast.info(
-            `Phone number shared with ${namesList}. Saving "${custName}" as a separate customer.`
+            `Contact number shared with ${namesList}. Saving "${custName}" as a separate customer.`
           );
         }
       }
@@ -2234,6 +2263,30 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
       }
     } else {
       // EDITING EXISTING AGREEMENT
+      // Requirement 1: If agreement date or payment date modified, update the dates on initial advance payments
+      const newPayDate = paymentDate || agreementDate || getLocalYYYYMMDD();
+      const initialPayments = allCurrentPayments.filter(
+        (p) =>
+          p.agreement === finalAgreementId &&
+          ((p.notes &&
+            (/at agreement creation/i.test(p.notes) ||
+              /advance rent payment/i.test(p.notes) ||
+              /security deposit/i.test(p.notes))) ||
+            p.type === "Deposit" ||
+            p.type === "Security Deposit" ||
+            p.date === rental.paymentDate ||
+            p.date === rental.start)
+      );
+
+      if (initialPayments.length > 0) {
+        initialPayments.forEach((initP) => {
+          if (initP.date !== newPayDate) {
+            initP.date = newPayDate;
+            savePayment(initP);
+          }
+        });
+      }
+
       let rentDiff = Math.max(0, rentToAdd - existingRentPaid);
       if (rentDiff > 0) {
         // Allocate first to added equipments, or any equipment in agreement lacking a rent payment
@@ -2606,7 +2659,7 @@ function CreateRentalDialog({ trigger, title = "New Rental Agreement", rental, o
               </div>
               <div className="space-y-1.5">
                 <Label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Agreement Date (Rent Start Date)</Label>
-                <Input type="date" value={agreementDate} max={endDate} onChange={(e) => setAgreementDate(e.target.value)} />
+                <Input type="date" value={agreementDate} max={endDate} onChange={(e) => handleAgreementDateChange(e.target.value)} />
               </div>
 
               {/* Customer Selection or Creation */}

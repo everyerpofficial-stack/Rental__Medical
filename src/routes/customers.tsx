@@ -361,28 +361,45 @@ function CustomerFormDialog({
     // ITEM-4: a shared name is legitimate (families, common names) - customers
     // are identified by their CUST-XXXX id and phone number, not their name.
     // So a name clash is informational only; only an exact phone clash blocks.
+    // Consider all three phone numbers (primary, altPhone, and contactNumber3).
+    // If ANY of the three contact numbers matches ANY contact number of an existing customer
+    // AND the customer name matches, block saving!
+    const getDigits10 = (v: any) => {
+      const d = String(v || "").replace(/\D/g, "");
+      return d.length >= 10 ? d.slice(-10) : "";
+    };
+
     const normalizedName = name.trim().toLowerCase();
-    const normalizedPhone = phone.replace(/\D/g, "");
+    const enteredPhones = [
+      getDigits10(phone),
+      getDigits10(altPhone),
+      getDigits10(contactNumber3),
+    ].filter(Boolean);
+
     const others = getCustomers().filter((c) => c.id !== customer?.id);
 
-    const matchingPhoneOwners = others.filter((c) =>
-      [c.phone, c.altPhone, c.contactNumber3].some(
-        (p: any) => String(p || "").replace(/\D/g, "") === normalizedPhone
-      )
-    );
+    const matchingPhoneOwners = others.filter((c) => {
+      const existingPhones = [
+        getDigits10(c.phone),
+        getDigits10(c.altPhone),
+        getDigits10(c.contactNumber3),
+      ].filter(Boolean);
+      return enteredPhones.some((ep) => existingPhones.includes(ep));
+    });
+
     if (matchingPhoneOwners.length > 0) {
       const exactMatch = matchingPhoneOwners.find(
         (o) => (o.name || "").trim().toLowerCase() === normalizedName
       );
       if (exactMatch) {
         toast.error(
-          `A customer with this exact name and phone number already exists (${exactMatch.id}).`
+          `A customer with this name and contact number already exists (${exactMatch.id} - ${exactMatch.name}). Cannot save duplicate customer.`
         );
         return;
       }
       const namesList = matchingPhoneOwners.map((o) => `"${o.name}" (${o.id})`).join(", ");
       toast.info(
-        `Phone number shared with ${namesList}. Saving as a separate customer record.`
+        `Contact number shared with ${namesList}. Saving as a separate customer record.`
       );
     }
 

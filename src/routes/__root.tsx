@@ -694,6 +694,7 @@ function RootComponent() {
               ? `Your last backup was on ${status.lastBackupDate}. Download today's snapshot to keep it safe.`
               : "No backup has been downloaded from this device yet. Download today's snapshot to keep your data safe.",
             duration: 15000,
+            closeButton: true,
             action: {
               label: "Download",
               onClick: () => downloadStoredSnapshot(),

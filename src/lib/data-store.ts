@@ -2029,6 +2029,40 @@ export function saveRental(rental: typeof initialRentals[number] & { equipmentIt
         }
       });
     }
+
+    // Sync dates on initial advance payments if rental start or paymentDate was modified
+    const targetDate = getLocalYYYYMMDD((rental as any).paymentDate || rental.start);
+    if (targetDate && oldRental && (oldRental.start !== rental.start || (oldRental as any).paymentDate !== (rental as any).paymentDate)) {
+      const cleanAgr = String(rental.id).trim().toUpperCase().replace(/^AGR-/i, "");
+      const paymentsList = getStorageItem<any[]>("medirent-payments", []);
+      let paymentsChanged = false;
+      paymentsList.forEach((p: any) => {
+        if (!p) return;
+        const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+        if (pAgr === cleanAgr) {
+          const isInitial =
+            (p.notes &&
+              (/at agreement creation/i.test(p.notes) ||
+                /advance rent payment/i.test(p.notes) ||
+                /security deposit/i.test(p.notes))) ||
+            p.type === "Deposit" ||
+            p.type === "Security Deposit" ||
+            p.date === oldRental.start ||
+            p.date === (oldRental as any).paymentDate;
+          if (isInitial && p.date !== targetDate) {
+            p.date = targetDate;
+            paymentsChanged = true;
+            if (isGSheetsEnabled()) {
+              syncRowToSheet(SHEETS.PAYMENTS, p as Record<string, unknown>);
+            }
+          }
+        }
+      });
+      if (paymentsChanged) {
+        setStorageItem("medirent-payments", paymentsList);
+      }
+    }
+
     list[index] = rental;
   } else {
     list.unshift(rental);
@@ -2692,6 +2726,35 @@ export function getPayments() {
       }
     });
   }
+
+  // Self-healing: if an agreement's start/paymentDate was modified, ensure initial agreement creation payments sync their date
+  allRentals.forEach((r) => {
+    if (!r || !r.id || !r.start) return;
+    const cleanAgr = String(r.id).trim().toUpperCase().replace(/^AGR-/i, "");
+    const targetDate = getLocalYYYYMMDD((r as any).paymentDate || r.start);
+    if (!targetDate) return;
+
+    mergedList.forEach((p) => {
+      if (!p) return;
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId || "").trim().toUpperCase().replace(/^AGR-/i, "");
+      if (pAgr === cleanAgr) {
+        const isInitialPayment =
+          (p.notes &&
+            (/at agreement creation/i.test(p.notes) ||
+              /advance rent payment/i.test(p.notes) ||
+              /security deposit/i.test(p.notes))) ||
+          p.type === "Deposit" ||
+          p.type === "Security Deposit";
+        if (isInitialPayment && p.date !== targetDate) {
+          p.date = targetDate;
+          dirty = true;
+          if (isBrowser && isGSheetsEnabled()) {
+            syncRowToSheet(SHEETS.PAYMENTS, p as any);
+          }
+        }
+      }
+    });
+  });
 
   if (isBrowser) {
     if (reconcileRentalEquipmentPayments(mergedList)) {
