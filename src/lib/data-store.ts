@@ -3324,6 +3324,9 @@ export function getDynamicKPIs() {
     const status = String(p.status || "").trim().toLowerCase();
     if (status === "cancelled" || status === "failed" || status === "not paid" || status === "void") return true;
     if (status !== "paid" && status !== "completed") return true;
+    // Security deposits are refundable (shown separately under Security Deposits) and
+    // refunds are money paid out, so neither is revenue
+    if (/deposit|security|refund/i.test(String(p.type || ""))) return true;
     if (p.agreement || p.rentalId || p.agreementId) {
       const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
       const r = rent.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
@@ -3340,31 +3343,57 @@ export function getDynamicKPIs() {
     })
     .reduce((sum, p) => sum + p.amount, 0);
 
+  const isRelifePayment = (p: any, eqId: string) => {
+    if (eqId) {
+      const e = equip.find((item) => item.id === eqId);
+      if (e) return isRelifeOwner(e.owner, owners);
+      return true;
+    }
+    if (p.agreement || p.rentalId || p.agreementId) {
+      const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
+      const r = rent.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
+      if (r) {
+        const rEqId = r.equipmentId || (r.equipmentItems && r.equipmentItems[0]?.equipmentId);
+        const e = equip.find((item) => item.id === rEqId);
+        if (e) return isRelifeOwner(e.owner, owners);
+        if (r.owner) return isRelifeOwner(r.owner, owners);
+      }
+      return true;
+    }
+    if (p.owner) return isRelifeOwner(p.owner, owners);
+    return true;
+  };
+
+  // Payments covering several equipment (multi-item payments, or ones merged by
+  // consolidatePayments) carry a comma-joined equipmentId that matches no single
+  // equipment, which used to credit the whole amount to Relife even when some
+  // items belong to another owner. Split those per equipment instead.
+  const rawPaymentsById = new Map(
+    getStorageItem<any[]>("medirent-payments", []).filter(Boolean).map((p) => [String(p.id), p])
+  );
+  const relifeShareByEquipment = (p: any) => {
+    const amount = Number(p.amount) || 0;
+    const eqIds = String(p.equipmentId || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (eqIds.length <= 1) return isRelifePayment(p, eqIds[0] || "") ? amount : 0;
+    const relifeCount = eqIds.filter((id) => isRelifePayment(p, id)).length;
+    return Math.round((amount * relifeCount) / eqIds.length);
+  };
+  const relifeShare = (p: any) => {
+    const ids: string[] = Array.isArray(p.constituentIds) ? p.constituentIds : [];
+    const parts = ids.map((id) => rawPaymentsById.get(String(id)));
+    if (parts.length > 1 && parts.every((c) => c && !(Array.isArray(c.constituentIds) && c.constituentIds.length > 1))) {
+      return parts.reduce((sum, c) => sum + relifeShareByEquipment(c), 0);
+    }
+    return relifeShareByEquipment(p);
+  };
+
   const relifeMonthlyRevenue = pay
     .filter((p) => {
       if (isExcludedRevenuePayment(p)) return false;
       const d = parseLocalDate(p.date);
-      if (isNaN(d.getTime()) || d.getMonth() !== curMonth || d.getFullYear() !== curYear) return false;
-
-      let isRelife = true;
-      if (p.equipmentId) {
-        const e = equip.find((item) => item.id === p.equipmentId);
-        if (e) isRelife = isRelifeOwner(e.owner, owners);
-      } else if (p.agreement || p.rentalId || p.agreementId) {
-        const pAgr = String(p.agreement || p.rentalId || p.agreementId).trim().toUpperCase().replace(/^AGR-/i, "AGR-");
-        const r = rent.find((item) => String(item.id).trim().toUpperCase().replace(/^AGR-/i, "AGR-") === pAgr);
-        if (r) {
-          const eqId = r.equipmentId || (r.equipmentItems && r.equipmentItems[0]?.equipmentId);
-          const e = equip.find((item) => item.id === eqId);
-          if (e) isRelife = isRelifeOwner(e.owner, owners);
-          else if (r.owner) isRelife = isRelifeOwner(r.owner, owners);
-        }
-      } else if (p.owner) {
-        isRelife = isRelifeOwner(p.owner, owners);
-      }
-      return isRelife;
+      return !isNaN(d.getTime()) && d.getMonth() === curMonth && d.getFullYear() === curYear;
     })
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + relifeShare(p), 0);
 
   const prevMonthRevenue = pay
     .filter((p) => {

@@ -295,6 +295,8 @@ function Dashboard() {
   const revenueData = months.map((m, idx) => {
     const monthlyPayments = paymentsList.filter(p => {
       if (isCancelledPayment(p)) return false;
+      // Refundable security deposits (and refunds paid out) are not revenue
+      if (/deposit|security|refund/i.test(String(p.type || ""))) return false;
       const pDate = parseLocalDate(p.date);
       return !isNaN(pDate.getTime()) && pDate.getMonth() === idx && pDate.getFullYear() === currentYear;
     });
