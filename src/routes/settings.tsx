@@ -544,6 +544,16 @@ const WHATSAPP_TEMPLATE_LANG   = "en";
 const WHATSAPP_API_VERSION     = "v21.0";
 const WHATSAPP_DEFAULT_CC      = "91"; // country code prefixed to bare 10-digit Indian numbers
 
+/**
+ * Run this function ONCE in the Apps Script editor (select "authorizeWhatsApp"
+ * in the top toolbar dropdown and click "▷ Run") to grant Google permission
+ * for external requests (UrlFetchApp). This is required for WhatsApp sending.
+ */
+function authorizeWhatsApp() {
+  UrlFetchApp.fetch("https://graph.facebook.com", { muteHttpExceptions: true });
+  Logger.log("UrlFetchApp authorized successfully!");
+}
+
 function unauthorized() {
   return ContentService
     .createTextOutput(JSON.stringify({ error: "Unauthorized" }))
