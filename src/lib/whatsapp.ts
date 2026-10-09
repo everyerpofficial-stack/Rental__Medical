@@ -440,7 +440,13 @@ export async function sendRentalAgreementOnWhatsApp(
   // including the captured signature and thumbprint data URIs. Print mode is
   // off deliberately: it only injects an auto-window.print() script, which is
   // dead weight in a payload that is already large and never runs anyway.
-  const documentHtml = getAgreementHtmlContent(rental, false);
+  const rawHtml = getAgreementHtmlContent(rental, false);
+  const documentHtml = rawHtml
+    .replace(/src=["']https?:\/\/localhost[^"']*["']/gi, 'src=""')
+    .replace(/src=["']https?:\/\/127\.0\.0\.1[^"']*["']/gi, 'src=""')
+    .replace(/src=["']\/images\/[^"']*["']/gi, 'src=""')
+    .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
+    .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
 
   const result = await sendWhatsAppMessage({
     to: phone,

@@ -972,7 +972,15 @@ function waUploadPdf(cfg, html, filename) {
   var safeName = String(filename || "Agreement.pdf").replace(/[^A-Za-z0-9._-]/g, "_");
   if (safeName.slice(-4).toLowerCase() !== ".pdf") safeName += ".pdf";
 
-  var pdf = Utilities.newBlob(html, MimeType.HTML, safeName).getAs(MimeType.PDF).setName(safeName);
+  // Strip localhost URLs and external font links so Google's converter does not stall on network timeouts
+  var cleanHtml = String(html || "")
+    .replace(/src=["']https?:\/\/localhost[^"']*["']/gi, 'src=""')
+    .replace(/src=["']https?:\/\/127\.0\.0\.1[^"']*["']/gi, 'src=""')
+    .replace(/src=["']\/images\/[^"']*["']/gi, 'src=""')
+    .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
+    .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
+
+  var pdf = Utilities.newBlob(cleanHtml, MimeType.HTML, safeName).getAs(MimeType.PDF).setName(safeName);
 
   var res = UrlFetchApp.fetch(waUrl(cfg, cfg.phoneNumberId + "/media"), {
     method: "post",
