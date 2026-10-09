@@ -44,6 +44,7 @@ import {
   normalizeWhatsAppPhone,
   sendWhatsAppMessage,
   buildRentalAgreementMessage,
+  buildAgreementPdfFilename,
   type WhatsAppStatus,
   type WhatsAppTemplate,
 } from "@/lib/whatsapp";
@@ -188,7 +189,7 @@ function WhatsAppSettingsTab() {
         to: normalized,
         message: buildRentalAgreementMessage(sampleRental, true),
         documentHtml,
-        filename: "Agreement_TEST-AGR-001.pdf",
+        filename: buildAgreementPdfFilename(sampleRental),
         customerName: "Valued Customer",
         reference: "TEST-AGR-001",
         templateParams: ["Valued Customer"],

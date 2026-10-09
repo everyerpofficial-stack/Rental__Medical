@@ -323,43 +323,52 @@ export function getBusinessName(): string {
  * carries text only, so the automatic wording would promise the customer a PDF
  * that is not there.
  */
-export function buildRentalAgreementMessage(rental: any, withAttachment = true): string {
+/**
+ * Customer-friendly filename for rental agreements:
+ * Agreement_<CustomerName>_<DD.MM.YY>.pdf
+ * Example: Agreement_Mrs.Lakshmamma_08.10.26.pdf
+ */
+export function buildAgreementPdfFilename(rental: any): string {
+  const rawCustomer = String(rental?.customer || "Customer").trim();
+  const cleanCustomer = rawCustomer.replace(/\s+/g, "").replace(/[^A-Za-z0-9._-]/g, "") || "Customer";
+
+  // Date formatting: DD.MM.YY (e.g., 08.10.26)
+  let datePart = "";
+  const dateRaw = rental?.start || rental?.rentDate || rental?.startDate || rental?.createdAt || "";
+  const ddmmyyyy = dateRaw ? formatDateDDMMYYYY(dateRaw) : "";
+  if (/^\d{2}-\d{2}-\d{4}$/.test(ddmmyyyy)) {
+    const [dd, mm, yyyy] = ddmmyyyy.split("-");
+    const yy = yyyy.slice(-2);
+    datePart = `${dd}.${mm}.${yy}`;
+  } else {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yy = String(now.getFullYear()).slice(-2);
+    datePart = `${dd}.${mm}.${yy}`;
+  }
+
+  return `Agreement_${cleanCustomer}_${datePart}.pdf`;
+}
+
+/**
+ * Standard agreement message matching the WhatsApp template wording:
+ * Hello <Customer>,
+ * Please find your attached agreement for rental equipment.
+ * Thanks & Regards,
+ * Relife Medical Technologies
+ */
+export function buildRentalAgreementMessage(rental: any, _withAttachment = true): string {
   const business = getBusinessName();
-  const start = rental?.start ? formatDateDDMMYYYY(rental.start) : "—";
-  const end = rental?.end ? formatDateDDMMYYYY(rental.end) : "Ongoing";
-
-  const rent =
-    rental?.rentRate ||
-    (Number(rental?.monthlyRent) > 0
-      ? `${rupee(rental.monthlyRent)}/month`
-      : Number(rental?.dailyRent) > 0
-        ? `${rupee(rental.dailyRent)}/day`
-        : "—");
-
-  const equipmentLabels = getRentalEquipmentLabels(rental);
-  const equipment = equipmentLabels.length
-    ? equipmentLabels.join(", ")
-    : rental?.equipment || "Medical Equipment";
+  const customer = rental?.customer || "Customer";
 
   return [
-    `*Rental Agreement — ${business}*`,
+    `Hello ${customer},`,
     "",
-    withAttachment
-      ? `Dear ${rental?.customer || "Customer"}, your signed rental agreement is attached as a PDF.`
-      : `Dear ${rental?.customer || "Customer"}, here are the details of your rental agreement.`,
+    "Please find your attached agreement for rental equipment.",
     "",
-    `📄 Agreement No: ${rental?.id ?? "—"}`,
-    `📦 Equipment: ${equipment}`,
-    `🗓️ Start Date: ${start}`,
-    `🗓️ End Date: ${end}`,
-    `💰 Rent: ${rent}`,
-    `💵 Security Deposit: ${rupee(rental?.deposit)}`,
-    "",
-    withAttachment
-      ? `Please keep this document for your records. Call us any time you need support with the equipment.`
-      : `Call us any time you need support with the equipment, or a copy of the signed agreement.`,
-    "",
-    `— ${business}`,
+    "Thanks & Regards,",
+    business,
   ].join("\n");
 }
 
@@ -449,11 +458,13 @@ export async function sendRentalAgreementOnWhatsApp(
     .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
     .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
 
+  const filename = buildAgreementPdfFilename(rental);
+
   const result = await sendWhatsAppMessage({
     to: phone,
     message,
     documentHtml,
-    filename: `Agreement_${String(rental.id || "Rental").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
+    filename,
     customerName: rental.customer,
     reference: String(rental.id ?? ""),
     templateParams: [rental.customer || "Customer"],
