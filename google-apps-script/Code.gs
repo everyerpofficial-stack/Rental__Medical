@@ -75,12 +75,12 @@ const LOCK_WAIT_MS = 30000;
 // Leave these blank and set them under Project Settings → Script Properties
 // instead; Script Properties win over the constants below. Either way the
 // values stay inside this script and are never sent to a browser.
-const WHATSAPP_PHONE_NUMBER_ID = "";  // e.g. "123456789012345"
-const WHATSAPP_ACCESS_TOKEN    = "";  // System User permanent token (starts with EAA...)
+const WHATSAPP_PHONE_NUMBER_ID = "1193201143885448";
+const WHATSAPP_ACCESS_TOKEN    = "";  // Set in Script Properties (permanent token)
 const WHATSAPP_APP_SECRET      = "";  // only needed if the Meta app requires appsecret_proof
-const WHATSAPP_BUSINESS_ACCOUNT_ID = ""; // WhatsApp Manager > Account tools > Business account ID
-const WHATSAPP_TEMPLATE_NAME   = "";  // approved template, used when the 24h window has closed
-const WHATSAPP_TEMPLATE_LANG   = "en_US";
+const WHATSAPP_BUSINESS_ACCOUNT_ID = "1438971281628072";
+const WHATSAPP_TEMPLATE_NAME   = "rental_agreement_pdf";
+const WHATSAPP_TEMPLATE_LANG   = "en";
 const WHATSAPP_API_VERSION     = "v21.0";
 const WHATSAPP_DEFAULT_CC      = "91"; // country code prefixed to bare 10-digit Indian numbers
 
@@ -519,7 +519,7 @@ function waConfig() {
     appSecret:     pick("WHATSAPP_APP_SECRET", WHATSAPP_APP_SECRET),
     businessAccountId: pick("WHATSAPP_BUSINESS_ACCOUNT_ID", WHATSAPP_BUSINESS_ACCOUNT_ID),
     templateName:  pick("WHATSAPP_TEMPLATE_NAME", WHATSAPP_TEMPLATE_NAME),
-    templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en_US",
+    templateLang:  pick("WHATSAPP_TEMPLATE_LANG", WHATSAPP_TEMPLATE_LANG) || "en",
     apiVersion:    pick("WHATSAPP_API_VERSION", WHATSAPP_API_VERSION) || "v21.0",
     defaultCc:     pick("WHATSAPP_DEFAULT_CC", WHATSAPP_DEFAULT_CC) || "91"
   };
@@ -682,7 +682,9 @@ function handleWhatsAppSend(body) {
   if ((sent.code >= 300 || sent.json.error) && waIsOutsideWindow(sent.json) && cfg.templateName) {
     var params = body.templateParams && body.templateParams.length
       ? body.templateParams
-      : [body.customerName || "Customer", body.reference || ""];
+      : (cfg.templateName === "rental_agreement_pdf"
+          ? [body.customerName || "Customer"]
+          : [body.customerName || "Customer", body.reference || ""]);
     var retry = waPostMessage(cfg, waBuildTemplatePayload(cfg, to, media, params));
     if (retry.code < 300 && !retry.json.error) {
       return {

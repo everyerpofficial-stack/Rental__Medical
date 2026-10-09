@@ -449,6 +449,7 @@ export async function sendRentalAgreementOnWhatsApp(
     filename: `Agreement_${String(rental.id || "Rental").replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`,
     customerName: rental.customer,
     reference: String(rental.id ?? ""),
+    templateParams: [rental.customer || "Customer"],
   });
 
   if (result.ok) {
