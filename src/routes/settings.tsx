@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
-  Building2, CreditCard, Shield, Bell, Check, Users, Wallet, MessageSquare, Mail, Phone, BarChart3,
+  Building2, CreditCard, Shield, Bell, Check, Users, Wallet, MessageSquare, Mail, Phone, BarChart3, FileText,
   Database, Link2, CheckCircle2, XCircle, RefreshCw, AlertTriangle, Copy, ExternalLink, CloudUpload, CloudDownload,
   Lock, Trash2, UserPlus, Download, Upload, FileSpreadsheet, HardDriveDownload, HardDriveUpload, Calculator,
 } from "lucide-react";
@@ -35,6 +35,7 @@ import {
   getLocalYYYYMMDD,
   parseLocalDate,
   deduplicateStaffUsers,
+  getAgreementHtmlContent,
 } from "@/lib/data-store";
 import {
   getBusinessName,
@@ -42,6 +43,7 @@ import {
   getWhatsAppTemplates,
   normalizeWhatsAppPhone,
   sendWhatsAppMessage,
+  buildRentalAgreementMessage,
   type WhatsAppStatus,
   type WhatsAppTemplate,
 } from "@/lib/whatsapp";
@@ -127,6 +129,8 @@ function WhatsAppSettingsTab() {
     // Checked once when the tab mounts; the button re-runs it on demand.
   }, []);
 
+  const [testingPdf, setTestingPdf] = useState(false);
+
   const handleTestSend = async () => {
     const normalized = normalizeWhatsAppPhone(testPhone);
     if (!normalized) {
@@ -150,6 +154,55 @@ function WhatsAppSettingsTab() {
       }
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleTestAgreementPdf = async () => {
+    const normalized = normalizeWhatsAppPhone(testPhone);
+    if (!normalized) {
+      toast.error("Enter a 10-digit mobile number to send the test agreement to.");
+      return;
+    }
+    setTestingPdf(true);
+    const toastId = toast.loading(`Sending real test rental agreement PDF to +${normalized}…`);
+    try {
+      const sampleRental = {
+        id: "TEST-AGR-001",
+        customer: "Valued Customer",
+        phone: normalized,
+        equipment: "Oxygen Concentrator 5L",
+        start: new Date().toISOString(),
+        monthlyRent: 2500,
+        deposit: 5000,
+        address: "Bengaluru, Karnataka",
+      };
+      const rawHtml = getAgreementHtmlContent(sampleRental, false);
+      const documentHtml = rawHtml
+        .replace(/src=["']https?:\/\/localhost[^"']*["']/gi, 'src=""')
+        .replace(/src=["']https?:\/\/127\.0\.0\.1[^"']*["']/gi, 'src=""')
+        .replace(/src=["']\/images\/[^"']*["']/gi, 'src=""')
+        .replace(/<link[^>]*fonts\.googleapis\.com[^>]*>/gi, '')
+        .replace(/<link[^>]*fonts\.gstatic\.com[^>]*>/gi, '');
+
+      const result = await sendWhatsAppMessage({
+        to: normalized,
+        message: buildRentalAgreementMessage(sampleRental, true),
+        documentHtml,
+        filename: "Agreement_TEST-AGR-001.pdf",
+        customerName: "Valued Customer",
+        reference: "TEST-AGR-001",
+        templateParams: ["Valued Customer"],
+      });
+      if (result.ok) {
+        toast.success(`Test rental agreement PDF delivered to +${result.to}.`, {
+          id: toastId,
+          description: "Check WhatsApp on this phone — the PDF document has been delivered.",
+        });
+      } else {
+        toast.error(result.error || "Test agreement send failed.", { id: toastId, duration: 15000 });
+      }
+    } finally {
+      setTestingPdf(false);
     }
   };
 
@@ -412,14 +465,22 @@ function WhatsAppSettingsTab() {
                 inputMode="numeric"
                 className="h-10 text-[13px] flex-1"
               />
-              <Button onClick={handleTestSend} disabled={testing || !status?.configured} className="h-10">
+              <Button onClick={handleTestSend} disabled={testing || testingPdf || !status?.configured} className="h-10">
                 <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                {testing ? "Sending…" : "Send Test"}
+                {testing ? "Sending…" : "Send Test Text"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleTestAgreementPdf}
+                disabled={testing || testingPdf || !status?.configured}
+                className="h-10 border-emerald-600/40 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-500/40 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                {testingPdf ? "Sending PDF…" : "Send Test Agreement PDF"}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Use your own number. Message that number from WhatsApp first so the 24-hour window is open,
-              otherwise the test will be refused even when everything is configured correctly.
+              Enter your mobile number to test. <strong>"Send Test Agreement PDF"</strong> generates a real agreement PDF and delivers it via the approved WhatsApp template within seconds.
             </p>
           </div>
         </CardContent>
@@ -1023,6 +1084,8 @@ function waIsOutsideWindow(json) {
 }
 
 function waBuildTemplatePayload(cfg, to, media, params) {
+  var lang = cfg.templateLang || "en";
+  if (cfg.templateName === "rental_agreement_pdf") lang = "en";
   var components = [];
   if (media && media.id) {
     components.push({
@@ -1044,7 +1107,7 @@ function waBuildTemplatePayload(cfg, to, media, params) {
     type: "template",
     template: {
       name: cfg.templateName,
-      language: { code: cfg.templateLang },
+      language: { code: lang },
       components: components
     }
   };
@@ -1070,6 +1133,30 @@ function handleWhatsAppSend(body) {
       media = waUploadPdf(cfg, String(body.documentHtml), body.filename);
     } catch (err) {
       return { error: String(err.message || err) };
+    }
+  }
+
+  // When sending a PDF document and an approved template is configured, send
+  // via the template FIRST. WhatsApp Cloud API requires pre-approved templates
+  // for all business-initiated messages. Free-form documents sent outside a
+  // 24h customer window are quietly dropped by Meta downstream even if accepted with 200 OK.
+  if (media && cfg.templateName) {
+    var tplParams = body.templateParams && body.templateParams.length
+      ? body.templateParams
+      : (cfg.templateName === "rental_agreement_pdf"
+          ? [body.customerName || "Customer"]
+          : [body.customerName || "Customer", body.reference || ""]);
+    var tplSent = waPostMessage(cfg, waBuildTemplatePayload(cfg, to, media, tplParams));
+    if (tplSent.code < 300 && !tplSent.json.error) {
+      return {
+        status: "ok",
+        mode: "template+document",
+        to: to,
+        messageId: tplSent.json.messages && tplSent.json.messages[0] && tplSent.json.messages[0].id
+      };
+    }
+    if (tplSent.json && tplSent.json.error) {
+      Logger.log("Template send error, trying direct fallback: " + JSON.stringify(tplSent.json));
     }
   }
 

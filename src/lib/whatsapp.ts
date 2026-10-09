@@ -419,10 +419,11 @@ function toastFailureWithFallback(
 export async function sendRentalAgreementOnWhatsApp(
   rental: any,
   customersList: any[] = [],
+  phoneOverride?: string,
 ): Promise<WhatsAppSendResult> {
   if (!rental) return { ok: false, error: "No agreement selected." };
 
-  const phone = resolveCustomerPhone(rental, customersList);
+  const phone = phoneOverride || resolveCustomerPhone(rental, customersList);
   const message = buildRentalAgreementMessage(rental);
 
   if (!normalizeWhatsAppPhone(phone)) {

@@ -627,6 +627,8 @@ function waIsOutsideWindow(json) {
 }
 
 function waBuildTemplatePayload(cfg, to, media, params) {
+  var lang = cfg.templateLang || "en";
+  if (cfg.templateName === "rental_agreement_pdf") lang = "en";
   var components = [];
   if (media && media.id) {
     components.push({
@@ -648,7 +650,7 @@ function waBuildTemplatePayload(cfg, to, media, params) {
     type: "template",
     template: {
       name: cfg.templateName,
-      language: { code: cfg.templateLang },
+      language: { code: lang },
       components: components
     }
   };
@@ -674,6 +676,30 @@ function handleWhatsAppSend(body) {
       media = waUploadPdf(cfg, String(body.documentHtml), body.filename);
     } catch (err) {
       return { error: String(err.message || err) };
+    }
+  }
+
+  // When sending a PDF document and an approved template is configured, send
+  // via the template FIRST. WhatsApp Cloud API requires pre-approved templates
+  // for all business-initiated messages. Free-form documents sent outside a
+  // 24h customer window are quietly dropped by Meta downstream even if accepted with 200 OK.
+  if (media && cfg.templateName) {
+    var tplParams = body.templateParams && body.templateParams.length
+      ? body.templateParams
+      : (cfg.templateName === "rental_agreement_pdf"
+          ? [body.customerName || "Customer"]
+          : [body.customerName || "Customer", body.reference || ""]);
+    var tplSent = waPostMessage(cfg, waBuildTemplatePayload(cfg, to, media, tplParams));
+    if (tplSent.code < 300 && !tplSent.json.error) {
+      return {
+        status: "ok",
+        mode: "template+document",
+        to: to,
+        messageId: tplSent.json.messages && tplSent.json.messages[0] && tplSent.json.messages[0].id
+      };
+    }
+    if (tplSent.json && tplSent.json.error) {
+      Logger.log("Template send error, trying direct fallback: " + JSON.stringify(tplSent.json));
     }
   }
 
