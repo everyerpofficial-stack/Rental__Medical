@@ -383,15 +383,14 @@ function WhatsAppSettingsTab() {
                           : "No document header — this template would send text without the agreement PDF."}
                       </p>
                     )}
-                    {t.usableForDocuments && t.bodyParams !== 2 && (
-                      <p className="mt-1.5 text-[10.5px] text-amber-700 dark:text-amber-400">
-                        Expects {t.bodyParams} variable(s); the agreement send supplies 2 (customer name, then
-                        agreement number). Tell your developer to match this count.
+                    {t.usableForDocuments && (t.bodyParams === 1 || t.bodyParams === 2) && (
+                      <p className="mt-1.5 text-[10.5px] text-emerald-700 dark:text-emerald-400">
+                        Ready to use — configured with WHATSAPP_TEMPLATE_NAME.
                       </p>
                     )}
-                    {t.usableForDocuments && t.bodyParams === 2 && (
-                      <p className="mt-1.5 text-[10.5px] text-emerald-700 dark:text-emerald-400">
-                        Ready to use — put this name in WHATSAPP_TEMPLATE_NAME.
+                    {t.usableForDocuments && t.bodyParams !== 1 && t.bodyParams !== 2 && (
+                      <p className="mt-1.5 text-[10.5px] text-amber-700 dark:text-amber-400">
+                        Expects {t.bodyParams} variable(s); the agreement send supplies 1 or 2.
                       </p>
                     )}
                   </div>
